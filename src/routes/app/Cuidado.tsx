@@ -1,0 +1,135 @@
+import { Icon } from '../../components/Icon'
+import { formatarData } from '../../lib/formato'
+import { CENTROS, ENSAIOS } from '../../data/seed'
+import { navegar } from '../../lib/router'
+import { useAcoes, useEstado } from '../../lib/store'
+
+const ROTULO_PRIORIDADE = { alta: 'Prioridade alta', media: 'Prioridade média', baixa: 'Prioridade baixa' }
+
+export function Cuidado() {
+  const { passos, eventos } = useEstado()
+  const { alternarPasso } = useAcoes()
+  const abertos = passos.filter((p) => !p.feito)
+
+  return (
+    <div className="cuidado">
+      <section className="painel">
+        <div className="painel__cabeca">
+          <h2>
+            {abertos.length > 0
+              ? <>Encontramos <span className="num">{abertos.length}</span> pontas soltas no seu acompanhamento</>
+              : 'Nenhuma ponta solta no momento'}
+          </h2>
+          <p>
+            Cada item nasceu do cruzamento de registros de instituições diferentes — nenhum
+            médico isolado tinha esse conjunto na tela. Marcar como resolvido é seu; conduta,
+            do profissional que atende você.
+          </p>
+        </div>
+
+        <ol className="passos">
+          {passos.map((p) => (
+            <li key={p.id} className={`passo${p.feito ? ' passo--feito' : ''} prioridade-${p.prioridade}`}>
+              <label className="passo__marcar">
+                <input
+                  type="checkbox" checked={p.feito}
+                  onChange={() => alternarPasso(p.id)}
+                />
+                <span className="passo__caixa" aria-hidden="true"><Icon nome="check" tamanho={13} /></span>
+                <span className="sr-only">Marcar “{p.titulo}” como resolvido</span>
+              </label>
+
+              <div className="passo__corpo">
+                <div className="passo__cabeca">
+                  <h3>{p.titulo}</h3>
+                  <span className="chip chip--prioridade">{ROTULO_PRIORIDADE[p.prioridade]}</span>
+                </div>
+                <p className="passo__porque">{p.porque}</p>
+                <div className="passo__pe">
+                  <span className="passo__prazo"><Icon nome="calendario" tamanho={14} /> {p.prazo}</span>
+                  {p.ancoras.map((id) => {
+                    const e = eventos.find((ev) => ev.id === id)
+                    if (!e) return null
+                    return (
+                      <button
+                        key={id} type="button" className="chip chip--botao"
+                        onClick={() => navegar(`/app/linha/${id}`)}
+                      >
+                        <span className="num">{formatarData(e.data)}</span> · {e.titulo}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="painel">
+        <div className="painel__cabeca">
+          <h2>Onde tratar isso</h2>
+          <p>
+            Centros públicos e credenciados com foco no que o seu histórico mostra, ordenados
+            pela aderência ao seu caso — não por convênio nem por publicidade.
+          </p>
+        </div>
+        <ul className="centros">
+          {CENTROS.map((c) => (
+            <li key={c.id} className="centro">
+              <div>
+                <p className="centro__nome">{c.nome}</p>
+                <p className="centro__foco">{c.foco}</p>
+                <p className="centro__motivo"><Icon nome="bussola" tamanho={14} /> {c.motivo}</p>
+              </div>
+              <dl className="centro__dados">
+                <div><dt>Distância</dt><dd className="num">{c.distancia}</dd></div>
+                <div><dt>Cidade</dt><dd>{c.cidade}</dd></div>
+                <div><dt>Acesso</dt><dd>{c.convenio}</dd></div>
+              </dl>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="painel">
+        <div className="painel__cabeca">
+          <h2>Ensaios clínicos com critérios compatíveis</h2>
+          <p>
+            A elegibilidade é calculada sobre o histórico reunido. Compatibilidade não é
+            convite nem inscrição: quem confirma critério e indicação é a equipe do estudo.
+          </p>
+        </div>
+        <ul className="ensaios">
+          {ENSAIOS.map((e) => (
+            <li key={e.id} className="ensaio">
+              <div className="ensaio__cabeca">
+                <div>
+                  <p className="ensaio__codigo num">{e.codigo}</p>
+                  <h3>{e.titulo}</h3>
+                  <p className="ensaio__meta">{e.fase} · {e.local}</p>
+                </div>
+                <div className="ensaio__match">
+                  <span className="ensaio__pct num">{e.match}%</span>
+                  <span className="ensaio__barra" aria-hidden="true">
+                    <span style={{ width: `${e.match}%` }} />
+                  </span>
+                  <span className="ensaio__rotulo">critérios compatíveis</span>
+                </div>
+              </div>
+              <ul className="criterios">
+                {e.criterios.map((c) => (
+                  <li key={c.texto} className={c.atende === true ? 'ok' : c.atende === false ? 'nao' : 'talvez'}>
+                    <Icon nome={c.atende === true ? 'check' : c.atende === false ? 'fechar' : 'alerta'} tamanho={13} />
+                    {c.texto}
+                    {c.atende === null && <span className="criterios__nota">não consta no histórico</span>}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  )
+}
