@@ -11,7 +11,7 @@ import { isoHoje, useAcoes, useEstado } from '../../lib/store'
 import { useRequisicao } from '../../lib/useRequisicao'
 import { Conferencia } from './Conferencia'
 
-const LIMITE_PDF = 5 * 1024 * 1024
+const LIMITE_PDF = 4 * 1024 * 1024
 
 function ehPdf(arquivo: File) {
   return arquivo.type === 'application/pdf' || arquivo.name.toLowerCase().endsWith('.pdf')
@@ -54,7 +54,7 @@ export function Fontes() {
       return
     }
     if (f.size > LIMITE_PDF) {
-      setErroLocal('O PDF passa de 5 MB. Envie um arquivo menor ou cole o texto do documento.')
+      setErroLocal('O PDF passa de 4 MB. Envie um arquivo menor ou cole o texto do documento.')
       return
     }
     ler(f.name, () => api.extrairPdf(f))
@@ -134,7 +134,7 @@ export function Fontes() {
               <Icon nome="anexar" tamanho={26} />
               <p className="soltar__titulo">Arraste um laudo ou resultado em PDF</p>
               <p className="soltar__texto">
-                PDF com texto selecionável, até 5 MB. O conteúdo é enviado ao servidor da
+                PDF com texto selecionável, até 4 MB. O conteúdo é enviado ao servidor da
                 demonstração e lido pela IA; use apenas documentos fictícios.
               </p>
               <div className="soltar__acoes">

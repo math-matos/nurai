@@ -1,7 +1,7 @@
 import { extractText } from 'unpdf'
 import { ErroIa } from './erros.js'
 
-export const LIMITE_PDF = 5 * 1024 * 1024
+export const LIMITE_PDF = 4 * 1024 * 1024
 const MINIMO_CARACTERES = 20
 
 export async function textoDoPdf(bytes: Uint8Array): Promise<string> {
