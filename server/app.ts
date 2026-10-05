@@ -1,7 +1,9 @@
 import { Hono, type Context } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import type { z } from 'zod'
 import { PACIENTE } from '../src/data/seed.js'
+import { LIMITE_PDF } from './ai/pdf.js'
 import type { LlmProvider } from './ai/provider.js'
 import { ErroConflito, type Repositorio } from './db/repo.js'
 import { esquemaCompartilhamento, esquemaEvento } from './esquemas.js'
@@ -34,6 +36,23 @@ async function lerCorpo<T>(c: Context, esquema: z.ZodType<T>): Promise<T> {
   return resultado.data
 }
 
+/* Barra o corpo antes de lê-lo: sem isso, um upload gigante seria lido inteiro em memória
+   (multipart) antes da checagem de tamanho. O PDF ganha folga para o envelope multipart. */
+const LIMITE_JSON = 256 * 1024
+const LIMITE_EXTRAIR = LIMITE_PDF + 512 * 1024
+
+const limiteJson = bodyLimit({
+  maxSize: LIMITE_JSON,
+  onError: (c) => c.json({ erro: 'O corpo da requisição passa do limite de 256 KB', codigo: 'CORPO_GRANDE' }, 413),
+})
+
+const limiteExtrair = bodyLimit({
+  maxSize: LIMITE_EXTRAIR,
+  onError: (c) => c.req.header('content-type')?.startsWith('multipart/form-data')
+    ? c.json({ erro: 'O PDF passa do limite de 4 MB', codigo: 'ARQUIVO_GRANDE' }, 413)
+    : c.json({ erro: 'O corpo da requisição passa do limite de 4 MB', codigo: 'CORPO_GRANDE' }, 413),
+})
+
 function naoEncontrado(oQue: string, id: string): never {
   throw new HTTPException(404, { message: `${oQue} "${id}" não encontrado` })
 }
@@ -41,6 +60,8 @@ function naoEncontrado(oQue: string, id: string): never {
 export function criarApp(deps: Deps): Hono {
   const { repo, llm } = deps
   const app = new Hono().basePath('/api')
+
+  app.use('*', (c, next) => (c.req.path === '/api/extrair' ? limiteExtrair : limiteJson)(c, next))
 
   app.get('/health', (c) => c.json({ ok: true, genai: llm.nome, db: repo.nome, versao: VERSAO }))
 

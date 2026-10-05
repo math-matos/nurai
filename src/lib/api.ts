@@ -61,7 +61,7 @@ export interface PassosGerados { passos: ProximoPasso[]; geradoPor: GeradoPor }
 
 export type CodigoErro =
   | 'IA_INDISPONIVEL' | 'IA_RESPOSTA_INVALIDA' | 'PDF_SEM_TEXTO' | 'PDF_INVALIDO' | 'ARQUIVO_GRANDE'
-  | 'NAO_CLINICO' | 'REDE' | 'TEMPO_ESGOTADO' | 'VALIDACAO' | 'NAO_ENCONTRADO' | 'RECUSADO' | 'SERVIDOR'
+  | 'NAO_CLINICO' | 'CORPO_GRANDE' | 'REDE' | 'TEMPO_ESGOTADO' | 'VALIDACAO' | 'NAO_ENCONTRADO' | 'RECUSADO' | 'SERVIDOR'
 
 const MENSAGENS: Record<CodigoErro, string> = {
   IA_INDISPONIVEL: 'A IA está indisponível agora. Tente de novo em alguns instantes.',
@@ -69,6 +69,7 @@ const MENSAGENS: Record<CodigoErro, string> = {
   PDF_SEM_TEXTO: 'Este PDF não tem texto selecionável (parece uma imagem digitalizada). Cole o texto do documento ou envie outro arquivo.',
   PDF_INVALIDO: 'Não conseguimos abrir este arquivo como PDF. Ele pode estar corrompido ou ter outro formato com a extensão .pdf. Exporte o documento de novo em PDF ou cole o texto dele.',
   ARQUIVO_GRANDE: 'O arquivo passa do limite de 4 MB. Envie um PDF menor ou cole o texto do documento.',
+  CORPO_GRANDE: 'O conteúdo enviado é grande demais para o servidor. Envie um texto menor.',
   NAO_CLINICO: 'Não reconhecemos este conteúdo como um documento de saúde. Confira se é um laudo, resultado de exame ou receita.',
   REDE: 'Não foi possível falar com o servidor. Verifique a conexão e tente de novo.',
   TEMPO_ESGOTADO: 'A resposta demorou mais do que o esperado. Tente de novo.',
@@ -109,7 +110,7 @@ export function podeRepetir(erro: unknown): boolean {
 }
 
 const CODIGOS_DO_SERVIDOR = new Set<string>([
-  'IA_INDISPONIVEL', 'IA_RESPOSTA_INVALIDA', 'PDF_SEM_TEXTO', 'PDF_INVALIDO', 'ARQUIVO_GRANDE', 'NAO_CLINICO',
+  'IA_INDISPONIVEL', 'IA_RESPOSTA_INVALIDA', 'PDF_SEM_TEXTO', 'PDF_INVALIDO', 'ARQUIVO_GRANDE', 'NAO_CLINICO', 'CORPO_GRANDE',
 ])
 
 function erroDaResposta(status: number, corpo: unknown): ErroApi {

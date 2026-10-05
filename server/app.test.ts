@@ -81,6 +81,13 @@ describe('API', () => {
       expect((await repo.estado()).eventos).toHaveLength(EVENTOS.length)
     })
 
+    it('413 CORPO_GRANDE para corpo acima de 256 KB', async () => {
+      const res = await app.request('/api/eventos', json({ ...EVENTO, resumo: 'a'.repeat(300 * 1024) }))
+      expect(res.status).toBe(413)
+      expect(await res.json()).toMatchObject({ codigo: 'CORPO_GRANDE' })
+      expect((await repo.estado()).eventos).toHaveLength(EVENTOS.length)
+    })
+
     it('409 CONFLITO quando o id já existe', async () => {
       await app.request('/api/eventos', json(EVENTO))
       const res = await app.request('/api/eventos', json({ ...EVENTO, titulo: 'Outro' }))

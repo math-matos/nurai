@@ -246,6 +246,14 @@ describe('rotas de IA com provider real (fake)', () => {
       expect(chamadas[0][0].role).toBe('system')
     })
 
+    it('413 CORPO_GRANDE para JSON acima de 256 KB', async () => {
+      const { llm, chamadas } = llmFake(COPILOTO)
+      const res = await app(llm).request('/api/copiloto', json({ pergunta: 'oi', lixo: 'a'.repeat(300 * 1024) }))
+      expect(res.status).toBe(413)
+      expect(await res.json()).toMatchObject({ codigo: 'CORPO_GRANDE' })
+      expect(chamadas).toHaveLength(0)
+    })
+
     it('JSON inválido duas vezes vira 502 IA_RESPOSTA_INVALIDA', async () => {
       const { llm, chamadas } = llmFake('não é json', '{"texto": "string solta"}')
       const res = await app(llm).request('/api/copiloto', json({ pergunta: 'oi' }))
@@ -350,6 +358,27 @@ describe('rotas de IA com provider real (fake)', () => {
       const res = await app(llm).request('/api/extrair', multipart(grande))
       expect(res.status).toBe(413)
       expect(await res.json()).toMatchObject({ codigo: 'ARQUIVO_GRANDE' })
+    })
+
+    it('corta upload acima do limite antes de ler o corpo inteiro', async () => {
+      const { llm, chamadas } = llmFake()
+      const MB = 1024 * 1024
+      let lidos = 0
+      const corpo = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (lidos >= 20 * MB) return controller.close()
+          lidos += MB
+          controller.enqueue(new Uint8Array(MB))
+        },
+      })
+      const res = await app(llm).request('/api/extrair', {
+        method: 'POST', body: corpo, duplex: 'half',
+        headers: { 'content-type': 'multipart/form-data; boundary=x' },
+      } as RequestInit)
+      expect(res.status).toBe(413)
+      expect(await res.json()).toMatchObject({ codigo: 'ARQUIVO_GRANDE' })
+      expect(lidos).toBeLessThan(8 * MB)
+      expect(chamadas).toHaveLength(0)
     })
 
     it('multipart sem o campo arquivo vira 400', async () => {
