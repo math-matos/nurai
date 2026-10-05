@@ -45,16 +45,28 @@ async function conversar(llm: LlmProvider, mensagens: MensagemLlm[], opcoes: Opc
   }
 }
 
+/* A função na Vercel morre em 60 s (vercel.json) e devolveria 504 sem JSON: tentativa e retry
+   dividem um prazo único, com folga para o resto da requisição. */
+export const ORCAMENTO_IA_MS = 50_000
+export const MINIMO_RETRY_MS = 15_000
+
 export async function pedirJson<T>(
   llm: LlmProvider,
   mensagens: MensagemLlm[],
   esquema: z.ZodType<T>,
-  opcoes: Omit<OpcoesChat, 'json'> = {},
+  opcoes: Omit<OpcoesChat, 'json' | 'timeoutMs'> = {},
 ): Promise<T> {
+  const prazo = Date.now() + ORCAMENTO_IA_MS
   const config = { temperatura: 0.2, maxTokens: 1500, ...opcoes, json: true }
-  const primeira = await conversar(llm, mensagens, config)
+  const primeira = await conversar(llm, mensagens, { ...config, timeoutMs: ORCAMENTO_IA_MS })
   const r1 = validar(primeira, esquema)
   if (r1.ok) return r1.valor
+
+  const restante = prazo - Date.now()
+  if (restante < MINIMO_RETRY_MS) {
+    console.error(`[ia] resposta inválida sem tempo para retry (${restante} ms restantes)`)
+    throw new ErroIa('IA_RESPOSTA_INVALIDA', 'A IA devolveu uma resposta em formato inesperado')
+  }
 
   const retry: MensagemLlm[] = [
     ...mensagens,
@@ -64,7 +76,7 @@ export async function pedirJson<T>(
       content: `Sua resposta não é válida (${r1.erro}). Responda novamente apenas com o objeto JSON corrigido, no formato pedido, sem texto fora dele.`,
     },
   ]
-  const r2 = validar(await conversar(llm, retry, config), esquema)
+  const r2 = validar(await conversar(llm, retry, { ...config, timeoutMs: restante }), esquema)
   if (r2.ok) return r2.valor
   console.error(`[ia] resposta inválida após retry: ${r2.erro.slice(0, 200)}`)
   throw new ErroIa('IA_RESPOSTA_INVALIDA', 'A IA devolveu uma resposta em formato inesperado')

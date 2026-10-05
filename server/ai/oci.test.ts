@@ -115,6 +115,15 @@ describe('criarLlmOci', () => {
     expect((erro as ErroIa).codigo).toBe('IA_RESPOSTA_INVALIDA')
   })
 
+  it('respeita o timeout pedido por chamada quando é menor que o da config', async () => {
+    sdk.chat.mockReturnValue(new Promise(() => {}))
+    const inicio = Date.now()
+    const erro = await criarLlmOci({ ...CONFIG, timeoutMs: 60_000 })
+      .chat([{ role: 'user', content: 'oi' }], { timeoutMs: 20 }).catch((e: unknown) => e)
+    expect((erro as ErroIa).codigo).toBe('IA_INDISPONIVEL')
+    expect(Date.now() - inicio).toBeLessThan(5_000)
+  })
+
   it('estoura timeout com IA_INDISPONIVEL', async () => {
     sdk.chat.mockReturnValue(new Promise(() => {}))
     const erro = await criarLlmOci({ ...CONFIG, timeoutMs: 20 })

@@ -102,7 +102,7 @@ export function criarLlmOci(config: ConfigOci): LlmProvider {
             servingMode: { servingType: 'ON_DEMAND', modelId: config.modelId } satisfies models.OnDemandServingMode,
             chatRequest,
           },
-        }), config.timeoutMs ?? 45_000)
+        }), Math.min(opcoes?.timeoutMs ?? Infinity, config.timeoutMs ?? 45_000))
       } catch (e) {
         const { statusCode, serviceCode, opcRequestId } = e as { statusCode?: number; serviceCode?: string; opcRequestId?: string }
         const codigo = serviceCode ?? ((e as Error).message?.startsWith('timeout') ? 'timeout' : (e as Error).name)

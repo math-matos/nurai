@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { ErroIa } from './erros.js'
-import { extrairJson, pedirJson } from './json.js'
+import { MINIMO_RETRY_MS, ORCAMENTO_IA_MS, extrairJson, pedirJson } from './json.js'
 import type { LlmProvider, MensagemLlm, OpcoesChat } from './provider.js'
 
 function llmFila(...respostas: string[]) {
@@ -76,5 +76,63 @@ describe('pedirJson', () => {
     const erro = await pedirJson(llm, PEDIDO, esquema).catch((e: unknown) => e)
     expect((erro as ErroIa).codigo).toBe('IA_INDISPONIVEL')
     expect((erro as ErroIa).status).toBe(503)
+  })
+})
+
+/* Vercel corta a função em 60 s: tentativa + retry precisam caber num prazo único. */
+describe('pedirJson — orçamento de tempo', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  function llmLento(...passos: { demoraMs: number; resposta: string }[]) {
+    const chamadas: OpcoesChat[] = []
+    const llm: LlmProvider = {
+      nome: 'oci',
+      async chat(_, opcoes) {
+        chamadas.push(opcoes ?? {})
+        const passo = passos.shift()
+        if (!passo) throw new Error('fila vazia')
+        vi.advanceTimersByTime(passo.demoraMs)
+        return passo.resposta
+      },
+    }
+    return { llm, chamadas }
+  }
+
+  it('cabe abaixo do maxDuration de 60 s com folga mínima para o retry', () => {
+    expect(ORCAMENTO_IA_MS).toBeLessThanOrEqual(50_000)
+    expect(MINIMO_RETRY_MS).toBeGreaterThanOrEqual(15_000)
+  })
+
+  it('a primeira tentativa recebe o orçamento inteiro como timeout', async () => {
+    vi.useFakeTimers()
+    const { llm, chamadas } = llmLento({ demoraMs: 1_000, resposta: '{"texto":[],"n":0}' })
+    await pedirJson(llm, PEDIDO, esquema)
+    expect(chamadas[0].timeoutMs).toBe(ORCAMENTO_IA_MS)
+  })
+
+  it('o retry usa só o tempo que sobrou do orçamento', async () => {
+    vi.useFakeTimers()
+    const { llm, chamadas } = llmLento(
+      { demoraMs: 20_000, resposta: 'nada' },
+      { demoraMs: 1_000, resposta: '{"texto":[],"n":0}' },
+    )
+    expect(await pedirJson(llm, PEDIDO, esquema)).toEqual({ texto: [], n: 0 })
+    expect(chamadas[1].timeoutMs).toBe(ORCAMENTO_IA_MS - 20_000)
+  })
+
+  it('não faz retry quando sobra menos que o mínimo e falha com IA_RESPOSTA_INVALIDA', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { llm, chamadas } = llmLento(
+      { demoraMs: ORCAMENTO_IA_MS - MINIMO_RETRY_MS + 1, resposta: 'nada' },
+      { demoraMs: 1_000, resposta: '{"texto":[],"n":0}' },
+    )
+    const erro = await pedirJson(llm, PEDIDO, esquema).catch((e: unknown) => e)
+    expect(erro).toBeInstanceOf(ErroIa)
+    expect((erro as ErroIa).codigo).toBe('IA_RESPOSTA_INVALIDA')
+    expect(chamadas).toHaveLength(1)
   })
 })

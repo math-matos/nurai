@@ -7,6 +7,7 @@ export interface OpcoesChat {
   json?: boolean
   maxTokens?: number
   temperatura?: number
+  timeoutMs?: number
 }
 
 export interface LlmProvider {
