@@ -12,9 +12,13 @@ import type { Deps } from '../app.js'
 
 const texto = z.string().trim().min(1)
 
+/* O histórico vai inteiro para o LLM: limitado ao que o copiloto usa (6 turnos) e sempre como user/assistant. */
 const esquemaCopiloto = z.object({
   pergunta: texto.max(1000),
-  historico: z.array(z.object({ pergunta: z.string(), texto: z.array(z.string()) })).max(20).optional(),
+  historico: z.array(z.object({
+    pergunta: z.string().max(1000),
+    texto: z.array(z.string().max(2000)).max(10),
+  })).max(6).optional(),
 })
 const esquemaTexto = z.object({
   texto: texto.max(100_000),
