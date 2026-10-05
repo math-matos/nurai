@@ -17,7 +17,7 @@ if (faltando.length || !config) {
   process.exit(1)
 }
 
-async function medir<T>(rotulo: string, fn: () => Promise<T>): Promise<T> {
+async function medir<T>(rotulo: string, fn: () => T | Promise<T>): Promise<T> {
   const inicio = performance.now()
   const resultado = await fn()
   console.log(`[smoke:genai] ${rotulo}: ${Math.round(performance.now() - inicio)} ms`)
