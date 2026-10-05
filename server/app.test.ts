@@ -68,6 +68,19 @@ describe('API', () => {
       expect((await repo.estado()).eventos).toHaveLength(EVENTOS.length)
     })
 
+    /* O Oracle rejeita (TO_DATE/ORA-12899) e viraria 500; a memória aceitaria. Os dois devem dar 400. */
+    it.each([
+      ['data impossível', { data: '2026-02-30' }, /data/],
+      ['titulo acima do limite da coluna', { titulo: 'é'.repeat(201) }, /titulo/],
+      ['documento acima do limite da coluna', { documento: 'a'.repeat(401) }, /documento/],
+      ['id acima do limite da coluna', { id: 'u'.repeat(65) }, /id/],
+    ])('400 para %s', async (_, mudanca, campo) => {
+      const res = await app.request('/api/eventos', json({ ...EVENTO, ...mudanca }))
+      expect(res.status).toBe(400)
+      expect((await corpo(res)).erro).toMatch(campo)
+      expect((await repo.estado()).eventos).toHaveLength(EVENTOS.length)
+    })
+
     it('400 quando o JSON é malformado', async () => {
       const res = await app.request('/api/eventos', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: '{',

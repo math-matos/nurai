@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { Evento, Medida } from '../../../src/data/types.js'
 import type { Deps } from '../../app.js'
+import { dataIsoValida } from '../../esquemas.js'
 import { ErroIa } from '../erros.js'
 import { pedirJson } from '../json.js'
 import { mensagens } from '../prompts.js'
@@ -71,7 +72,7 @@ export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string): Omit
       sinal: sinalDaMedida(m.valor, m.refMin, m.refMax),
     })
   }
-  const dataValida = bruto.data && /^\d{4}-\d{2}-\d{2}$/.test(bruto.data) && !Number.isNaN(Date.parse(bruto.data))
+  const dataValida = bruto.data != null && dataIsoValida(bruto.data)
   if (!dataValida) avisos.push('Não encontrei a data no documento; usei a data de hoje. Confira antes de salvar.')
   if (bruto.confianca < CONFIANCA_MINIMA) {
     avisos.push('A leitura teve baixa confiança. Confira cada campo com o documento original.')

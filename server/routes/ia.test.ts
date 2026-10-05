@@ -276,6 +276,14 @@ describe('rotas de IA com provider real (fake)', () => {
       expect(avisos.join(' ')).toMatch(/confian/i)
     })
 
+    it('troca data impossível lida pela IA pela data de hoje, com aviso', async () => {
+      const { llm } = llmFake({ ...EXTRACAO, data: '2026-02-30' })
+      const { evento, avisos } = CONTRATO.extrair.parse(
+        await (await app(llm).request('/api/extrair', json({ texto: 'exame lipidograma' }))).json())
+      expect(evento.data).toBe(new Date().toISOString().slice(0, 10))
+      expect(avisos.join(' ')).toMatch(/data/i)
+    })
+
     it('texto não clínico vira 422 NAO_CLINICO', async () => {
       const { llm } = llmFake({ clinico: false })
       const res = await app(llm).request('/api/extrair', json({ texto: 'Lista de compras: arroz, feijão' }))
