@@ -24,6 +24,7 @@ const NAV: { para: string; rotulo: string; icone: NomeIcone; nota: string }[] = 
 
 export function AppShell({ rota }: { rota: string }) {
   const [menuAberto, setMenuAberto] = useState(false)
+  const [confirmandoReinicio, setConfirmandoReinicio] = useState(false)
   const estado = useEstado()
   const { carregar, descartarFalha, reiniciar } = useAcoes()
 
@@ -92,15 +93,37 @@ export function AppShell({ rota }: { rota: string }) {
           <p className="lateral__aviso">
             Demonstração com dados sintéticos. Reiniciar restaura o histórico original no servidor.
           </p>
-          <button
-            type="button" className="btn btn--quiet"
-            onClick={() => {
-              reiniciar()
-              navegar('/app/linha')
-            }}
-          >
-            <Icon nome="recomecar" tamanho={16} /> Reiniciar a demonstração
-          </button>
+          {confirmandoReinicio ? (
+            <div className="reinicio" role="group" aria-labelledby="reinicio-pergunta">
+              <p id="reinicio-pergunta" className="reinicio__pergunta">
+                Reiniciar apaga os documentos anexados, os passos marcados e as permissões
+                alteradas, e restaura o histórico original. Continuar?
+              </p>
+              <div className="reinicio__acoes">
+                <button
+                  type="button" className="btn"
+                  onClick={() => {
+                    setConfirmandoReinicio(false)
+                    setMenuAberto(false)
+                    reiniciar()
+                    navegar('/app/linha')
+                  }}
+                >
+                  Reiniciar agora
+                </button>
+                <button
+                  type="button" className="btn btn--ghost" autoFocus
+                  onClick={() => setConfirmandoReinicio(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="btn btn--quiet" onClick={() => setConfirmandoReinicio(true)}>
+              <Icon nome="recomecar" tamanho={16} /> Reiniciar a demonstração
+            </button>
+          )}
         </div>
       </aside>
 
