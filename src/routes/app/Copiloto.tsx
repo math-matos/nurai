@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { Marca, Serie } from '../../components/ui'
-import { formatarData } from '../../lib/formato'
-import { SUGESTOES } from '../../data/copiloto'
-import { navegar } from '../../lib/router'
-import { perguntar, useEstado } from '../../lib/store'
+import { Ancoras, AvisoIa, Falha, Marca, SeloIa, Serie } from '../../components/ui'
+import { SUGESTOES } from '../../data/sugestoes'
+import { perguntar, tentarTurnoDeNovo, useEstado } from '../../lib/store'
 
 export function Copiloto() {
   const { eventos, conversa } = useEstado()
   const [texto, setTexto] = useState('')
   const fim = useRef<HTMLDivElement>(null)
-  const pensando = conversa.some((t) => !t.resposta)
+  const pensando = conversa.some((t) => t.carregando)
 
   useEffect(() => {
     fim.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -61,50 +59,31 @@ export function Copiloto() {
               {t.pergunta}
             </p>
 
-            {t.resposta ? (
-              <div className="turno__resposta">
-                {t.resposta.texto.map((p) => <p key={p.slice(0, 24)}>{p}</p>)}
-
-                {t.resposta.serie && <Serie {...t.resposta.serie} />}
-
-                {t.resposta.aviso && (
-                  <p className="turno__aviso">
-                    <Icon nome="alerta" tamanho={15} />
-                    {t.resposta.aviso}
-                  </p>
-                )}
-
-                {t.resposta.ancoras.length > 0 && (
-                  <div className="ancoras">
-                    <p className="label">Registros que sustentam esta resposta</p>
-                    <ul>
-                      {t.resposta.ancoras.map((id) => {
-                        const e = eventos.find((ev) => ev.id === id)
-                        if (!e) return null
-                        return (
-                          <li key={id}>
-                            <button
-                              type="button" className="ancora"
-                              onClick={() => navegar(`/app/linha/${id}`)}
-                            >
-                              <span className="ancora__data num">{formatarData(e.data)}</span>
-                              <span className="ancora__titulo">{e.titulo}</span>
-                              <span className="ancora__onde">{e.instituicao}</span>
-                              <Icon nome="setaCurta" tamanho={14} />
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            ) : (
+            {t.carregando ? (
               <div className="turno__resposta turno__resposta--carregando" aria-live="polite">
                 <span className="sr-only">Consultando o histórico</span>
                 <span className="esqueleto" style={{ width: '92%' }} />
                 <span className="esqueleto" style={{ width: '78%' }} />
                 <span className="esqueleto" style={{ width: '86%' }} />
+              </div>
+            ) : t.resposta ? (
+              <div className="turno__resposta">
+                {t.resposta.texto.map((p, i) => <p key={i}>{p}</p>)}
+
+                {t.resposta.serie && t.resposta.serie.pontos.length > 0 && <Serie {...t.resposta.serie} />}
+
+                {t.resposta.aviso && <AvisoIa>{t.resposta.aviso}</AvisoIa>}
+
+                <Ancoras ids={t.resposta.ancoras} eventos={eventos} />
+
+                <SeloIa geradoPor={t.resposta.geradoPor} />
+              </div>
+            ) : (
+              <div className="turno__resposta">
+                <Falha
+                  mensagem={t.erro ?? 'Não foi possível responder a esta pergunta.'}
+                  aoTentar={pensando ? undefined : () => tentarTurnoDeNovo(t.id)}
+                />
               </div>
             )}
           </article>
@@ -121,12 +100,8 @@ export function Copiloto() {
           placeholder="Pergunte sobre exames, remédios, pendências…"
           aria-label="Sua pergunta"
         />
-        <button
-          type="submit"
-          className={`btn${pensando ? ' btn--busy' : ''}`}
-          disabled={!texto.trim() || pensando}
-        >
-          Perguntar <Icon nome="seta" tamanho={16} />
+        <button type="submit" className="btn" disabled={!texto.trim() || pensando}>
+          {pensando ? 'Consultando o histórico…' : <>Perguntar <Icon nome="seta" tamanho={16} /></>}
         </button>
       </form>
     </div>

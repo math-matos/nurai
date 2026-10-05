@@ -1,6 +1,7 @@
 import { FONTES } from '../data/seed'
-import { ROTULO_SINAL } from '../lib/formato'
-import type { FonteId, Medida, Sinal } from '../data/types'
+import { ROTULO_SINAL, formatarData } from '../lib/formato'
+import { navegar } from '../lib/router'
+import type { Evento, FonteId, Medida, Sinal } from '../data/types'
 import { Icon, type NomeIcone } from './Icon'
 
 /* ---------------- marca ---------------- */
@@ -128,6 +129,68 @@ export function Vazio({
       <p className="vazio__titulo">{titulo}</p>
       <p className="vazio__texto">{texto}</p>
       {acao}
+    </div>
+  )
+}
+
+/* ---------------- IA: proveniência, aviso, falha ---------------- */
+
+export function SeloIa({ geradoPor }: { geradoPor: 'oci' | 'mock' }) {
+  return (
+    <span className={`selo selo--${geradoPor}`}>
+      <span className="chip__dot" />
+      {geradoPor === 'oci' ? 'Gerado por OCI Generative AI' : 'Gerado por IA simulada'}
+    </span>
+  )
+}
+
+export function AvisoIa({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="turno__aviso">
+      <Icon nome="alerta" tamanho={15} />
+      {children}
+    </p>
+  )
+}
+
+export function Falha({
+  mensagem, aoTentar, tentando = false,
+}: { mensagem: string; aoTentar?: () => void; tentando?: boolean }) {
+  return (
+    <div className="falha" role="alert">
+      <Icon nome="alerta" tamanho={15} />
+      <p className="falha__texto">{mensagem}</p>
+      {aoTentar && (
+        <button type="button" className="btn btn--ghost falha__acao" onClick={aoTentar} disabled={tentando}>
+          <Icon nome="recomecar" tamanho={14} /> {tentando ? 'Tentando…' : 'Tentar de novo'}
+        </button>
+      )}
+    </div>
+  )
+}
+
+export function Ancoras({
+  ids, eventos, titulo = 'Registros que sustentam esta resposta',
+}: { ids: string[]; eventos: Evento[]; titulo?: string }) {
+  const encontrados = ids
+    .map((id) => eventos.find((e) => e.id === id))
+    .filter((e): e is Evento => Boolean(e))
+  if (encontrados.length === 0) return null
+  return (
+    <div className="ancoras">
+      <p className="label">{titulo}</p>
+      <ul>
+        {encontrados.map((e) => (
+          <li key={e.id}>
+            <button type="button" className="ancora" onClick={() => navegar(`/app/linha/${e.id}`)}>
+              <span className="ancora__data num">{formatarData(e.data)}</span>
+              <span className="ancora__titulo">{e.titulo}</span>
+              <span className="ancora__onde">{e.instituicao}</span>
+              <Icon nome="setaCurta" tamanho={14} />
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon, type NomeIcone } from '../components/Icon'
-import { Marca } from '../components/ui'
+import { Falha, Marca, Vazio } from '../components/ui'
 import { Link } from '../components/Link'
 import { navegar } from '../lib/router'
 import { useAcoes, useEstado } from '../lib/store'
@@ -25,7 +25,9 @@ const NAV: { para: string; rotulo: string; icone: NomeIcone; nota: string }[] = 
 export function AppShell({ rota }: { rota: string }) {
   const [menuAberto, setMenuAberto] = useState(false)
   const estado = useEstado()
-  const { reiniciar } = useAcoes()
+  const { carregar, descartarFalha, reiniciar } = useAcoes()
+
+  useEffect(() => { void carregar() }, [carregar])
 
   const segmentos = rota.split('/').filter(Boolean) // ['app', 'linha', 'e09']
   const secao = segmentos[1] ?? 'linha'
@@ -85,7 +87,7 @@ export function AppShell({ rota }: { rota: string }) {
 
         <div className="lateral__rodape">
           <p className="lateral__aviso">
-            Demonstração com dados sintéticos, guardados só neste navegador.
+            Demonstração com dados sintéticos. Reiniciar restaura o histórico original no servidor.
           </p>
           <button
             type="button" className="btn btn--quiet"
@@ -119,18 +121,66 @@ export function AppShell({ rota }: { rota: string }) {
             <h1>{atual.rotulo}</h1>
             <p>{atual.nota}</p>
           </div>
+          {estado.saude && (
+            <div className="selos" aria-label="Infraestrutura em uso">
+              <span className={`selo selo--${estado.saude.genai}`}>
+                <span className="chip__dot" />
+                IA: {estado.saude.genai === 'oci' ? 'OCI Generative AI' : 'simulada'}
+              </span>
+              <span className={`selo selo--${estado.saude.db}`}>
+                <span className="chip__dot" />
+                Dados: {estado.saude.db === 'oracle' ? 'Oracle DB' : 'memória'}
+              </span>
+            </div>
+          )}
           <Link para="/projeto" className="btn btn--ghost barra__dossie">
             Dossiê do projeto
           </Link>
         </header>
 
         <main id="conteudo" className="palco__corpo">
-          {secao === 'linha' && <LinhaDoTempo selecionado={parametro} />}
-          {secao === 'fontes' && <Fontes />}
-          {secao === 'copiloto' && <Copiloto />}
-          {secao === 'cuidado' && <Cuidado />}
-          {secao === 'resumo' && <Resumo />}
-          {secao === 'privacidade' && <Privacidade />}
+          {estado.falhaAcao && (
+            <div className="palco__falha">
+              <Falha mensagem={estado.falhaAcao} />
+              <button type="button" className="btn btn--quiet" onClick={descartarFalha}>
+                <Icon nome="fechar" tamanho={14} /> Fechar
+              </button>
+            </div>
+          )}
+
+          {estado.erro ? (
+            <Vazio
+              icone="alerta"
+              titulo="Não foi possível carregar o histórico"
+              texto={estado.erro}
+              acao={
+                <button
+                  type="button" className="btn" disabled={estado.carregando}
+                  onClick={() => { void carregar(true) }}
+                >
+                  <Icon nome="recomecar" tamanho={16} />
+                  {estado.carregando ? 'Tentando…' : 'Tentar de novo'}
+                </button>
+              }
+            />
+          ) : estado.carregando ? (
+            <div className="carregando-app" aria-live="polite">
+              <p className="label">Reunindo o histórico</p>
+              <span className="esqueleto" style={{ width: '64%' }} />
+              <span className="esqueleto" style={{ width: '82%' }} />
+              <span className="esqueleto" style={{ width: '71%' }} />
+              <span className="esqueleto" style={{ width: '58%' }} />
+            </div>
+          ) : (
+            <>
+              {secao === 'linha' && <LinhaDoTempo selecionado={parametro} />}
+              {secao === 'fontes' && <Fontes />}
+              {secao === 'copiloto' && <Copiloto />}
+              {secao === 'cuidado' && <Cuidado />}
+              {secao === 'resumo' && <Resumo />}
+              {secao === 'privacidade' && <Privacidade />}
+            </>
+          )}
         </main>
       </div>
     </div>

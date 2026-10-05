@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Icon } from '../../components/Icon'
 import { ChipFonte } from '../../components/ui'
 import { formatarDataCurta } from '../../lib/formato'
@@ -5,8 +6,18 @@ import { useAcoes, useEstado } from '../../lib/store'
 
 export function Privacidade() {
   const { consentimentos, acessos } = useEstado()
-  const { alternarConsentimento } = useAcoes()
+  const { alternarConsentimento, atualizarAcessos } = useAcoes()
+  const [alternando, setAlternando] = useState<string | null>(null)
   const ativos = consentimentos.filter((c) => c.ativo).length
+
+  useEffect(() => { void atualizarAcessos() }, [atualizarAcessos])
+
+  const alternar = async (id: string) => {
+    if (alternando) return
+    setAlternando(id)
+    await alternarConsentimento(id)
+    setAlternando(null)
+  }
 
   return (
     <div className="privacidade">
@@ -36,8 +47,8 @@ export function Privacidade() {
               <ChipFonte fonte={c.fonte} curto />
               <label className="interruptor">
                 <input
-                  type="checkbox" checked={c.ativo}
-                  onChange={() => alternarConsentimento(c.id)}
+                  type="checkbox" checked={c.ativo} disabled={alternando === c.id}
+                  onChange={() => { void alternar(c.id) }}
                 />
                 <span className="interruptor__trilho" aria-hidden="true"><span /></span>
                 <span className="interruptor__estado">{c.ativo ? 'ativo' : 'revogado'}</span>
@@ -94,7 +105,7 @@ export function Privacidade() {
           </div>
           <div>
             <dt>Neste protótipo</dt>
-            <dd>Nada trafega: todo o estado vive no armazenamento local do seu navegador e some quando você reinicia a demonstração.</dd>
+            <dd>O histórico sintético fica no servidor da demonstração (Oracle Database ou memória, conforme o selo no topo) e cada concessão, revogação e anexo entra neste registro. Só a conversa com o copiloto fica no seu navegador. Reiniciar a demonstração restaura os dados originais.</dd>
           </div>
         </dl>
       </section>

@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { ChipFonte, ChipSinal, Regua, Vazio } from '../../components/ui'
+import { Ancoras, AvisoIa, ChipFonte, ChipSinal, Falha, Regua, SeloIa, Vazio } from '../../components/ui'
 import { ICONE_TIPO, ano, formatarData, ordenarRecentes } from '../../lib/formato'
 import { FONTES, TIPOS } from '../../data/seed'
 import type { Evento, FonteId, TipoId } from '../../data/types'
+import { api, type Explicacao } from '../../lib/api'
 import { navegar } from '../../lib/router'
 import { perguntar, useEstado } from '../../lib/store'
+import { useRequisicao } from '../../lib/useRequisicao'
 
 const TIPOS_FILTRO: TipoId[] = ['exame', 'consulta', 'imagem', 'internacao', 'cirurgia', 'vacina', 'documento']
 const FONTES_FILTRO: FonteId[] = ['sus', 'laboratorio', 'hospital', 'clinica', 'operadora', 'paciente']
@@ -94,7 +96,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
           <Vazio
             icone="busca"
             titulo="Nenhum registro com esses filtros"
-            texto="O histórico tem 24 eventos entre 2019 e 2026. Tente afrouxar a busca ou desmarcar um filtro."
+            texto={`O histórico tem ${eventos.length} registros. Tente afrouxar a busca ou desmarcar um filtro.`}
             acao={
               <button type="button" className="btn btn--ghost"
                 onClick={() => { setBusca(''); setTipos([]); setFontes([]) }}>
@@ -189,7 +191,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
               <button
                 type="button" className="btn"
                 onClick={() => {
-                  perguntar(`Me explique o registro de ${formatarData(atual.data)}: ${atual.titulo}`, false)
+                  perguntar(`Me explique o registro de ${formatarData(atual.data)}: ${atual.titulo}`)
                   navegar('/app/copiloto')
                 }}
               >
@@ -199,9 +201,67 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
                 <Icon nome="escudo" tamanho={16} /> Quem acessou
               </button>
             </div>
+
+            <ExplicarEvento key={atual.id} evento={atual} eventos={eventos} />
           </div>
         )}
       </aside>
     </div>
+  )
+}
+
+function ExplicarEvento({ evento, eventos }: { evento: Evento; eventos: Evento[] }) {
+  const { dados, erro, carregando, executar } = useRequisicao<Explicacao>()
+  const explicar = () => { void executar(() => api.explicarExame(evento.id)) }
+  const outrasAncoras = dados?.ancoras.filter((id) => id !== evento.id) ?? []
+
+  return (
+    <section className="explicacao" aria-live="polite">
+      {!dados && (
+        <button type="button" className="btn btn--ghost" onClick={explicar} disabled={carregando}>
+          <Icon nome="copiloto" tamanho={16} />
+          {carregando ? 'Preparando a explicação…' : 'Explicar em linguagem simples'}
+        </button>
+      )}
+
+      {carregando && (
+        <div className="explicacao__carregando">
+          <span className="esqueleto" style={{ width: '94%' }} />
+          <span className="esqueleto" style={{ width: '81%' }} />
+          <span className="esqueleto" style={{ width: '88%' }} />
+        </div>
+      )}
+
+      {erro && <Falha mensagem={erro} aoTentar={explicar} tentando={carregando} />}
+
+      {dados && (
+        <div className="explicacao__corpo">
+          <p className="label">Em linguagem simples</p>
+          {dados.explicacao.map((p, i) => <p key={i} className="explicacao__texto">{p}</p>)}
+
+          {dados.pontosDeAtencao.length > 0 && (
+            <>
+              <p className="label">Pontos de atenção</p>
+              <ul className="explicacao__lista">
+                {dados.pontosDeAtencao.map((p, i) => <li key={i}>{p}</li>)}
+              </ul>
+            </>
+          )}
+
+          {dados.perguntasParaMedico.length > 0 && (
+            <>
+              <p className="label">Perguntas para levar ao médico</p>
+              <ul className="explicacao__lista explicacao__lista--perguntas">
+                {dados.perguntasParaMedico.map((p, i) => <li key={i}>{p}</li>)}
+              </ul>
+            </>
+          )}
+
+          {dados.aviso && <AvisoIa>{dados.aviso}</AvisoIa>}
+          <Ancoras ids={outrasAncoras} eventos={eventos} titulo="Outros registros citados" />
+          <SeloIa geradoPor={dados.geradoPor} />
+        </div>
+      )}
+    </section>
   )
 }
