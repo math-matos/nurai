@@ -117,7 +117,10 @@ function historicoAntesDe(id: number): TurnoHistorico[] {
   return estado.conversa
     .filter((t) => t.id < id && t.resposta)
     .slice(-TURNOS_DE_CONTEXTO)
-    .map((t) => ({ pergunta: t.pergunta, texto: t.resposta!.texto }))
+    .map((t) => ({
+      pergunta: t.pergunta.slice(0, 1000),
+      texto: t.resposta!.texto.slice(0, 10).map((p) => p.slice(0, 2000)),
+    }))
 }
 
 function atualizarTurno(id: number, mudanca: Partial<Turno>) {
