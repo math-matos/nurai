@@ -5,6 +5,7 @@ import {
 } from '../../src/data/seed.js'
 import type { AcessoLog, Consentimento, Evento, ProximoPasso } from '../../src/data/types.js'
 import { comConexao, transacao } from './conexao.js'
+import { gerarCodigo } from './codigo.js'
 import { agora, hoje } from './datas.js'
 import {
   ErroConflito, type Compartilhamento, type FonteConectada, type NovoAcesso, type Repositorio,
@@ -14,7 +15,6 @@ type Linha = Record<string, unknown>
 type Bind = Record<string, string | number | null>
 
 const PACIENTE_ID = 'helena'
-const ALFABETO_CODIGO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 const TABELAS = ['eventos', 'consentimentos', 'acessos', 'passos', 'fontes', 'compartilhamentos']
 
 /* Instantes trafegam no formato exibido (horário de Brasília) e o banco guarda TIMESTAMP WITH TIME ZONE:
@@ -184,8 +184,7 @@ export function criarRepoOracle(): Repositorio {
     }),
 
     criarCompartilhamento: (para, autor) => transacao(async (conn) => {
-      const codigo = Array.from({ length: 6 }, () =>
-        ALFABETO_CODIGO[Math.floor(Math.random() * ALFABETO_CODIGO.length)]).join('')
+      const codigo = gerarCodigo()
       const compartilhamento: Compartilhamento = { codigo, criadoEm: agora(), para }
       await conn.execute(SQL.inserirCompartilhamento, { paciente: PACIENTE_ID, ...compartilhamento })
       await registrar(conn, { quem: autor, papel: 'Titular', acao: 'Gerou acesso temporário', itens: `${para}, 30 dias` })

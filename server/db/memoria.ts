@@ -2,10 +2,10 @@ import {
   ACESSOS, CONSENTIMENTOS, EVENTOS, FONTES_CONECTADAS, PROXIMOS_PASSOS,
 } from '../../src/data/seed.js'
 import type { AcessoLog } from '../../src/data/types.js'
+import { gerarCodigo } from './codigo.js'
 import { agora, hoje } from './datas.js'
 import { ErroConflito, type EstadoRepositorio, type NovoAcesso, type Repositorio } from './repo.js'
 
-const ALFABETO_CODIGO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
 function estadoInicial(): EstadoRepositorio {
   return structuredClone({
@@ -75,8 +75,7 @@ export function criarRepoMemoria(): Repositorio {
     },
 
     async criarCompartilhamento(para, autor) {
-      const codigo = Array.from({ length: 6 }, () =>
-        ALFABETO_CODIGO[Math.floor(Math.random() * ALFABETO_CODIGO.length)]).join('')
+      const codigo = gerarCodigo()
       const compartilhamento = { codigo, criadoEm: agora(), para }
       estado = { ...estado, compartilhamento }
       registrar({ quem: autor, papel: 'Titular', acao: 'Gerou acesso temporário', itens: `${para}, 30 dias` })

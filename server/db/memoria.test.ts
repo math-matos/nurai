@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import * as seed from '../../src/data/seed.js'
 import { criarRepoMemoria } from './memoria.js'
 import { suiteRepositorio } from './repo.contract.js'
@@ -30,6 +30,13 @@ describe('criarRepoMemoria', () => {
     const b = criarRepoMemoria()
     await a.alternarPasso('p1')
     expect((await b.estado()).passos[0].feito).toBe(false)
+  })
+
+  it('código de compartilhamento não usa Math.random (previsível)', async () => {
+    const random = vi.spyOn(Math, 'random')
+    await criarRepoMemoria().criarCompartilhamento('Dr. X', 'Helena Duarte Nogueira')
+    expect(random).not.toHaveBeenCalled()
+    random.mockRestore()
   })
 
   it('identifica-se como memoria', () => {
