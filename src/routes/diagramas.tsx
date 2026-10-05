@@ -138,14 +138,14 @@ export function Jornada() {
 export function Arquitetura() {
   return (
     <svg viewBox="0 0 1000 560" className="dg" role="img"
-      aria-label="Arquitetura em camadas: interface e domínio no navegador, estado em localStorage, e uma camada gerenciada tracejada como próxima fase.">
+      aria-label="Arquitetura em camadas: interface no navegador, contrato de dados com API Hono, OCI Generative AI e Oracle Autonomous Database já construídos, e o restante da camada gerenciada tracejado como próxima fase.">
       <g className="dg__banda">
         <rect x="20" y="34" width="960" height="118" rx="6" />
         <text x="36" y="26" className="dg__banda-rot">No navegador · construído hoje</text>
       </g>
       <Caixa x={44} y={58} w={286} h={70} linhas={['Interface React 19 + TypeScript', 'rotas, telas, estados de vazio e erro']} />
       <Caixa x={356} y={58} w={286} h={70} linhas={['Notação clínica reutilizável', 'régua de referência, linha do tempo, série']} />
-      <Caixa x={668} y={58} w={288} h={70} linhas={['Motor do copiloto', 'intenção → resposta + âncoras obrigatórias']} />
+      <Caixa x={668} y={58} w={288} h={70} linhas={['Cliente da API', 'estado e IA via /api, com selo de origem']} />
 
       <g className="dg__banda">
         <rect x="20" y="196" width="960" height="104" rx="6" />
@@ -153,20 +153,20 @@ export function Arquitetura() {
       </g>
       <Caixa x={44} y={218} w={286} h={62} linhas={['Modelo de evento clínico', 'fonte, origem, medidas, confiança']} />
       <Caixa x={356} y={218} w={286} h={62} linhas={['Store com assinatura', 'única fonte de verdade das telas']} />
-      <Caixa x={668} y={218} w={288} h={62} linhas={['Persistência em localStorage', 'nada sai do dispositivo']} />
+      <Caixa x={668} y={218} w={288} h={62} linhas={['API Hono na Vercel', 'valida, persiste e chama a IA']} />
 
       <path d="M500 300 V344" className="dg__seta" markerEnd="url(#ponta2)" />
-      <text x="516" y="328" className="dg__nota">trocar a store por API não altera nenhuma tela</text>
+      <text x="516" y="328" className="dg__nota">a API já usa a OCI; o tracejado vem a seguir</text>
 
       <g className="dg__banda dg__banda--futura">
         <rect x="20" y="356" width="960" height="182" rx="6" />
-        <text x="36" y="348" className="dg__banda-rot">Camada gerenciada · próxima fase</text>
+        <text x="36" y="348" className="dg__banda-rot">Camada gerenciada · traço cheio já na OCI, tracejado na próxima fase</text>
       </g>
       <Caixa x={44} y={380} w={220} h={64} variante="tracejada" linhas={['API do titular', 'autenticação e consentimento']} />
       <Caixa x={288} y={380} w={220} h={64} variante="tracejada" linhas={['Fila de ingestão', 'um documento por vez, assíncrona']} />
       <Caixa x={532} y={380} w={200} h={64} variante="tracejada" linhas={['Extração de documento', 'OCR e estruturação']} />
-      <Caixa x={756} y={380} w={200} h={64} variante="tracejada" linhas={['Execução de IA', 'resumo e resposta']} />
-      <Caixa x={44} y={460} w={220} h={62} variante="tracejada" linhas={['Banco do histórico', 'evento clínico + auditoria']} />
+      <Caixa x={756} y={380} w={200} h={64} linhas={['Execução de IA', 'OCI Generative AI']} />
+      <Caixa x={44} y={460} w={220} h={62} linhas={['Banco do histórico', 'Oracle Autonomous DB']} />
       <Caixa x={288} y={460} w={220} h={62} variante="tracejada" linhas={['Busca semântica', 'recuperação por significado']} />
       <Caixa x={532} y={460} w={200} h={62} variante="tracejada" linhas={['Objetos e imagem', 'PDF, foto, DICOM']} />
       <Caixa x={756} y={460} w={200} h={62} variante="tracejada" linhas={['Chaves e segredos', 'credenciais das integrações']} />

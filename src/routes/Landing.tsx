@@ -98,8 +98,8 @@ export function Landing() {
               <Link para="/projeto" className="btn btn--lg btn--ghost">Ver o dossiê do projeto</Link>
             </div>
             <p className="hero__nota">
-              Protótipo navegável, sem servidor. Dados sintéticos de uma paciente fictícia,
-              guardados apenas no seu navegador.
+              Protótipo navegável com back-end, IA da OCI e Oracle Database. Dados sintéticos
+              de uma paciente fictícia — não envie dados reais.
             </p>
           </div>
 
@@ -211,7 +211,7 @@ export function Landing() {
           <h2>A demonstração abre no histórico da Helena.</h2>
           <p>
             Sete anos de registros já carregados, o copiloto pronto para responder e as
-            pendências que ninguém tinha visto. Nada sai do seu navegador.
+            pendências que ninguém tinha visto. Tudo fictício, pronto para explorar.
           </p>
           <Link para="/app" className="btn btn--lg">
             Abrir a demonstração <Icon nome="seta" tamanho={17} />
