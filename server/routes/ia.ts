@@ -42,7 +42,7 @@ async function lerCorpo<T>(c: Context, esquema: z.ZodType<T>): Promise<T> {
 async function lerPdf(c: Context): Promise<EntradaExtracao> {
   const { arquivo } = await c.req.parseBody()
   if (!(arquivo instanceof File)) throw new HTTPException(400, { message: 'Envie o PDF no campo "arquivo"' })
-  if (arquivo.size > LIMITE_PDF) throw new ErroIa('ARQUIVO_GRANDE', 'O PDF passa do limite de 5 MB')
+  if (arquivo.size > LIMITE_PDF) throw new ErroIa('ARQUIVO_GRANDE', 'O PDF passa do limite de 4 MB')
   const bytes = new Uint8Array(await arquivo.arrayBuffer())
   return { texto: await textoDoPdf(bytes), nomeArquivo: arquivo.name }
 }

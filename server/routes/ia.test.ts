@@ -311,9 +311,9 @@ describe('rotas de IA com provider real (fake)', () => {
       expect(await res.json()).toMatchObject({ codigo: 'PDF_SEM_TEXTO' })
     })
 
-    it('PDF acima de 5 MB vira 413', async () => {
+    it('PDF acima de 4 MB vira 413', async () => {
       const { llm } = llmFake()
-      const grande = new Uint8Array(5 * 1024 * 1024 + 1)
+      const grande = new Uint8Array(4 * 1024 * 1024 + 1)
       grande.set(new TextEncoder().encode('%PDF-1.4'))
       const res = await app(llm).request('/api/extrair', multipart(grande))
       expect(res.status).toBe(413)
