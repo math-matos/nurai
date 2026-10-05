@@ -4,8 +4,8 @@ import { ChipFonte, Falha } from '../../components/ui'
 import { formatarDataCurta } from '../../lib/formato'
 import { FONTES } from '../../data/seed'
 import { LAUDO_EXEMPLO } from '../../data/exemplos'
-import type { Evento } from '../../data/types'
-import { api, type Extracao } from '../../lib/api'
+import type { Consentimento, Evento } from '../../data/types'
+import { api, type Extracao, type FonteConectada } from '../../lib/api'
 import { navegar } from '../../lib/router'
 import { isoHoje, useAcoes, useEstado } from '../../lib/store'
 import { useRequisicao } from '../../lib/useRequisicao'
@@ -17,8 +17,15 @@ function ehPdf(arquivo: File) {
   return arquivo.type === 'application/pdf' || arquivo.name.toLowerCase().endsWith('.pdf')
 }
 
+/* Fonte e consentimento não compartilham id no servidor: casam pelo nome da
+   instituição ("RNDS · Conecte SUS" ↔ "Rede Nacional de Dados em Saúde (RNDS)"). */
+function consentimentoDa(fonte: FonteConectada, consentimentos: Consentimento[]) {
+  const nome = fonte.nome.split(' · ')[0]
+  return consentimentos.find((c) => c.instituicao.includes(nome))
+}
+
 export function Fontes() {
-  const { fontes, saude } = useEstado()
+  const { fontes, consentimentos, saude } = useEstado()
   const { conectarFonte, adicionarEvento } = useAcoes()
   const leitura = useRequisicao<Extracao>()
   const [texto, setTexto] = useState('')
@@ -188,20 +195,39 @@ export function Fontes() {
         </div>
 
         <ul className="fontes__lista">
-          {conectadas.map((f) => (
-            <li key={f.id} className="fonte" style={{ ['--c' as string]: FONTES[f.fonte].cor }}>
-              <span className="fonte__faixa" />
-              <div className="fonte__corpo">
-                <p className="fonte__nome">{f.nome}</p>
-                <p className="fonte__meta">
-                  <ChipFonte fonte={f.fonte} curto />
-                  <span className="num">{f.registros} registros</span>
-                  <span>última sincronia em {f.ultima}</span>
-                </p>
-              </div>
-              <span className="chip chip--ok"><Icon nome="check" tamanho={12} /> conectada</span>
-            </li>
-          ))}
+          {conectadas.map((f) => {
+            const revogada = consentimentoDa(f, consentimentos)?.ativo === false
+            return (
+              <li key={f.id} className={`fonte${revogada ? ' fonte--revogada' : ''}`}
+                style={{ ['--c' as string]: FONTES[f.fonte].cor }}>
+                <span className="fonte__faixa" />
+                <div className="fonte__corpo">
+                  <p className="fonte__nome">{f.nome}</p>
+                  <p className="fonte__meta">
+                    <ChipFonte fonte={f.fonte} curto />
+                    <span className="num">{f.registros} registros</span>
+                    <span>última sincronia em {f.ultima}</span>
+                  </p>
+                  {revogada && (
+                    <p className="fonte__aviso">
+                      A permissão desta fonte está desligada em Acessos e consentimento: ela não
+                      envia registros novos nem acessa o seu histórico até você reativar.
+                    </p>
+                  )}
+                </div>
+                {revogada ? (
+                  <div className="fonte__acoes">
+                    <span className="chip chip--revogado"><Icon nome="cadeado" tamanho={12} /> acesso revogado</span>
+                    <button type="button" className="btn btn--ghost" onClick={() => navegar('/app/privacidade')}>
+                      Reativar em Privacidade
+                    </button>
+                  </div>
+                ) : (
+                  <span className="chip chip--ok"><Icon nome="check" tamanho={12} /> conectada</span>
+                )}
+              </li>
+            )
+          })}
         </ul>
 
         {disponiveis.length > 0 && (
