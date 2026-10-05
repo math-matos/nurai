@@ -62,6 +62,17 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
       })
     })
 
+    /* O Oracle grava '' como NULL: string opcional vazia equivale a campo ausente nos dois repositórios. */
+    it('adicionarEvento trata especialidade e documento vazios como ausentes', async () => {
+      const comVazios = { ...EVENTO_NOVO, especialidade: '', documento: '' }
+      const esperado = Object.fromEntries(Object.entries(comVazios).filter(([, v]) => v !== ''))
+      expect(await repo.adicionarEvento(comVazios, AUTOR)).toEqual(esperado)
+      const salvo = (await repo.estado()).eventos.at(-1)
+      expect(salvo).toEqual(esperado)
+      expect(salvo).not.toHaveProperty('especialidade')
+      expect(salvo).not.toHaveProperty('documento')
+    })
+
     describe('adicionarEvento com id repetido', () => {
       it('lança ErroConflito sem gravar o evento nem o acesso', async () => {
         await repo.adicionarEvento(EVENTO_NOVO, AUTOR)

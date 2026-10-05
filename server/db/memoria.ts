@@ -4,7 +4,9 @@ import {
 import type { AcessoLog } from '../../src/data/types.js'
 import { gerarCodigo } from './codigo.js'
 import { agora, hoje } from './datas.js'
-import { ErroConflito, type EstadoRepositorio, type NovoAcesso, type Repositorio } from './repo.js'
+import {
+  ErroConflito, semOpcionaisVazios, type EstadoRepositorio, type NovoAcesso, type Repositorio,
+} from './repo.js'
 
 
 function estadoInicial(): EstadoRepositorio {
@@ -40,7 +42,7 @@ export function criarRepoMemoria(): Repositorio {
 
     async adicionarEvento(evento, autor) {
       if (estado.eventos.some((e) => e.id === evento.id)) throw new ErroConflito(`Evento "${evento.id}" já existe`)
-      const copia = structuredClone(evento)
+      const copia = structuredClone(semOpcionaisVazios(evento))
       estado = { ...estado, eventos: [...estado.eventos, copia] }
       registrar({ quem: autor, papel: 'Titular', acao: 'Anexou documento ao histórico', itens: evento.titulo })
       return structuredClone(copia)

@@ -42,3 +42,9 @@ export class ErroConflito extends Error {
     this.name = 'ErroConflito'
   }
 }
+
+/* O Oracle grava '' como NULL e o campo some na leitura: os dois repositórios tratam string opcional vazia como ausente. */
+export function semOpcionaisVazios(evento: Evento): Evento {
+  const { especialidade, documento, ...resto } = evento
+  return { ...resto, ...(especialidade && { especialidade }), ...(documento && { documento }) }
+}

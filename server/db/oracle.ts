@@ -8,7 +8,7 @@ import { comConexao, transacao } from './conexao.js'
 import { gerarCodigo } from './codigo.js'
 import { agora, hoje } from './datas.js'
 import {
-  ErroConflito, type Compartilhamento, type FonteConectada, type NovoAcesso, type Repositorio,
+  ErroConflito, semOpcionaisVazios, type Compartilhamento, type FonteConectada, type NovoAcesso, type Repositorio,
 } from './repo.js'
 
 type Linha = Record<string, unknown>
@@ -152,7 +152,7 @@ export function criarRepoOracle(): Repositorio {
         throw e
       }
       await registrar(conn, { quem: autor, papel: 'Titular', acao: 'Anexou documento ao histórico', itens: evento.titulo })
-      return structuredClone(evento)
+      return structuredClone(semOpcionaisVazios(evento))
     }),
 
     alternarConsentimento: (id, autor) => transacao(async (conn) => {
