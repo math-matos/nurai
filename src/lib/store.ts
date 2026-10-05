@@ -96,9 +96,21 @@ async function executar<T>(acao: () => Promise<T>): Promise<T | null> {
   }
 }
 
-async function atualizarAcessos() {
-  const acessos = await api.acessos().catch(() => null)
-  if (acessos) definir(() => ({ acessos }))
+/* A leitura em curso é reaproveitada: a tela de Privacidade pede o registro ao montar
+   (duas vezes sob StrictMode). Depois de uma mudança, porém, sempre busca de novo,
+   senão uma leitura iniciada antes da mudança esconderia o registro novo. */
+let acessosEmCurso: Promise<void> | null = null
+let ultimaLeituraDeAcessos = 0
+
+function atualizarAcessos(aposMudanca = false): Promise<void> {
+  if (acessosEmCurso && !aposMudanca) return acessosEmCurso
+  const leitura = ++ultimaLeituraDeAcessos
+  const promessa = api.acessos()
+    .then((acessos) => { if (leitura === ultimaLeituraDeAcessos) definir(() => ({ acessos })) })
+    .catch(() => { /* o registro antigo continua na tela */ })
+    .finally(() => { if (acessosEmCurso === promessa) acessosEmCurso = null })
+  acessosEmCurso = promessa
+  return promessa
 }
 
 function historicoAntesDe(id: number): TurnoHistorico[] {
@@ -163,14 +175,14 @@ export function useAcoes() {
     adicionarEvento: useCallback((evento: Evento) => executar(async () => {
       const salvo = await api.adicionarEvento(evento)
       definir((e) => ({ eventos: [...e.eventos, salvo] }))
-      void atualizarAcessos()
+      void atualizarAcessos(true)
       return salvo
     }), []),
 
     alternarConsentimento: useCallback((id: string) => executar(async () => {
       const atualizado = await api.alternarConsentimento(id)
       definir((e) => ({ consentimentos: e.consentimentos.map((c) => (c.id === id ? atualizado : c)) }))
-      void atualizarAcessos()
+      void atualizarAcessos(true)
       return atualizado
     }), []),
 
@@ -189,7 +201,7 @@ export function useAcoes() {
     gerarCompartilhamento: useCallback((para: string) => executar(async () => {
       const compartilhamento = await api.compartilhar(para)
       definir(() => ({ compartilhamento }))
-      void atualizarAcessos()
+      void atualizarAcessos(true)
       return compartilhamento
     }), []),
 
