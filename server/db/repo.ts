@@ -34,3 +34,11 @@ export interface Repositorio {
   registrarAcesso(log: NovoAcesso): Promise<AcessoLog>
   reiniciar(): Promise<void>
 }
+
+/* Id que já existe: os dois repositórios lançam isto em vez de duplicar (memória) ou estourar ORA-00001 (Oracle). */
+export class ErroConflito extends Error {
+  constructor(mensagem: string) {
+    super(mensagem)
+    this.name = 'ErroConflito'
+  }
+}

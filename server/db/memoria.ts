@@ -3,7 +3,7 @@ import {
 } from '../../src/data/seed.js'
 import type { AcessoLog } from '../../src/data/types.js'
 import { agora, hoje } from './datas.js'
-import type { EstadoRepositorio, NovoAcesso, Repositorio } from './repo.js'
+import { ErroConflito, type EstadoRepositorio, type NovoAcesso, type Repositorio } from './repo.js'
 
 const ALFABETO_CODIGO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
@@ -39,6 +39,7 @@ export function criarRepoMemoria(): Repositorio {
     },
 
     async adicionarEvento(evento, autor) {
+      if (estado.eventos.some((e) => e.id === evento.id)) throw new ErroConflito(`Evento "${evento.id}" já existe`)
       const copia = structuredClone(evento)
       estado = { ...estado, eventos: [...estado.eventos, copia] }
       registrar({ quem: autor, papel: 'Titular', acao: 'Anexou documento ao histórico', itens: evento.titulo })

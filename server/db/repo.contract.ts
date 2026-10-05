@@ -3,7 +3,7 @@ import {
   ACESSOS, CONSENTIMENTOS, EVENTOS, FONTES_CONECTADAS, PROXIMOS_PASSOS,
 } from '../../src/data/seed.js'
 import type { Evento, ProximoPasso } from '../../src/data/types.js'
-import type { Repositorio } from './repo.js'
+import { ErroConflito, type Repositorio } from './repo.js'
 
 const AUTOR = 'Helena Duarte Nogueira'
 const FORMATO_QUANDO = /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/
@@ -59,6 +59,22 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
         })
         expect(acessos[0].id).toMatch(/^a/)
         expect(acessos[0].quando).toMatch(FORMATO_QUANDO)
+      })
+    })
+
+    describe('adicionarEvento com id repetido', () => {
+      it('lança ErroConflito sem gravar o evento nem o acesso', async () => {
+        await repo.adicionarEvento(EVENTO_NOVO, AUTOR)
+        const antes = await repo.estado()
+        await expect(repo.adicionarEvento({ ...EVENTO_NOVO, titulo: 'Outro' }, AUTOR))
+          .rejects.toBeInstanceOf(ErroConflito)
+        expect(await repo.estado()).toEqual(antes)
+      })
+
+      it('também para id que já vem do seed', async () => {
+        await expect(repo.adicionarEvento({ ...EVENTO_NOVO, id: EVENTOS[0].id }, AUTOR))
+          .rejects.toBeInstanceOf(ErroConflito)
+        expect((await repo.estado()).eventos).toEqual(EVENTOS)
       })
     })
 

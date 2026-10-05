@@ -3,7 +3,7 @@ import { HTTPException } from 'hono/http-exception'
 import type { z } from 'zod'
 import { PACIENTE } from '../src/data/seed.js'
 import type { LlmProvider } from './ai/provider.js'
-import type { Repositorio } from './db/repo.js'
+import { ErroConflito, type Repositorio } from './db/repo.js'
 import { esquemaCompartilhamento, esquemaEvento } from './esquemas.js'
 import { rotasIa } from './routes/ia.js'
 
@@ -84,6 +84,7 @@ export function criarApp(deps: Deps): Hono {
 
   app.onError((err, c) => {
     if (err instanceof HTTPException) return c.json({ erro: err.message }, err.status)
+    if (err instanceof ErroConflito) return c.json({ erro: err.message, codigo: 'CONFLITO' }, 409)
     console.error(`[api] ${c.req.method} ${c.req.path} falhou: ${err.name}: ${err.message}`)
     return c.json({ erro: 'Erro interno' }, 500)
   })

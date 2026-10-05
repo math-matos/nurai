@@ -6,7 +6,9 @@ import {
 import type { AcessoLog, Consentimento, Evento, ProximoPasso } from '../../src/data/types.js'
 import { comConexao, transacao } from './conexao.js'
 import { agora, hoje } from './datas.js'
-import type { Compartilhamento, FonteConectada, NovoAcesso, Repositorio } from './repo.js'
+import {
+  ErroConflito, type Compartilhamento, type FonteConectada, type NovoAcesso, type Repositorio,
+} from './repo.js'
 
 type Linha = Record<string, unknown>
 type Bind = Record<string, string | number | null>
@@ -119,6 +121,10 @@ async function inserirVarios(conn: oracledb.Connection, sql: string, linhas: Bin
   await conn.executeMany(sql, linhas, { bindDefs })
 }
 
+/* ORA-00001: unique constraint violated; a mensagem traz o nome da constraint. */
+const violouChave = (e: unknown, constraint: string) =>
+  (e as { errorNum?: number }).errorNum === 1 && (e as Error).message.toUpperCase().includes(constraint)
+
 async function registrar(conn: oracledb.Connection, log: NovoAcesso): Promise<AcessoLog> {
   const completo = { id: `a${Date.now()}-${randomUUID().slice(0, 8)}`, quando: agora(), ...log }
   await conn.execute(SQL.inserirAcesso, linhaAcesso(completo))
@@ -139,7 +145,12 @@ export function criarRepoOracle(): Repositorio {
     })),
 
     adicionarEvento: (evento, autor) => transacao(async (conn) => {
-      await conn.execute(SQL.inserirEvento, linhaEvento(evento))
+      try {
+        await conn.execute(SQL.inserirEvento, linhaEvento(evento))
+      } catch (e) {
+        if (violouChave(e, 'EVENTOS_PK')) throw new ErroConflito(`Evento "${evento.id}" já existe`)
+        throw e
+      }
       await registrar(conn, { quem: autor, papel: 'Titular', acao: 'Anexou documento ao histórico', itens: evento.titulo })
       return structuredClone(evento)
     }),

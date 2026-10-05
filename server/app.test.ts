@@ -81,6 +81,16 @@ describe('API', () => {
       expect((await repo.estado()).eventos).toHaveLength(EVENTOS.length)
     })
 
+    it('409 CONFLITO quando o id já existe', async () => {
+      await app.request('/api/eventos', json(EVENTO))
+      const res = await app.request('/api/eventos', json({ ...EVENTO, titulo: 'Outro' }))
+      expect(res.status).toBe(409)
+      const body = await res.json() as { erro: string; codigo: string }
+      expect(body.codigo).toBe('CONFLITO')
+      expect(body.erro).toMatch(/u1/)
+      expect((await repo.estado()).eventos).toHaveLength(EVENTOS.length + 1)
+    })
+
     it('400 quando o JSON é malformado', async () => {
       const res = await app.request('/api/eventos', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: '{',
