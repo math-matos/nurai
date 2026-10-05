@@ -16,6 +16,11 @@ export function hoje(d = new Date()) {
   return `${p.day}/${p.month}/${p.year}`
 }
 
+export function hojeIso(d = new Date()) {
+  const p = partes(d)
+  return `${p.year}-${p.month}-${p.day}`
+}
+
 export function agora(d = new Date()) {
   const p = partes(d)
   return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`

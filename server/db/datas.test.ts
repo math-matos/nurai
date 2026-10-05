@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agora, hoje } from './datas.js'
+import { agora, hoje, hojeIso } from './datas.js'
 
 describe('datas', () => {
   it('formata no horário de Brasília', () => {
@@ -10,5 +10,10 @@ describe('datas', () => {
 
   it('usa 00 para meia-noite', () => {
     expect(agora(new Date('2026-03-10T03:00:00Z'))).toBe('10/03/2026 00:00')
+  })
+
+  it('hojeIso devolve a data de Brasília em AAAA-MM-DD, mesmo quando em UTC já virou o dia', () => {
+    expect(hojeIso(new Date('2026-10-05T01:30:00Z'))).toBe('2026-10-04')
+    expect(hojeIso(new Date('2026-10-05T03:00:00Z'))).toBe('2026-10-05')
   })
 })

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { criarLlmMock } from '../ai/mock.js'
 import type { LlmProvider, MensagemLlm } from '../ai/provider.js'
 import { criarApp } from '../app.js'
+import { hojeIso } from '../db/datas.js'
 import { criarRepoMemoria } from '../db/memoria.js'
 import type { Repositorio } from '../db/repo.js'
 import { esquemaEvento } from '../esquemas.js'
@@ -301,7 +302,7 @@ describe('rotas de IA com provider real (fake)', () => {
       expect(evento.medidas).toBeUndefined()
       expect(evento.sinal).toBe('info')
       expect(evento.instituicao).toBe('Não identificada')
-      expect(evento.data).toBe(new Date().toISOString().slice(0, 10))
+      expect(evento.data).toBe(hojeIso())
       expect(evento).not.toHaveProperty('documento')
       expect(avisos.join(' ')).toMatch(/Vitamina D/)
       expect(avisos.join(' ')).toMatch(/data/i)
@@ -312,7 +313,7 @@ describe('rotas de IA com provider real (fake)', () => {
       const { llm } = llmFake({ ...EXTRACAO, data: '2026-02-30' })
       const { evento, avisos } = CONTRATO.extrair.parse(
         await (await app(llm).request('/api/extrair', json({ texto: 'exame lipidograma' }))).json())
-      expect(evento.data).toBe(new Date().toISOString().slice(0, 10))
+      expect(evento.data).toBe(hojeIso())
       expect(avisos.join(' ')).toMatch(/data/i)
     })
 

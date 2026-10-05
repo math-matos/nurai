@@ -1,4 +1,5 @@
 import type { Evento, Sinal } from '../../../src/data/types.js'
+import { hojeIso } from '../../db/datas.js'
 
 export const normalizar = (s: string) =>
   s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
@@ -22,7 +23,7 @@ export function mesAno(iso: string): string {
   return `${mes}/${ano}`
 }
 
-export const hojeISO = () => new Date().toISOString().slice(0, 10)
+export const hojeISO = () => hojeIso()
 
 export function sinalDaMedida(valor: number, refMin: number, refMax: number): Sinal {
   return valor < refMin || valor > refMax ? 'alterado' : 'normal'
