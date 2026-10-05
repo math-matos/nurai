@@ -33,8 +33,11 @@ export function AppShell({ rota }: { rota: string }) {
   const secao = segmentos[1] ?? 'linha'
   const parametro = segmentos[2]
 
-  const atual = NAV.find((n) => n.para === `/app/${secao}`) ?? NAV[0]
+  const atual = NAV.find((n) => n.para === `/app/${secao}`)
+  const titulo = atual?.rotulo ?? 'Página não encontrada'
   const pendencias = estado.passos.filter((p) => !p.feito).length
+
+  useEffect(() => { document.title = `${titulo} · Nurai` }, [titulo])
 
   return (
     <div className="app">
@@ -118,8 +121,8 @@ export function AppShell({ rota }: { rota: string }) {
             <span className="sr-only">Abrir menu</span>
           </button>
           <div className="barra__titulo">
-            <h1>{atual.rotulo}</h1>
-            <p>{atual.nota}</p>
+            <h1>{titulo}</h1>
+            {atual && <p>{atual.nota}</p>}
           </div>
           {estado.saude && (
             <div className="selos" aria-label="Infraestrutura em uso">
@@ -179,6 +182,14 @@ export function AppShell({ rota }: { rota: string }) {
               {secao === 'cuidado' && <Cuidado />}
               {secao === 'resumo' && <Resumo />}
               {secao === 'privacidade' && <Privacidade />}
+              {!atual && (
+                <Vazio
+                  icone="busca"
+                  titulo="Página não encontrada"
+                  texto="Este endereço não corresponde a nenhuma tela da demonstração."
+                  acao={<Link para="/app/linha" className="btn btn--ghost">Ir para a linha do tempo</Link>}
+                />
+              )}
             </>
           )}
         </main>
