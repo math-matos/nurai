@@ -12,7 +12,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "smoke:genai": "tsx server/scripts/smoke-genai.ts",
+    "smoke:db": "tsx server/scripts/smoke-db.ts",
+    "db:setup": "tsx server/scripts/db-setup.ts",
+    "test:oci": "pnpm smoke:genai && pnpm smoke:db"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",
