@@ -107,7 +107,7 @@ export function Resumo() {
               Acesso de 30 dias criado para {compartilhamento.para}
             </p>
             <p className="acesso__texto">
-              Ela abre exatamente esta página — e nada além dela. Você pode revogar quando
+              O código abre exatamente esta página — e nada além dela. Você pode revogar quando
               quiser em Acessos e consentimento. Criado em {compartilhamento.criadoEm}.
             </p>
           </div>
