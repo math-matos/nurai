@@ -22,17 +22,25 @@ export function extrairJson(texto: string): unknown {
   throw new Error('objeto JSON incompleto na resposta')
 }
 
-function validar<T>(bruto: string, esquema: z.ZodType<T>): { ok: true; valor: T } | { ok: false; erro: string } {
+/* "erro" volta para o modelo no retry e pode citar trecho da resposta (o JSON.parse cita);
+   "tipo" é o que pode ir para log. */
+type Validacao<T> = { ok: true; valor: T } | { ok: false; erro: string; tipo: string }
+
+function validar<T>(bruto: string, esquema: z.ZodType<T>): Validacao<T> {
   let json: unknown
   try {
     json = extrairJson(bruto)
   } catch (e) {
-    return { ok: false, erro: (e as Error).message }
+    return { ok: false, erro: (e as Error).message, tipo: (e as Error).name }
   }
   const r = esquema.safeParse(json)
   if (r.success) return { ok: true, valor: r.data }
   const erro = r.error.issues.map((i) => `${i.path.join('.') || 'raiz'}: ${i.message}`).join('; ')
-  return { ok: false, erro }
+  return { ok: false, erro, tipo: 'esquema' }
+}
+
+function registrarInvalida(motivo: string, r: { tipo: string }, resposta: string) {
+  console.error(`[ia] ${motivo}: tipo=${r.tipo} tamanho=${resposta.length}`)
 }
 
 async function conversar(llm: LlmProvider, mensagens: MensagemLlm[], opcoes: OpcoesChat) {
@@ -64,7 +72,7 @@ export async function pedirJson<T>(
 
   const restante = prazo - Date.now()
   if (restante < MINIMO_RETRY_MS) {
-    console.error(`[ia] resposta inválida sem tempo para retry (${restante} ms restantes)`)
+    registrarInvalida(`resposta inválida sem tempo para retry (${restante} ms restantes)`, r1, primeira)
     throw new ErroIa('IA_RESPOSTA_INVALIDA', 'A IA devolveu uma resposta em formato inesperado')
   }
 
@@ -76,8 +84,9 @@ export async function pedirJson<T>(
       content: `Sua resposta não é válida (${r1.erro}). Responda novamente apenas com o objeto JSON corrigido, no formato pedido, sem texto fora dele.`,
     },
   ]
-  const r2 = validar(await conversar(llm, retry, { ...config, timeoutMs: restante }), esquema)
+  const segunda = await conversar(llm, retry, { ...config, timeoutMs: restante })
+  const r2 = validar(segunda, esquema)
   if (r2.ok) return r2.valor
-  console.error(`[ia] resposta inválida após retry: ${r2.erro.slice(0, 200)}`)
+  registrarInvalida('resposta inválida após retry', r2, segunda)
   throw new ErroIa('IA_RESPOSTA_INVALIDA', 'A IA devolveu uma resposta em formato inesperado')
 }

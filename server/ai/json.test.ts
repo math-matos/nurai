@@ -71,6 +71,18 @@ describe('pedirJson', () => {
     expect((erro as ErroIa).status).toBe(502)
   })
 
+  it('o log de resposta inválida não carrega conteúdo da resposta, só tipo e tamanho', async () => {
+    const clinico = '{"texto": HbA1c 9,1% em 2026}'
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { llm } = llmFila(clinico, clinico)
+    await pedirJson(llm, PEDIDO, esquema).catch(() => {})
+    const registrado = log.mock.calls.flat().join(' ')
+    log.mockRestore()
+    expect(registrado).toMatch(/SyntaxError/)
+    expect(registrado).toContain(String(clinico.length))
+    expect(registrado).not.toMatch(/HbA1c|9,1/)
+  })
+
   it('erro do provider vira IA_INDISPONIVEL', async () => {
     const llm: LlmProvider = { nome: 'oci', chat: async () => { throw new Error('ECONNRESET') } }
     const erro = await pedirJson(llm, PEDIDO, esquema).catch((e: unknown) => e)
