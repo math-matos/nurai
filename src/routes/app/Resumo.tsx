@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { Regua } from '../../components/ui'
+import { AvisoIa, Falha, Regua, SeloIa } from '../../components/ui'
 import { formatarData } from '../../lib/formato'
 import { MEDICACOES, PACIENTE } from '../../data/seed'
+import { api, mensagemDeErro, type ResumoIa } from '../../lib/api'
+import { navegar } from '../../lib/router'
 import { hoje, useAcoes, useEstado } from '../../lib/store'
 
 type Foco = 'cardiologia' | 'endocrinologia' | 'clinica'
@@ -26,6 +28,10 @@ export function Resumo() {
   const { eventos, passos, compartilhamento } = useEstado()
   const { gerarCompartilhamento } = useAcoes()
   const [foco, setFoco] = useState<Foco>('cardiologia')
+  const [sinteses, setSinteses] = useState<Partial<Record<Foco, ResumoIa>>>({})
+  const [gerandoPara, setGerandoPara] = useState<Foco | null>(null)
+  const [erroIa, setErroIa] = useState<{ foco: Foco; mensagem: string } | null>(null)
+  const [compartilhando, setCompartilhando] = useState(false)
 
   const alvo = FOCOS.find((f) => f.id === foco)!
   const destaques = alvo.ids
@@ -33,6 +39,31 @@ export function Resumo() {
     .filter((e): e is NonNullable<typeof e> => Boolean(e))
   const pendentes = passos.filter((p) => !p.feito)
   const fontesDistintas = new Set(eventos.map((e) => e.fonte)).size
+  const sintese = sinteses[foco]
+
+  const gerarResumo = async () => {
+    if (gerandoPara) return
+    const alvoAtual = foco
+    setGerandoPara(alvoAtual)
+    setErroIa(null)
+    try {
+      const resumo = await api.resumo(alvo.rotulo)
+      setSinteses((s) => ({ ...s, [alvoAtual]: resumo }))
+    } catch (erro) {
+      setErroIa({ foco: alvoAtual, mensagem: mensagemDeErro(erro) })
+    } finally {
+      setGerandoPara(null)
+    }
+  }
+
+  const compartilhar = async () => {
+    if (compartilhando) return
+    setCompartilhando(true)
+    await gerarCompartilhamento(alvo.medico)
+    setCompartilhando(false)
+  }
+
+  const eventoPorId = (id: string) => eventos.find((e) => e.id === id)
 
   return (
     <div className="resumo">
@@ -54,10 +85,17 @@ export function Resumo() {
             <Icon nome="papel" tamanho={16} /> Imprimir
           </button>
           <button
-            type="button" className="btn"
-            onClick={() => gerarCompartilhamento(alvo.medico)}
+            type="button" className="btn btn--ghost" disabled={gerandoPara !== null}
+            onClick={() => { void gerarResumo() }}
           >
-            <Icon nome="chave" tamanho={16} /> Gerar acesso temporário
+            <Icon nome="copiloto" tamanho={16} />
+            {gerandoPara === foco ? 'Gerando resumo…' : sintese ? 'Gerar de novo com IA' : 'Gerar resumo com IA'}
+          </button>
+          <button
+            type="button" className="btn" disabled={compartilhando}
+            onClick={() => { void compartilhar() }}
+          >
+            <Icon nome="chave" tamanho={16} /> {compartilhando ? 'Gerando acesso…' : 'Gerar acesso temporário'}
           </button>
         </div>
       </div>
@@ -100,6 +138,60 @@ export function Resumo() {
             <p>{PACIENTE.alergias.join(' · ')}</p>
           </div>
         </section>
+
+        {(sintese || gerandoPara === foco || erroIa?.foco === foco) && (
+          <section className="folha-resumo__bloco sintese-ia" aria-live="polite">
+            <h3>Síntese para {alvo.rotulo.toLowerCase()}</h3>
+            {gerandoPara === foco && (
+              <div className="sintese-ia__carregando">
+                <span className="esqueleto" style={{ width: '90%' }} />
+                <span className="esqueleto" style={{ width: '76%' }} />
+                <span className="esqueleto" style={{ width: '84%' }} />
+              </div>
+            )}
+            {erroIa?.foco === foco && gerandoPara !== foco && (
+              <Falha mensagem={erroIa.mensagem} aoTentar={() => { void gerarResumo() }} />
+            )}
+            {sintese && gerandoPara !== foco && (
+              <>
+                {sintese.sintese.map((p, i) => <p key={i} className="sintese-ia__texto">{p}</p>)}
+                {sintese.pontos.length > 0 && (
+                  <ul className="sintese-ia__pontos">
+                    {sintese.pontos.map((p, i) => (
+                      <li key={i}>
+                        <p>{p.texto}</p>
+                        <div className="sintese-ia__ancoras">
+                          {p.ancoras.map((id) => {
+                            const e = eventoPorId(id)
+                            if (!e) return null
+                            return (
+                              <button
+                                key={id} type="button" className="chip chip--botao"
+                                onClick={() => navegar(`/app/linha/${id}`)}
+                              >
+                                <span className="num">{formatarData(e.data)}</span> · {e.titulo}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {sintese.perguntasSugeridas.length > 0 && (
+                  <>
+                    <p className="label">Perguntas para levar à consulta</p>
+                    <ul className="sintese-ia__perguntas">
+                      {sintese.perguntasSugeridas.map((p, i) => <li key={i}>{p}</li>)}
+                    </ul>
+                  </>
+                )}
+                {sintese.aviso && <AvisoIa>{sintese.aviso}</AvisoIa>}
+                <SeloIa geradoPor={sintese.geradoPor} />
+              </>
+            )}
+          </section>
+        )}
 
         <section className="folha-resumo__bloco">
           <h3>Condições ativas</h3>

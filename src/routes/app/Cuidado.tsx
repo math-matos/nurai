@@ -1,15 +1,30 @@
 import { Icon } from '../../components/Icon'
+import { useState } from 'react'
+import { Falha, SeloIa } from '../../components/ui'
 import { formatarData } from '../../lib/formato'
 import { CENTROS, ENSAIOS } from '../../data/seed'
+import type { PassosGerados } from '../../lib/api'
 import { navegar } from '../../lib/router'
 import { useAcoes, useEstado } from '../../lib/store'
+import { useRequisicao } from '../../lib/useRequisicao'
 
 const ROTULO_PRIORIDADE = { alta: 'Prioridade alta', media: 'Prioridade média', baixa: 'Prioridade baixa' }
 
 export function Cuidado() {
   const { passos, eventos } = useEstado()
-  const { alternarPasso } = useAcoes()
+  const { alternarPasso, gerarPassos } = useAcoes()
+  const analise = useRequisicao<PassosGerados>()
+  const [marcando, setMarcando] = useState<string | null>(null)
   const abertos = passos.filter((p) => !p.feito)
+
+  const reanalisar = () => { void analise.executar(gerarPassos) }
+
+  const marcar = async (id: string) => {
+    if (marcando) return
+    setMarcando(id)
+    await alternarPasso(id)
+    setMarcando(null)
+  }
 
   return (
     <div className="cuidado">
@@ -25,6 +40,14 @@ export function Cuidado() {
             médico isolado tinha esse conjunto na tela. Marcar como resolvido é seu; conduta,
             do profissional que atende você.
           </p>
+          <div className="cuidado__analise">
+            <button type="button" className="btn btn--ghost" onClick={reanalisar} disabled={analise.carregando}>
+              <Icon nome="recomecar" tamanho={16} />
+              {analise.carregando ? 'Reanalisando o histórico…' : 'Reanalisar meu histórico'}
+            </button>
+            {analise.dados && !analise.carregando && <SeloIa geradoPor={analise.dados.geradoPor} />}
+          </div>
+          {analise.erro && <Falha mensagem={analise.erro} aoTentar={reanalisar} tentando={analise.carregando} />}
         </div>
 
         <ol className="passos">
@@ -32,8 +55,8 @@ export function Cuidado() {
             <li key={p.id} className={`passo${p.feito ? ' passo--feito' : ''} prioridade-${p.prioridade}`}>
               <label className="passo__marcar">
                 <input
-                  type="checkbox" checked={p.feito}
-                  onChange={() => alternarPasso(p.id)}
+                  type="checkbox" checked={p.feito} disabled={marcando === p.id}
+                  onChange={() => { void marcar(p.id) }}
                 />
                 <span className="passo__caixa" aria-hidden="true"><Icon nome="check" tamanho={13} /></span>
                 <span className="sr-only">Marcar “{p.titulo}” como resolvido</span>
