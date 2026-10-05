@@ -22,7 +22,9 @@ const CONTRATO = {
     geradoPor,
   }).strict(),
   extrair: z.object({
-    evento: esquemaEvento.and(z.object({ origem: z.literal('OCR + IA'), novo: z.literal(true) })),
+    evento: z.custom<object>((e) => typeof e === 'object' && e !== null && !('id' in e))
+      .pipe(z.preprocess((e) => ({ ...e, id: 'sem-id' }), esquemaEvento))
+      .refine((e) => e.origem === 'OCR + IA' && e.novo === true, 'origem OCR + IA e novo: true'),
     avisos: z.array(z.string()),
     geradoPor,
   }).strict(),
@@ -251,7 +253,6 @@ describe('rotas de IA com provider real (fake)', () => {
         fonte: 'paciente', sinal: 'alterado', origem: 'OCR + IA', confianca: 0.88,
         documento: 'lipidios.pdf', novo: true, tags: ['colesterol'],
       })
-      expect(evento).not.toHaveProperty('id')
       expect(evento.medidas?.map((m) => m.sinal)).toEqual(['alterado', 'normal'])
       expect(avisos).toEqual([])
       expect(chamadas[0].at(-1)?.content).toContain('Colesterol LDL: 162')
@@ -418,7 +419,9 @@ describe('rotas de IA em modo mock', () => {
   it('extrai de PDF real em modo mock', async () => {
     const res = await app.request('/api/extrair', multipart(pdf(LAUDO_TEXTO)))
     expect(res.status).toBe(200)
-    CONTRATO.extrair.parse(await res.json())
+    const { evento } = CONTRATO.extrair.parse(await res.json())
+    expect(evento).toMatchObject({ data: '2026-09-20', documento: 'laudo.pdf', instituicao: 'Laboratorio Teste' })
+    expect(evento.medidas?.map((m) => m.nome)).toEqual(['Colesterol LDL', 'Colesterol HDL'])
   })
 
   it('recusa texto não clínico', async () => {

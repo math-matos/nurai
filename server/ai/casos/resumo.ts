@@ -1,0 +1,88 @@
+import { z } from 'zod'
+import { PACIENTE } from '../../../src/data/seed.js'
+import type { Evento } from '../../../src/data/types.js'
+import type { Deps } from '../../app.js'
+import { pedirJson } from '../json.js'
+import { PERFIL, mensagens, serializarEventos } from '../prompts.js'
+import { dataBR, filtrarAncoras, idsDe, mesAno, normalizar, porData } from './comum.js'
+
+export interface RespostaResumo {
+  especialidade: string
+  sintese: string[]
+  pontos: { texto: string; ancoras: string[] }[]
+  perguntasSugeridas: string[]
+  aviso: string
+  geradoPor: 'oci' | 'mock'
+}
+
+const AVISO = 'Resumo montado a partir dos registros do seu histórico para apoiar a conversa com o médico — não substitui a avaliação clínica.'
+const MAX_PONTOS = 6
+/* Tags que não indicam especialidade e puxariam registros sem relação. */
+const TAGS_GENERICAS = new Set(['imagem', 'medicacao', 'papel', 'vacina', 'procedimento', 'diagnostico'])
+
+const esquema = z.object({
+  sintese: z.array(z.string()).min(1),
+  pontos: z.array(z.object({ texto: z.string(), ancoras: z.array(z.string()) })),
+  perguntasSugeridas: z.array(z.string()),
+})
+
+const tarefa = (especialidade: string) => `Tarefa: preparar um resumo pré-consulta para a especialidade "${especialidade}", que a paciente vai levar ao médico. Selecione apenas o que é relevante para essa especialidade.
+Formato da resposta (JSON):
+{"sintese": ["frase"], "pontos": [{"texto": "fato objetivo e datado", "ancoras": ["e01"]}], "perguntasSugeridas": ["..."]}
+- "sintese": 1 a 3 frases sobre o quadro registrado relevante para a especialidade.
+- "pontos": até ${MAX_PONTOS} fatos objetivos e datados (mudanças recentes, exames alterados, medicamentos, pendências), cada um com os ids que o sustentam.
+- "perguntasSugeridas": 2 a 4 perguntas para a paciente levar à consulta.`
+
+function relevantes(eventos: Evento[], especialidade: string): Evento[] {
+  const alvo = normalizar(especialidade)
+  const base = eventos.filter((e) => e.especialidade && normalizar(e.especialidade).includes(alvo))
+  const tags = new Set(base.flatMap((e) => e.tags).filter((t) => !TAGS_GENERICAS.has(normalizar(t))))
+  const doTema = eventos.filter((e) => base.includes(e) || e.tags.some((t) => tags.has(t)))
+  return (doTema.length ? doTema : eventos.filter((e) => e.sinal === 'alterado').slice(-MAX_PONTOS)).sort(porData)
+}
+
+function resumirSemIa(eventos: Evento[], especialidade: string): Omit<RespostaResumo, 'especialidade' | 'aviso' | 'geradoPor'> {
+  const doTema = relevantes(eventos, especialidade)
+  const primeiro = doTema[0]
+  const ultimo = doTema.at(-1)!
+  const destaque = doTema.filter((e) => e.sinal === 'alterado' || e.sinal === 'atencao')
+  return {
+    sintese: [
+      `Encontrei ${doTema.length} registro(s) relacionados a ${especialidade}, entre ${mesAno(primeiro.data)} e ${mesAno(ultimo.data)}.`,
+      `O mais recente é "${ultimo.titulo}", de ${dataBR(ultimo.data)}.`,
+    ],
+    pontos: (destaque.length ? destaque : doTema).slice(-MAX_PONTOS).reverse().map((e) => ({
+      texto: `${dataBR(e.data)} — ${e.titulo}: ${e.resumo}`,
+      ancoras: [e.id],
+    })),
+    perguntasSugeridas: [
+      'O que mudou no meu acompanhamento desde a última consulta?',
+      'Algum desses resultados muda o que eu preciso fazer agora?',
+      'Quando devo repetir os exames de controle?',
+    ],
+  }
+}
+
+export async function gerarResumo({ repo, llm }: Deps, especialidade: string): Promise<RespostaResumo> {
+  const { eventos } = await repo.estado()
+  let corpo: Omit<RespostaResumo, 'especialidade' | 'aviso' | 'geradoPor'>
+  if (llm.nome === 'mock') {
+    corpo = resumirSemIa(eventos, especialidade)
+  } else {
+    const r = await pedirJson(llm, mensagens(
+      tarefa(especialidade), PERFIL, `Histórico (${eventos.length} registros):\n${serializarEventos(eventos)}`,
+    ), esquema, { maxTokens: 2000 })
+    const validos = idsDe(eventos)
+    corpo = {
+      sintese: r.sintese.map((t) => t.trim()).filter(Boolean),
+      pontos: r.pontos
+        .map((p) => ({ texto: p.texto.trim(), ancoras: filtrarAncoras(p.ancoras, validos) }))
+        .filter((p) => p.texto && p.ancoras.length),
+      perguntasSugeridas: r.perguntasSugeridas.map((t) => t.trim()).filter(Boolean),
+    }
+  }
+  await repo.registrarAcesso({
+    quem: PACIENTE.nome, papel: 'Titular', acao: 'Gerou resumo pré-consulta', itens: especialidade,
+  })
+  return { especialidade, ...corpo, aviso: AVISO, geradoPor: llm.nome }
+}
