@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../../components/Icon'
 import { Ancoras, AvisoIa, ChipFonte, ChipSinal, Falha, Regua, SeloIa, Vazio } from '../../components/ui'
 import { ICONE_TIPO, ano, formatarData, ordenarRecentes } from '../../lib/formato'
@@ -11,6 +11,20 @@ import { useRequisicao } from '../../lib/useRequisicao'
 
 const TIPOS_FILTRO: TipoId[] = ['exame', 'consulta', 'imagem', 'internacao', 'cirurgia', 'vacina', 'documento']
 const FONTES_FILTRO: FonteId[] = ['sus', 'laboratorio', 'hospital', 'clinica', 'operadora', 'paciente']
+
+/* Mesmo ponto de quebra de `.linha` em app.css: abaixo dele o detalhe vai para baixo da lista. */
+const EMPILHADO = '(max-width: 1180px)'
+
+const empilhado = () => window.matchMedia(EMPILHADO).matches
+const idDoItem = (id: string) => `evento-${id}`
+
+/* Desconta a barra superior grudenta, que no celular pode passar de 100px. */
+function rolarAte(alvo: HTMLElement | null) {
+  if (!alvo) return
+  const barra = document.querySelector('.barra')?.getBoundingClientRect().height ?? 0
+  const topo = alvo.getBoundingClientRect().top + window.scrollY - barra - 12
+  window.scrollTo({ top: Math.max(topo, 0) })
+}
 
 export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
   const { eventos } = useEstado()
@@ -30,8 +44,32 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
     })
   }, [eventos, busca, tipos, fontes])
 
-  const atual: Evento | undefined =
-    lista.find((e) => e.id === selecionado) ?? eventos.find((e) => e.id === selecionado) ?? lista[0]
+  const naoEncontrado = selecionado !== undefined && !eventos.some((e) => e.id === selecionado)
+  const atual: Evento | undefined = naoEncontrado
+    ? undefined
+    : lista.find((e) => e.id === selecionado) ?? eventos.find((e) => e.id === selecionado) ?? lista[0]
+
+  const detalhe = useRef<HTMLElement>(null)
+  const tituloDetalhe = useRef<HTMLHeadingElement>(null)
+
+  /* Em tela estreita o detalhe fica empilhado abaixo da lista inteira: ao escolher
+     um registro, leva a pessoa até ele em vez de deixá-lo milhares de pixels abaixo. */
+  const mostrarDetalhe = () => {
+    if (!empilhado()) return
+    rolarAte(detalhe.current)
+    tituloDetalhe.current?.focus({ preventScroll: true })
+  }
+
+  useEffect(() => {
+    if (selecionado) mostrarDetalhe()
+  }, [selecionado])
+
+  const voltarALista = () => {
+    const item = atual && document.getElementById(idDoItem(atual.id))
+    if (!item) return
+    rolarAte(item)
+    item.focus({ preventScroll: true })
+  }
 
   const alterna = <T,>(valor: T, atuais: T[], set: (v: T[]) => void) =>
     set(atuais.includes(valor) ? atuais.filter((v) => v !== valor) : [...atuais, valor])
@@ -60,7 +98,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
                   onClick={() => alterna(t, tipos, setTipos)}
                 >
                   <Icon nome={ICONE_TIPO[t]} tamanho={13} />
-                  {TIPOS[t].replace(' laboratorial', '').replace(' de imagem', '')}
+                  {TIPOS[t]}
                 </button>
               ))}
             </div>
@@ -112,10 +150,10 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
                 <li key={e.id}>
                   {novoAno && <p className="tempo__ano num">{ano(e.data)}</p>}
                   <button
-                    type="button"
+                    type="button" id={idDoItem(e.id)}
                     className={`evento${atual?.id === e.id ? ' evento--ativo' : ''}`}
                     style={{ ['--c' as string]: FONTES[e.fonte].cor }}
-                    onClick={() => navegar(`/app/linha/${e.id}`)}
+                    onClick={() => (e.id === selecionado ? mostrarDetalhe() : navegar(`/app/linha/${e.id}`))}
                     aria-current={atual?.id === e.id ? 'true' : undefined}
                   >
                     <span className="evento__no" />
@@ -125,8 +163,10 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
                       <span className="evento__titulo">{e.titulo}</span>
                       <span className="evento__onde">{e.instituicao}</span>
                     </span>
-                    {e.sinal === 'alterado' && <span className="evento__sinal sinal-alterado" aria-label="Fora da faixa" />}
-                    {e.novo && <span className="chip chip--novo">novo</span>}
+                    <span className="evento__marcas">
+                      {e.sinal === 'alterado' && <span className="evento__sinal sinal-alterado" aria-label="Fora da faixa" />}
+                      {e.novo && <span className="chip chip--novo">novo</span>}
+                    </span>
                   </button>
                 </li>
               )
@@ -135,9 +175,24 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
         )}
       </div>
 
-      <aside className="detalhe" aria-label="Detalhe do registro">
+      <aside className="detalhe" aria-label="Detalhe do registro" ref={detalhe}>
+        {naoEncontrado && (
+          <Vazio
+            icone="alerta"
+            titulo="Registro não encontrado"
+            texto={`Não há um registro “${selecionado}” neste histórico. O endereço pode estar incompleto ou o registro ter sido apagado ao reiniciar a demonstração.`}
+            acao={
+              <button type="button" className="btn btn--ghost" onClick={() => navegar('/app/linha')}>
+                Ver o registro mais recente
+              </button>
+            }
+          />
+        )}
         {atual && (
           <div className="detalhe__caixa">
+            <button type="button" className="btn btn--quiet detalhe__voltar" onClick={voltarALista}>
+              <Icon nome="linha" tamanho={16} /> Voltar à lista
+            </button>
             <div className="detalhe__cabeca">
               <div className="detalhe__meta">
                 <ChipFonte fonte={atual.fonte} />
@@ -146,7 +201,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
               <time className="detalhe__data num" dateTime={atual.data}>{formatarData(atual.data)}</time>
             </div>
 
-            <h2 className="detalhe__titulo">{atual.titulo}</h2>
+            <h2 className="detalhe__titulo" ref={tituloDetalhe} tabIndex={-1}>{atual.titulo}</h2>
             <p className="detalhe__inst">
               <Icon nome="instituicao" tamanho={15} />
               {atual.instituicao}{atual.especialidade ? ` · ${atual.especialidade}` : ''}
