@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Evento } from '../data/types'
 import {
-  api, mensagemDeErro, type EstadoServidor, type RespostaCopiloto, type Saude, type TurnoHistorico,
+  api, mensagemDeErro, podeRepetir, type EstadoServidor, type RespostaCopiloto, type Saude, type TurnoHistorico,
 } from './api'
 
 export interface Turno {
@@ -10,6 +10,7 @@ export interface Turno {
   resposta?: RespostaCopiloto
   carregando: boolean
   erro?: string
+  repetivel?: boolean
 }
 
 export interface Estado extends EstadoServidor {
@@ -119,7 +120,7 @@ async function responderTurno(id: number) {
     const resposta = await api.copiloto(turno.pergunta, historicoAntesDe(id))
     atualizarTurno(id, { resposta, carregando: false })
   } catch (erro) {
-    atualizarTurno(id, { erro: mensagemDeErro(erro), carregando: false })
+    atualizarTurno(id, { erro: mensagemDeErro(erro), repetivel: podeRepetir(erro), carregando: false })
   }
 }
 

@@ -3,7 +3,7 @@ import { Icon } from '../../components/Icon'
 import { AvisoIa, Falha, Regua, SeloIa } from '../../components/ui'
 import { formatarData } from '../../lib/formato'
 import { MEDICACOES, PACIENTE } from '../../data/seed'
-import { api, mensagemDeErro, type ResumoIa } from '../../lib/api'
+import { api, mensagemDeErro, podeRepetir, type ResumoIa } from '../../lib/api'
 import { navegar } from '../../lib/router'
 import { hoje, useAcoes, useEstado } from '../../lib/store'
 
@@ -30,7 +30,7 @@ export function Resumo() {
   const [foco, setFoco] = useState<Foco>('cardiologia')
   const [sinteses, setSinteses] = useState<Partial<Record<Foco, ResumoIa>>>({})
   const [gerandoPara, setGerandoPara] = useState<Foco | null>(null)
-  const [erroIa, setErroIa] = useState<{ foco: Foco; mensagem: string } | null>(null)
+  const [erroIa, setErroIa] = useState<{ foco: Foco; mensagem: string; repetivel: boolean } | null>(null)
   const [compartilhando, setCompartilhando] = useState(false)
 
   const alvo = FOCOS.find((f) => f.id === foco)!
@@ -50,7 +50,7 @@ export function Resumo() {
       const resumo = await api.resumo(alvo.rotulo)
       setSinteses((s) => ({ ...s, [alvoAtual]: resumo }))
     } catch (erro) {
-      setErroIa({ foco: alvoAtual, mensagem: mensagemDeErro(erro) })
+      setErroIa({ foco: alvoAtual, mensagem: mensagemDeErro(erro), repetivel: podeRepetir(erro) })
     } finally {
       setGerandoPara(null)
     }
@@ -150,7 +150,7 @@ export function Resumo() {
               </div>
             )}
             {erroIa?.foco === foco && gerandoPara !== foco && (
-              <Falha mensagem={erroIa.mensagem} aoTentar={() => { void gerarResumo() }} />
+              <Falha mensagem={erroIa.mensagem} aoTentar={erroIa.repetivel ? () => { void gerarResumo() } : undefined} />
             )}
             {sintese && gerandoPara !== foco && (
               <>

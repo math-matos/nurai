@@ -47,7 +47,7 @@ export function Cuidado() {
             </button>
             {analise.dados && !analise.carregando && <SeloIa geradoPor={analise.dados.geradoPor} />}
           </div>
-          {analise.erro && <Falha mensagem={analise.erro} aoTentar={reanalisar} tentando={analise.carregando} />}
+          {analise.erro && <Falha mensagem={analise.erro} aoTentar={analise.repetivel ? reanalisar : undefined} tentando={analise.carregando} />}
         </div>
 
         <ol className="passos">

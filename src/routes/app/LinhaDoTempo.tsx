@@ -211,7 +211,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
 }
 
 function ExplicarEvento({ evento, eventos }: { evento: Evento; eventos: Evento[] }) {
-  const { dados, erro, carregando, executar } = useRequisicao<Explicacao>()
+  const { dados, erro, repetivel, carregando, executar } = useRequisicao<Explicacao>()
   const explicar = () => { void executar(() => api.explicarExame(evento.id)) }
   const outrasAncoras = dados?.ancoras.filter((id) => id !== evento.id) ?? []
 
@@ -232,7 +232,7 @@ function ExplicarEvento({ evento, eventos }: { evento: Evento; eventos: Evento[]
         </div>
       )}
 
-      {erro && <Falha mensagem={erro} aoTentar={explicar} tentando={carregando} />}
+      {erro && <Falha mensagem={erro} aoTentar={repetivel ? explicar : undefined} tentando={carregando} />}
 
       {dados && (
         <div className="explicacao__corpo">

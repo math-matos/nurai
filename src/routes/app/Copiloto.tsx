@@ -82,7 +82,7 @@ export function Copiloto() {
               <div className="turno__resposta">
                 <Falha
                   mensagem={t.erro ?? 'Não foi possível responder a esta pergunta.'}
-                  aoTentar={pensando ? undefined : () => tentarTurnoDeNovo(t.id)}
+                  aoTentar={pensando || t.repetivel === false ? undefined : () => tentarTurnoDeNovo(t.id)}
                 />
               </div>
             )}

@@ -60,20 +60,28 @@ export interface ResumoIa {
 export interface PassosGerados { passos: ProximoPasso[]; geradoPor: GeradoPor }
 
 export type CodigoErro =
-  | 'IA_INDISPONIVEL' | 'IA_RESPOSTA_INVALIDA' | 'PDF_SEM_TEXTO' | 'NAO_CLINICO'
-  | 'REDE' | 'TEMPO_ESGOTADO' | 'VALIDACAO' | 'NAO_ENCONTRADO' | 'SERVIDOR'
+  | 'IA_INDISPONIVEL' | 'IA_RESPOSTA_INVALIDA' | 'PDF_SEM_TEXTO' | 'PDF_INVALIDO' | 'ARQUIVO_GRANDE'
+  | 'NAO_CLINICO' | 'REDE' | 'TEMPO_ESGOTADO' | 'VALIDACAO' | 'NAO_ENCONTRADO' | 'RECUSADO' | 'SERVIDOR'
 
 const MENSAGENS: Record<CodigoErro, string> = {
   IA_INDISPONIVEL: 'A IA está indisponível agora. Tente de novo em alguns instantes.',
   IA_RESPOSTA_INVALIDA: 'A IA devolveu uma resposta que não passou na conferência, então ela foi descartada. Tente de novo.',
   PDF_SEM_TEXTO: 'Este PDF não tem texto selecionável (parece uma imagem digitalizada). Cole o texto do documento ou envie outro arquivo.',
+  PDF_INVALIDO: 'Não conseguimos abrir este arquivo como PDF. Ele pode estar corrompido ou ter outro formato com a extensão .pdf. Exporte o documento de novo em PDF ou cole o texto dele.',
+  ARQUIVO_GRANDE: 'O arquivo passa do limite de 4 MB. Envie um PDF menor ou cole o texto do documento.',
   NAO_CLINICO: 'Não reconhecemos este conteúdo como um documento de saúde. Confira se é um laudo, resultado de exame ou receita.',
   REDE: 'Não foi possível falar com o servidor. Verifique a conexão e tente de novo.',
   TEMPO_ESGOTADO: 'A resposta demorou mais do que o esperado. Tente de novo.',
   VALIDACAO: 'Alguns dados não passaram na conferência do servidor.',
   NAO_ENCONTRADO: 'Este item não foi encontrado no servidor.',
+  RECUSADO: 'O servidor não aceitou este pedido. Confira os dados enviados antes de tentar outra vez.',
   SERVIDOR: 'O servidor encontrou um erro inesperado. Tente de novo.',
 }
+
+/* Só vale oferecer "Tentar de novo" quando repetir o mesmo pedido pode dar certo:
+   falha de rede, demora ou instabilidade do servidor/IA. Erros de entrada (4xx)
+   pedem que a pessoa mude o que enviou. */
+const REPETIVEIS = new Set<CodigoErro>(['REDE', 'TEMPO_ESGOTADO', 'SERVIDOR', 'IA_INDISPONIVEL', 'IA_RESPOSTA_INVALIDA'])
 
 export class ErroApi extends Error {
   readonly codigo: CodigoErro
@@ -85,21 +93,35 @@ export class ErroApi extends Error {
     this.codigo = codigo
     this.status = status
   }
+
+  get repetivel(): boolean {
+    return REPETIVEIS.has(this.codigo)
+  }
 }
 
 export function mensagemDeErro(erro: unknown): string {
   return erro instanceof ErroApi ? erro.message : MENSAGENS.SERVIDOR
 }
 
-const CODIGOS_DO_SERVIDOR = new Set<string>(['IA_INDISPONIVEL', 'IA_RESPOSTA_INVALIDA', 'PDF_SEM_TEXTO', 'NAO_CLINICO'])
+/* Erro desconhecido (bug de cliente, por exemplo) conta como repetível, como o SERVIDOR. */
+export function podeRepetir(erro: unknown): boolean {
+  return erro instanceof ErroApi ? erro.repetivel : true
+}
+
+const CODIGOS_DO_SERVIDOR = new Set<string>([
+  'IA_INDISPONIVEL', 'IA_RESPOSTA_INVALIDA', 'PDF_SEM_TEXTO', 'PDF_INVALIDO', 'ARQUIVO_GRANDE', 'NAO_CLINICO',
+])
 
 function erroDaResposta(status: number, corpo: unknown): ErroApi {
   const { erro, codigo } = (corpo ?? {}) as { erro?: string; codigo?: string }
   if (codigo && CODIGOS_DO_SERVIDOR.has(codigo)) return new ErroApi(codigo as CodigoErro, status)
+  // 413 sem corpo JSON: a plataforma barrou o upload antes de chegar à API.
+  if (status === 413) return new ErroApi('ARQUIVO_GRANDE', status)
   // 5xx sem corpo JSON: o proxy não alcançou a API.
   if (corpo === null && status >= 500) return new ErroApi('REDE', status)
   if (status === 400) return new ErroApi('VALIDACAO', status, erro ? `${MENSAGENS.VALIDACAO} ${erro}` : undefined)
   if (status === 404) return new ErroApi('NAO_ENCONTRADO', status)
+  if (status >= 400 && status < 500) return new ErroApi('RECUSADO', status)
   return new ErroApi('SERVIDOR', status)
 }
 

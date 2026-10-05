@@ -171,7 +171,7 @@ export function Fontes() {
             {erro && (
               <Falha
                 mensagem={erro}
-                aoTentar={leitura.erro && !erroLocal && repetir ? repetir : undefined}
+                aoTentar={leitura.erro && leitura.repetivel && !erroLocal && repetir ? repetir : undefined}
               />
             )}
           </div>
