@@ -4,16 +4,39 @@ import type { ExtracaoBruta } from './extrair.js'
 
 /* Modo demonstração sem IA generativa: regex sobre o texto, suficiente para laudos simples. */
 
-const CLINICO = /exame|resultado|laudo|referencia|paciente|consulta|medic|hospital|laborat|mg\/dl|glic|colesterol|hemoglobina|pressao|receita|diagnost/
-const MEDIDA = /^\s*([^:\n]{2,60}?)\s*:\s*(-?\d+(?:[.,]\d+)?)\s*([^\s(;]*)\s*\(?\s*(?:ref[^\s:]*|VR)\s*:?\s*(-?\d+(?:[.,]\d+)?)\s*(?:a|-|–|até)\s*(-?\d+(?:[.,]\d+)?)/gim
+const CLINICO = /exame|resultado|laudo|referencia|paciente|consulta|medic|hospital|laborat|mg\/dl|glic|colesterol|hemoglobina|pressao|diagnost/
+/* "receita" sozinha também é de bolo: só conta com dose ou posologia. */
+const RECEITA_MEDICA = /prescri|posologia|\d+\s*(?:mg|mcg|ui)\b|comprimido|capsula|gotas|de \d+ em \d+ horas|uso (?:oral|continuo)/
+const NUM = '(-?\\d+(?:[.,]\\d+)?)'
+const MEDIDA = new RegExp(`^\\s*([^:\\n]{2,60}?)\\s*:\\s*${NUM}\\s*([^\\s(;]*)\\s*\\(?\\s*(?:ref[^\\s:]*|VR)\\s*:?\\s*${NUM}\\s*(?:a|-|–|até)\\s*${NUM}`, 'gim')
+/* Linha de tabela: "Colesterol HDL      44 mg/dL     45 a 90 mg/dL" ou "... < 190 mg/dL". */
+const MEDIDA_TABELA = new RegExp(`^[ \\t]*([^\\s:][^:\\n]{1,58}?)[ \\t]{2,}${NUM}[ \\t]*(\\S+)[ \\t]{2,}(?:(?:<|≤|até)[ \\t]*${NUM}|${NUM}[ \\t]*(?:a|-|–|até)[ \\t]*${NUM})`, 'gm')
 const INSTITUICAO = /laborat|hospital|clinica|ubs|instituto|centro/
+const DATA = /(\d{2})\/(\d{2})\/(\d{4})|(\d{4}-\d{2}-\d{2})/
+const DATA_ROTULADA = new RegExp(`(?:coleta|realizacao|realizado em|data do exame|data do atendimento|emissao|emitido em)[^\\d\\n]{0,20}(?:${DATA.source})`)
+const NASCIMENTO = new RegExp(`(?:nascimento|nasc\\.?|dn)[^\\d\\n]{0,10}(?:${DATA.source})`, 'g')
 
 const numero = (s: string) => Number(s.replace(',', '.'))
 
-function lerData(texto: string): string | null {
-  const br = texto.match(/(\d{2})\/(\d{2})\/(\d{4})/)
-  if (br) return `${br[3]}-${br[2]}-${br[1]}`
-  return texto.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? null
+const isoDe = (m: RegExpMatchArray) => m[4] ?? `${m[3]}-${m[2]}-${m[1]}`
+
+/* A data do exame vem do rótulo (coleta, realização, emissão); a de nascimento nunca é a do evento. */
+function lerData(normalizado: string): string | null {
+  const rotulada = normalizado.match(DATA_ROTULADA)
+  if (rotulada) return isoDe(rotulada)
+  const qualquer = normalizado.replace(NASCIMENTO, '').match(DATA)
+  return qualquer ? isoDe(qualquer) : null
+}
+
+function lerMedidas(texto: string): Extract<ExtracaoBruta, { clinico: true }>['medidas'] {
+  const comRotulo = [...texto.matchAll(MEDIDA)].map(([, nome, valor, unidade, refMin, refMax]) => ({
+    nome: nome.trim(), valor: numero(valor), unidade, refMin: numero(refMin), refMax: numero(refMax),
+  }))
+  const tabela = [...texto.matchAll(MEDIDA_TABELA)].map(([, nome, valor, unidade, teto, refMin, refMax]) => ({
+    nome: nome.trim(), valor: numero(valor), unidade,
+    refMin: teto ? 0 : numero(refMin), refMax: numero(teto ?? refMax),
+  }))
+  return [...comRotulo, ...tabela]
 }
 
 function lerTipo(normalizado: string, temMedidas: boolean): TipoId {
@@ -26,11 +49,9 @@ function lerTipo(normalizado: string, temMedidas: boolean): TipoId {
 
 export function extrairPorHeuristica(texto: string): ExtracaoBruta {
   const normalizado = normalizar(texto)
-  if (!CLINICO.test(normalizado)) return { clinico: false }
+  if (!CLINICO.test(normalizado) && !RECEITA_MEDICA.test(normalizado)) return { clinico: false }
 
-  const medidas = [...texto.matchAll(MEDIDA)].map(([, nome, valor, unidade, refMin, refMax]) => ({
-    nome: nome.trim(), valor: numero(valor), unidade, refMin: numero(refMin), refMax: numero(refMax),
-  }))
+  const medidas = lerMedidas(texto)
   const linhas = texto.split('\n').map((l) => l.trim()).filter(Boolean)
   const instituicao = linhas.find((l) => INSTITUICAO.test(normalizar(l)))
   const titulo = medidas.length
@@ -39,7 +60,7 @@ export function extrairPorHeuristica(texto: string): ExtracaoBruta {
 
   return {
     clinico: true,
-    data: lerData(texto),
+    data: lerData(normalizado),
     tipo: lerTipo(normalizado, medidas.length > 0),
     titulo,
     instituicao: instituicao?.split(/\s[-–]\s/)[0].slice(0, 80) ?? null,
