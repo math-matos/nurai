@@ -105,3 +105,14 @@ describe('extrairEvento — tipo', () => {
     expect(prompt).toMatch(/"medicacao": [^\n]*receita/)
   })
 })
+
+describe('extrairEvento — título de pedido', () => {
+  it('o prompt manda nomear o exame pedido no título e no resumo de pedidos e guias', async () => {
+    const { llm, recebidas } = llmFixo(bruto([]))
+    await extrairEvento({ llm }, { texto: PEDIDO })
+    const prompt = instrucoes(recebidas)
+    expect(prompt).toMatch(/"titulo":[^\n]*pedido[^\n]*"Pedido de perfil lipídico"/i)
+    expect(prompt).toMatch(/"titulo":[^\n]*nunca[^\n]*"Pedido de exame"/i)
+    expect(prompt).toMatch(/"resumo":[^\n]*exames? pedidos?/i)
+  })
+})
