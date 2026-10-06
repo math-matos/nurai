@@ -10,6 +10,13 @@ export interface Compartilhamento { codigo: string; criadoEm: string; para: stri
 export type Onboarding = 'pendente' | 'vazio' | 'exemplo'
 export type ModoOnboarding = Exclude<Onboarding, 'pendente'>
 
+/* Quem usa a conta para cuidar do histórico de outra pessoa; relacao é o que ele é do paciente (ex.: "filho"). */
+export interface Responsavel { nome: string; relacao: string }
+
+/* Vai para o log e para o médico como "Rafael (filho)". */
+export const RELACOES = ['filho', 'filha', 'pai', 'mãe', 'cônjuge', 'outro'] as const
+
+/* nome é o do paciente, dono do histórico; com responsavel, a conta é de quem cuida dele. */
 export interface Perfil {
   pacienteId: string
   nome: string
@@ -20,9 +27,13 @@ export interface Perfil {
   alergias: string[]
   cartaoSus?: string
   plano?: string
+  responsavel?: Responsavel
   onboarding: Onboarding
   convidado: boolean
 }
+
+/* "Para alguém que eu cuido": o histórico passa a ser deste paciente e quem criou a conta vira o responsável. */
+export interface PacienteCuidado { nome: string; dataNascimento?: string; relacao: string }
 
 export interface Usuario { id: string; email: string }
 export interface Conta { usuario: Usuario; perfil: Perfil }
@@ -43,13 +54,24 @@ export interface MudancasPerfil {
   alergias?: string[]
   cartaoSus?: string
   plano?: string
+  /* null: o histórico volta a ser do próprio usuário. */
+  responsavel?: Responsavel | null
+}
+
+/* Calculado no acesso a partir dos registros (não depende dos passos gravados pelo paciente). */
+export interface PontoEmAberto {
+  tipo: 'repeticao' | 'pedido' | 'reavaliacao' | 'retorno'
+  texto: string
+  ancoras: string[]
 }
 
 export interface AcessoMedico {
-  paciente: { nome: string; idade?: number; condicoes: string[]; alergias: string[] }
+  paciente: { nome: string; idade?: number; condicoes: string[]; alergias: string[]; responsavel?: Responsavel }
   para: string
   expiraEm: string
   eventos: Evento[]
+  pontosEmAberto: PontoEmAberto[]
+  /* Passos gravados pelo paciente; mantidos por compatibilidade. */
   passos: ProximoPasso[]
 }
 
@@ -256,12 +278,15 @@ export const api = {
   cadastrar: (dados: DadosCadastro) => requisitar<Conta>('/auth/cadastro', json('POST', dados)),
   entrarDemo: () => requisitar<Conta>('/auth/demo', json('POST')),
   sair: () => requisitar<void>('/auth/logout', json('POST')),
-  onboarding: (modo: ModoOnboarding) => requisitar<{ perfil: Perfil }>('/onboarding', json('POST', { modo })),
+  onboarding: (modo: ModoOnboarding, paciente?: PacienteCuidado) =>
+    requisitar<{ perfil: Perfil }>('/onboarding', json('POST', { modo, paciente })),
   atualizarPerfil: (mudancas: MudancasPerfil) => requisitar<{ perfil: Perfil }>('/perfil', json('PATCH', mudancas)),
   excluirConta: () => requisitar<void>('/conta', json('DELETE', { confirmacao: 'EXCLUIR' })),
 
   acessoMedico: (codigo: string, profissional: string) =>
     requisitar<AcessoMedico>('/acesso-medico', json('POST', { codigo, profissional })),
+  /* 204 se o código ainda vale; 404 (CODIGO_INVALIDO) se foi revogado ou expirou. Não registra acesso. */
+  verificarAcessoMedico: (codigo: string) => requisitar<void>('/acesso-medico/verificar', json('POST', { codigo })),
   resumoMedico: (codigo: string, profissional: string, especialidade?: string) =>
     requisitar<ResumoIa>('/acesso-medico/resumo', json('POST', { codigo, profissional, especialidade })),
 
