@@ -13,7 +13,7 @@ const MEDIDA = new RegExp(`^\\s*([^:\\n]{2,60}?)\\s*:\\s*${NUM}\\s*([^\\s(;]*)\\
 const MEDIDA_TABELA = new RegExp(`^[ \\t]*([^\\s:][^:\\n]{1,58}?)[ \\t]{2,}${NUM}[ \\t]*(\\S+)[ \\t]{2,}(?:(?:<|≤|até)[ \\t]*${NUM}|${NUM}[ \\t]*(?:a|-|–|até)[ \\t]*${NUM})`, 'gm')
 const INSTITUICAO = /laborat|hospital|clinica|ubs|instituto|centro/
 const DATA = /(\d{2})\/(\d{2})\/(\d{4})|(\d{4}-\d{2}-\d{2})/
-const DATA_ROTULADA = new RegExp(`(?:coleta|realizacao|realizado em|data do exame|data do atendimento|emissao|emitido em)[^\\d\\n]{0,20}(?:${DATA.source})`)
+const DATA_ROTULADA = new RegExp(`(?:coleta|realizacao|realizado em|data do exame|data do atendimento|emissao|emitido em|solicitacao)[^\\d\\n]{0,20}(?:${DATA.source})`)
 const NASCIMENTO = new RegExp(`(?:nascimento|nasc\\.?|dn)[^\\d\\n]{0,10}(?:${DATA.source})`, 'g')
 
 const numero = (s: string) => Number(s.replace(',', '.'))
@@ -46,6 +46,8 @@ function lerTipo(normalizado: string, temMedidas: boolean): TipoId {
   if (/consulta/.test(normalizado)) return 'consulta'
   return 'documento'
 }
+
+export const lerDataDoTexto = (texto: string) => lerData(normalizar(texto))
 
 export function extrairPorHeuristica(texto: string): ExtracaoBruta {
   const normalizado = normalizar(texto)

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { type ExtracaoBruta, montarEvento } from './extrair.js'
+import type { MensagemLlm } from '../provider.js'
+import { type ExtracaoBruta, extrairEvento, montarEvento } from './extrair.js'
 
 type Clinica = Extract<ExtracaoBruta, { clinico: true }>
 type MedidaBruta = Clinica['medidas'][number]
@@ -48,5 +49,59 @@ describe('montarEvento — confiança', () => {
       [m('A', 1, null, null), m('B', 1, null, null)], { confianca: 0.95 }))
     expect(evento.confianca).toBe(0.65)
     expect(avisos.at(-1)).toMatch(/baixa confiança/)
+  })
+})
+
+/* Modelo falso que devolve sempre a mesma extração e guarda o prompt que recebeu. */
+/* Só as instruções: o documento enviado fica de fora, para não casar com o texto dele. */
+const instrucoes = (recebidas: MensagemLlm[][]) => recebidas[0].map((m) => m.content.split('Documento:')[0]).join('\n')
+
+function llmFixo(resposta: Clinica) {
+  const recebidas: MensagemLlm[][] = []
+  return {
+    recebidas,
+    llm: { nome: 'oci' as const, chat: async (mensagens: MensagemLlm[]) => { recebidas.push(mensagens); return JSON.stringify(resposta) } },
+  }
+}
+
+const PEDIDO = `Clínica Ipê-Roxo
+Paciente: Marcos Vinícius Teixeira Registro: FIC-0044-1982
+Nascimento: 14/02/1982 (44 anos) Sexo: Masculino
+Data da solicitação: 02/04/2026 Solicitante: Dra. Beatriz N. Sallum
+PEDIDO MÉDICO DE EXAMES
+40301397 Perfil lipídico — colesterol total, HDL, LDL e triglicerídeos 1`
+
+describe('extrairEvento — data', () => {
+  it('modelo sem data: usa a data impressa no documento (não a de nascimento), com aviso para conferir', async () => {
+    const { llm } = llmFixo(bruto([], { data: null, tipo: 'documento', titulo: 'Pedido de perfil lipídico' }))
+    const { evento, avisos } = await extrairEvento({ llm }, { texto: PEDIDO })
+    expect(evento.data).toBe('2026-04-02')
+    expect(avisos.join(' ')).toMatch(/data .*documento.*confira/i)
+    expect(avisos.join(' ')).not.toMatch(/data de hoje/)
+  })
+
+  it('sem data alguma no texto, segue usando hoje com o aviso', async () => {
+    const { llm } = llmFixo(bruto([], { data: null }))
+    const { avisos } = await extrairEvento({ llm }, { texto: 'Laudo sem data. Paciente: Fulano. Exame normal.' })
+    expect(avisos.join(' ')).toMatch(/data de hoje/)
+  })
+
+  it('o prompt pede a data da solicitação ou emissão para pedidos e receitas', async () => {
+    const { llm, recebidas } = llmFixo(bruto([]))
+    await extrairEvento({ llm }, { texto: PEDIDO })
+    expect(instrucoes(recebidas)).toMatch(/"data":[^\n]*solicitação/)
+  })
+})
+
+describe('extrairEvento — tipo', () => {
+  it('o prompt define cada tipo, para radiografia não virar "exame" nem receita virar "consulta"', async () => {
+    const { llm, recebidas } = llmFixo(bruto([]))
+    await extrairEvento({ llm }, { texto: PEDIDO })
+    const prompt = instrucoes(recebidas)
+    for (const tipo of ['exame', 'consulta', 'imagem', 'cirurgia', 'medicacao', 'internacao', 'vacina', 'documento']) {
+      expect(prompt, tipo).toMatch(new RegExp(`- "${tipo}": `))
+    }
+    expect(prompt).toMatch(/"imagem": [^\n]*radiografia/)
+    expect(prompt).toMatch(/"medicacao": [^\n]*receita/)
   })
 })

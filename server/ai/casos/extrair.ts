@@ -5,7 +5,7 @@ import { ErroIa } from '../erros.js'
 import { pedirJson } from '../json.js'
 import { mensagens } from '../prompts.js'
 import { hojeISO, sinalDaMedida, type ContextoIa } from './comum.js'
-import { extrairPorHeuristica } from './extrair-mock.js'
+import { extrairPorHeuristica, lerDataDoTexto } from './extrair-mock.js'
 
 export interface EntradaExtracao {
   texto: string
@@ -56,7 +56,16 @@ const TAREFA = `Tarefa: ler o texto de um documento de saúde enviado pela pacie
 Formato da resposta (JSON):
 {"clinico": true, "data": "AAAA-MM-DD" ou null, "tipo": "${TIPOS.join('" | "')}", "titulo": "título curto", "instituicao": "nome" ou null, "especialidade": "nome" ou null, "resumo": "1 a 2 frases fiéis ao documento", "medidas": [{"nome": "Colesterol LDL", "valor": 162, "unidade": "mg/dL", "refMin": 0, "refMax": 130}], "tags": ["colesterol"], "confianca": 0.9, "avisos": ["o que ficou ilegível ou ambíguo"]}
 - Se o texto não for um documento de saúde, responda apenas {"clinico": false}.
-- "data": a data do exame/atendimento (coleta, realização ou emissão), não a data de impressão.
+- "data": a data do exame/atendimento (coleta, realização ou emissão; em receita, pedido ou guia, a data da emissão ou da solicitação), nunca a de impressão nem a de nascimento. Use null só se o documento não trouxer nenhuma dessas datas.
+- "tipo": o que o documento é, não o que ele cita ou pede:
+  - "exame": resultado de exame laboratorial ou funcional (sangue, urina, eletrocardiograma, espirometria, Holter).
+  - "imagem": laudo de exame de imagem (radiografia/raio-X, ultrassom, tomografia, ressonância, mamografia, ecocardiograma).
+  - "medicacao": receita ou prescrição de medicamentos, mesmo que emitida numa consulta.
+  - "consulta": registro ou evolução de consulta, parecer ou relatório médico sem receita.
+  - "internacao": resumo de alta, internação ou atendimento de pronto-socorro.
+  - "cirurgia": descrição de cirurgia ou procedimento.
+  - "vacina": comprovante ou registro de vacinação.
+  - "documento": pedido de exame, guia, atestado, encaminhamento e outros documentos.
 - "medidas": só valores numéricos presentes no texto, com ponto decimal; refMin/refMax da faixa de referência impressa. Não invente faixas.
 - Faixa "X a Y": refMin X e refMax Y. Faixa só com teto ("< X", "≤ X", "até X", "inferior a X"): refMin null e refMax X. Faixa só com piso ("> X", "≥ X", "acima de X", "superior a X"): refMin X e refMax null. Use null nos dois só quando o documento não trouxer referência para a medida.
 - "resumo": descreva o que o documento registra, sem interpretar nem diagnosticar.
@@ -114,13 +123,22 @@ export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string): Omit
   return { evento, avisos }
 }
 
+/* O modelo às vezes devolve null para uma data rotulada de outro jeito ("Data da solicitação"):
+   antes de cair na data de hoje, usa a impressa no documento, que a heurística acha sem a de nascimento. */
+function completarData(bruto: ExtracaoClinica, texto: string): ExtracaoClinica {
+  if (bruto.data != null && dataIsoValida(bruto.data)) return bruto
+  const doTexto = lerDataDoTexto(texto)
+  if (!doTexto || !dataIsoValida(doTexto)) return bruto
+  return { ...bruto, data: doTexto, avisos: [...bruto.avisos, 'Usei a data impressa no documento; confira antes de salvar.'] }
+}
+
 export async function extrairEvento({ llm }: Pick<ContextoIa, 'llm'>, entrada: EntradaExtracao): Promise<ResultadoExtracao> {
   const texto = entrada.texto.slice(0, LIMITE_TEXTO)
   const bruto = llm.nome === 'mock'
     ? extrairPorHeuristica(texto)
     : await pedirJson(llm, mensagens(TAREFA, `Documento:\n"""\n${texto}\n"""`), esquemaExtracao)
   if (!bruto.clinico) throw new ErroIa('NAO_CLINICO', 'O texto enviado não parece ser um documento de saúde')
-  const resultado = montarEvento(bruto, entrada.nomeArquivo)
+  const resultado = montarEvento(completarData(bruto, texto), entrada.nomeArquivo)
   if (entrada.texto.length > LIMITE_TEXTO) {
     resultado.avisos.push('O documento é longo e só o início foi lido. Confira se faltou alguma informação.')
   }
