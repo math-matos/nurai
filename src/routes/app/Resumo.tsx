@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Icon } from '../../components/Icon'
 import { AvisoIa, Falha, Regua, SeloIa, VazioHistorico } from '../../components/ui'
 import { formatarData, ordenarRecentes } from '../../lib/formato'
+import { agruparEspecialidades, chaveEspecialidade } from '../../data/especialidades'
 import { MEDICACOES } from '../../data/seed'
 import type { Evento } from '../../data/types'
 import { api, mensagemDeErro, podeRepetir, type Compartilhamento, type ResumoIa } from '../../lib/api'
@@ -20,20 +21,12 @@ const CLINICA = 'Clínica médica'
 const OUTRA = 'outra'
 const MAX_ESPECIALIDADE = 80
 
-/* Abas a partir do próprio histórico: mais frequentes primeiro, sem repetir grafias, e sempre clínica médica. */
+/* Abas a partir do próprio histórico: mais frequentes primeiro, grafias agrupadas, e sempre clínica médica. */
 function especialidadesDe(eventos: Evento[]): string[] {
-  const contagem = new Map<string, { rotulo: string; n: number }>()
-  for (const e of eventos) {
-    const rotulo = e.especialidade?.trim()
-    if (!rotulo) continue
-    const chave = rotulo.toLocaleLowerCase('pt-BR')
-    const atual = contagem.get(chave)
-    contagem.set(chave, { rotulo: atual?.rotulo ?? rotulo, n: (atual?.n ?? 0) + 1 })
-  }
-  const rotulos = [...contagem.values()]
-    .sort((a, b) => b.n - a.n || a.rotulo.localeCompare(b.rotulo, 'pt-BR'))
-    .map((x) => x.rotulo)
-  return contagem.has(CLINICA.toLocaleLowerCase('pt-BR')) ? rotulos : [...rotulos, CLINICA]
+  const grupos = agruparEspecialidades(eventos.map((e) => e.especialidade), Object.keys(FOCOS_EXEMPLO))
+  const rotulos = grupos.map((g) => g.rotulo)
+  const temClinica = rotulos.some((r) => chaveEspecialidade(r) === chaveEspecialidade(CLINICA))
+  return temClinica ? rotulos : [...rotulos, CLINICA]
 }
 
 export function Resumo() {
