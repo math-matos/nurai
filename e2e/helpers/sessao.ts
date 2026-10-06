@@ -27,7 +27,8 @@ export const cabecalhosDeIp = (ip = ipAleatorio()): Record<string, string> =>
   LOCAL ? { 'x-forwarded-for': ip } : {}
 
 /* No navegador o IP vai só nas chamadas à API: como extraHTTPHeaders ele iria também às fontes
-   do Google, e o cabeçalho extra dispara um preflight de CORS que elas recusam. */
+   do Google, e o cabeçalho extra dispara um preflight de CORS que elas recusam.
+   O route não pega `contexto.request`: para chamar a API direto com este IP, use cabecalhosDeIp(ip). */
 export async function rotearIp(contexto: BrowserContext, ip: string) {
   if (!LOCAL) return
   await contexto.route(
