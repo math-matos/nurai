@@ -1,0 +1,165 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import type { APIRequestContext, Page, Response } from '@playwright/test'
+import type { Evento } from '../src/data/types.ts'
+import { GABARITOS, compararExtracao, ehErro, type ErroEsperado, type Gabarito } from './fixtures/gabaritos.ts'
+import { DIR_DOCUMENTOS } from './fixtures/gerar.ts'
+import { excluirConta } from './helpers/conta.ts'
+import {
+  CSRF, LOCAL, REAL, cabecalhosDeIp, cadastrarPorApi, entrarPorApi, esperarApp, lerEstado, type Credenciais,
+} from './helpers/sessao.ts'
+import { expect, test } from './helpers/test.ts'
+
+const ACERTO_MINIMO = 0.9
+
+/* Uma conta "do zero" por worker para o arquivo todo: os documentos se acumulam no mesmo histórico. */
+let conta: Credenciais
+let sessaoDaConta: APIRequestContext
+
+test.beforeAll(async ({ playwright }, info) => {
+  sessaoDaConta = await playwright.request.newContext({ baseURL: info.project.use.baseURL, extraHTTPHeaders: cabecalhosDeIp() })
+  conta = await cadastrarPorApi(sessaoDaConta, { nome: 'Marcos Vinícius Teixeira', modo: 'vazio' })
+})
+
+test.afterAll(async () => {
+  expect(await excluirConta(sessaoDaConta)).toBe(204)
+  await sessaoDaConta.dispose()
+})
+
+test.beforeEach(async ({ page }) => {
+  await entrarPorApi(page.request, conta)
+  await page.goto('/#/app/fontes')
+  await esperarApp(page)
+})
+
+const caminho = (arquivo: string) => join(DIR_DOCUMENTOS, arquivo)
+const ehExtrair = (r: Response) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/extrair'
+
+async function enviar(page: Page, g: Gabarito) {
+  if (g.modo === 'pdf') {
+    await page.getByTestId('fontes-pdf').setInputFiles(caminho(g.arquivo))
+  } else {
+    await page.getByTestId('fontes-texto').fill(await readFile(caminho(g.arquivo), 'utf8'))
+    await page.getByTestId('fontes-ler-texto').click()
+  }
+}
+
+const LEGIVEIS = GABARITOS.filter((g) => !ehErro(g.esperado))
+
+for (const g of LEGIVEIS) {
+  test(`${g.arquivo}: lê, confere, salva na linha do tempo e persiste`, async ({ page }) => {
+    const resposta = page.waitForResponse(ehExtrair)
+    await enviar(page, g)
+    const extraida = await resposta
+    expect(extraida.status()).toBe(200)
+    const { evento, geradoPor } = await extraida.json()
+    const arquivo = g.modo === 'pdf' ? g.arquivo : 'texto-colado.txt'
+
+    expect(evento).toMatchObject({ fonte: 'paciente', origem: 'OCR + IA', documento: arquivo, novo: true })
+    expect(evento.data).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(evento.titulo.trim()).not.toBe('')
+    if (LOCAL && !REAL) expect(geradoPor).toBe('mock')
+    await expect(page.getByTestId('conferencia')).toContainText(arquivo)
+    await expect(page.getByTestId('conferencia-titulo')).toHaveValue(evento.titulo)
+
+    if (REAL) {
+      const { acertos, total, divergencias } = compararExtracao(evento, g.esperado as Exclude<Gabarito['esperado'], { erro: ErroEsperado }>)
+      const taxa = total ? acertos / total : 1
+      test.info().annotations.push({ type: 'extracao', description: `${g.arquivo}: ${acertos}/${total} (${Math.round(taxa * 100)}%)` })
+      expect(taxa, JSON.stringify(divergencias)).toBeGreaterThanOrEqual(ACERTO_MINIMO)
+    }
+
+    const gravacao = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/eventos')
+    await page.getByTestId('conferencia-salvar').click()
+    const gravada = await gravacao
+    expect(gravada.status()).toBe(201)
+    const salvo: Evento = await gravada.json()
+
+    await expect(page).toHaveURL(new RegExp(`#/app/linha/${salvo.id}$`))
+    await expect(page.getByTestId('evento-detalhe').getByRole('heading', { level: 2 })).toHaveText(salvo.titulo)
+    await expect(page.locator(`#evento-${salvo.id}`)).toContainText(salvo.titulo)
+
+    await page.reload()
+    await esperarApp(page)
+    await expect(page.getByTestId('evento-detalhe').getByRole('heading', { level: 2 })).toHaveText(salvo.titulo)
+    const persistido = (await lerEstado(page.request)).eventos.find((e) => e.id === salvo.id)
+    expect(persistido).toMatchObject({ titulo: salvo.titulo, data: evento.data, documento: arquivo })
+  })
+}
+
+/* Mensagem esperada na tela; `status` null = a tela barra antes de enviar ao servidor. */
+const BORDAS: Record<ErroEsperado, { mensagem: string; status: number | null }> = {
+  PDF_SEM_TEXTO: { mensagem: 'Este PDF não tem texto selecionável', status: 422 },
+  NAO_CLINICO: { mensagem: 'Não reconhecemos este conteúdo como um documento de saúde', status: 422 },
+  ARQUIVO_GRANDE: { mensagem: 'O PDF passa de 4 MB', status: null },
+  PDF_INVALIDO: { mensagem: 'Não conseguimos abrir este arquivo como PDF', status: 422 },
+  NAO_PDF: { mensagem: 'Por enquanto a leitura aceita PDF com texto', status: null },
+}
+
+for (const g of GABARITOS.filter((x) => ehErro(x.esperado))) {
+  const { erro } = g.esperado as { erro: ErroEsperado }
+  const { mensagem, status } = BORDAS[erro]
+
+  test(`${g.arquivo}: ${erro} mostra mensagem amigável sem "Tentar de novo"`, async ({ page }) => {
+    const enviados: Response[] = []
+    page.on('response', (r) => { if (ehExtrair(r)) enviados.push(r) })
+    const eventosAntes = (await lerEstado(page.request)).eventos.length
+
+    await enviar(page, g)
+    const falha = page.getByRole('alert')
+    await expect(falha).toContainText(mensagem)
+    await expect(falha.getByRole('button', { name: 'Tentar de novo' })).toHaveCount(0)
+    await expect(page.getByTestId('conferencia')).toHaveCount(0)
+
+    if (status === null) {
+      expect(enviados, 'a tela deveria barrar antes de enviar').toHaveLength(0)
+    } else {
+      await expect.poll(() => enviados.length).toBe(1)
+      expect(enviados[0].status()).toBe(status)
+      expect((await enviados[0].json()).codigo).toBe(erro)
+    }
+    expect((await lerEstado(page.request)).eventos).toHaveLength(eventosAntes)
+  })
+}
+
+/* O 413 do PDF grande fica nos testes de rota (server/routes/ia.test.ts): o servidor responde antes de
+   ler o corpo, e o proxy do Vite devolve 502 (EPIPE) quando a conexão fecha no meio do envio. */
+test('o servidor também recusa um arquivo que não é PDF', async ({ page }) => {
+  const arquivo = '15-texto-simples.txt'
+  const res = await page.request.post('/api/extrair', {
+    headers: CSRF,
+    multipart: { arquivo: { name: arquivo, mimeType: 'application/pdf', buffer: await readFile(caminho(arquivo)) } },
+  })
+  expect(res.status()).toBe(422)
+  expect((await res.json()).codigo).toBe('PDF_INVALIDO')
+})
+
+test('o valor editado na conferência é o que fica salvo', async ({ page }) => {
+  await page.getByRole('button', { name: 'Carregar exemplo' }).click()
+  await page.getByTestId('fontes-ler-texto').click()
+  const conferencia = page.getByTestId('conferencia')
+  const linha = conferencia.locator('.medida-edicao').first()
+  await expect(linha).toBeVisible()
+
+  const nome = await linha.getByLabel('Nome').inputValue()
+  const refMin = Number((await linha.getByLabel('Ref. mín.').inputValue()).replace(',', '.'))
+  const refMax = Number((await linha.getByLabel('Ref. máx.').inputValue()).replace(',', '.'))
+  /* Dentro da faixa: a linha editada ganha o sinal da comparação com a referência. */
+  const editado = Math.round(((refMin + refMax) / 2) * 10 + 5) / 10
+  await linha.getByLabel('Valor').fill(String(editado).replace('.', ','))
+  const titulo = `Perfil lipídico conferido ${Date.now()}`
+  await page.getByTestId('conferencia-titulo').fill(titulo)
+
+  const gravacao = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/eventos')
+  await page.getByTestId('conferencia-salvar').click()
+  const salvo: Evento = await (await gravacao).json()
+  expect(salvo.titulo).toBe(titulo)
+
+  const persistido = (await lerEstado(page.request)).eventos.find((e) => e.id === salvo.id)!
+  const medida = persistido.medidas!.find((m) => m.nome === nome)!
+  expect(medida.valor).toBe(editado)
+  expect(medida.sinal).toBe('normal')
+  await expect(page.getByTestId('evento-detalhe').locator('.regua').filter({ hasText: nome })).toContainText(
+    editado.toLocaleString('pt-BR'),
+  )
+})
