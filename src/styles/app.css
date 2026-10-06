@@ -749,6 +749,8 @@
 .meus-dados__salvo { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--sig-normal); }
 .painel--perigo { border-color: #e0bdb4; }
 .excluir { max-width: 420px; }
+.privacidade__atalho { font-size: 14px; }
+.privacidade__atalho .btn-link { display: inline-flex; align-items: center; gap: 6px; }
 .excluir__acoes { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .btn--perigo { --btn-bg: var(--sig-alterado); }
 .btn--perigo:hover { --btn-bg: #7d2a16; }
