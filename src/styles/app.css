@@ -212,9 +212,11 @@
   position: absolute; top: -5px; bottom: -5px; width: 2.5px; margin-left: -1.25px;
   background: currentColor; border-radius: 1px;
 }
-.regua__legenda { position: relative; height: 15px; font-size: 11px; color: var(--ink-3); }
-.regua__legenda > span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
-.regua__ref { position: absolute; right: 0; left: auto !important; transform: none !important; }
+/* Os limites ficam sobre a pista e o rótulo numa linha própria: na mesma linha, o refMax
+   perto da borda direita caía em cima de "faixa de referência". */
+.regua__legenda { position: relative; padding-top: 17px; font-size: 11px; line-height: 17px; color: var(--ink-3); }
+.regua__legenda > span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.regua__legenda > .regua__ref { position: static; display: block; text-align: right; transform: none; }
 
 /* ---------------- série ---------------- */
 .serie { margin: var(--sp-4) 0 0; }
