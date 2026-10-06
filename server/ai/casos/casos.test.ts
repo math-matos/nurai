@@ -145,6 +145,44 @@ describe('gerarPassos', () => {
   })
 })
 
+describe('gerarPassos — passos concretos', () => {
+  const passo = (titulo: string, porque: string, ancoras: string[]) => ({ titulo, porque, ancoras, prazo: 'Próxima consulta', prioridade: 'media' })
+  const repeticao = passo('Levar o laudo do Doppler', 'Feito em 27/05/2026 e pedido de novo em 08/07/2026.', ['e22', 'e24'])
+
+  it('começa título e porque com maiúscula', async () => {
+    const { deps: d } = await deps({ passos: [repeticao, passo('levar o hemograma', 'o exame de 05/03/2026 trouxe creatinina de 1.1 mg/dL.', ['e21'])] })
+    const { passos } = await gerarPassos(d)
+    expect(passos[1]).toMatchObject({ titulo: 'Levar o hemograma', porque: 'O exame de 05/03/2026 trouxe creatinina de 1,1 mg/dL.' })
+  })
+
+  it('descarta passo genérico que não diz qual valor ou achado, e mantém o que cita a medida', async () => {
+    const { deps: d } = await deps({
+      passos: [
+        repeticao,
+        passo('Discutir com o médico os resultados do hemograma', 'o exame de hemograma completo de 05/03/2026 apresentou alterações.', ['e21']),
+        passo('Mostrar a filtração glomerular ao nefrologista', 'A taxa de filtração glomerular caiu no exame de 05/03/2026.', ['e21']),
+      ],
+    })
+    const { passos } = await gerarPassos(d)
+    expect(passos.map((p) => p.titulo)).toEqual(['Levar o laudo do Doppler', 'Mostrar a filtração glomerular ao nefrologista'])
+  })
+
+  it('exame repetido dos fatos derivados vira passo mesmo se o modelo não o listar', async () => {
+    const { deps: d } = await deps({ passos: [passo('Mostrar a creatinina', 'Creatinina de 1.1 mg/dL em 05/03/2026.', ['e21'])] })
+    const { passos } = await gerarPassos(d)
+    expect(passos[0].ancoras).toEqual(['e22', 'e24'])
+    expect(passos[0].porque).toMatch(/27\/05\/2026.*08\/07\/2026/)
+    expect(passos.map((p) => p.titulo)).toContain('Mostrar a creatinina')
+  })
+
+  it('o prompt exige o valor ou achado concreto e a data em cada passo', async () => {
+    const { deps: d, chamadas } = await deps({ passos: [repeticao] })
+    await gerarPassos(d)
+    expect(prompt(chamadas)).toMatch(/"porque"[^\n]*valor[^\n]*data/i)
+    expect(prompt(chamadas)).toMatch(/genéric/i)
+  })
+})
+
 describe('explicarExame', () => {
   it('limpa ids e formatos do texto', async () => {
     const { deps: d } = await deps({
