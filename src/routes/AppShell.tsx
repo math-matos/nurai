@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Icon, type NomeIcone } from '../components/Icon'
 import { Falha, Marca, Vazio } from '../components/ui'
 import { Link } from '../components/Link'
+import { PedidoAutorizacao } from '../components/PedidoAutorizacao'
 import { navegar } from '../lib/router'
 import { concluirOnboarding, definir, sair, useAcoes, useEstado, usePerfil } from '../lib/store'
 import { mensagemDeErro } from '../lib/api'
@@ -240,6 +241,7 @@ export function AppShell({ rota }: { rota: string }) {
         </header>
 
         <main id="conteudo" className="palco__corpo">
+          <PedidoAutorizacao perfil={perfil} />
           {estado.falhaAcao && (
             <div className="palco__falha">
               <Falha mensagem={estado.falhaAcao} />
