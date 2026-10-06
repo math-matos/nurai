@@ -25,3 +25,9 @@ dist-ssr
 
 .env
 .vercel
+
+# Playwright
+e2e/relatorio
+e2e/resultados
+blob-report
+playwright/.cache
