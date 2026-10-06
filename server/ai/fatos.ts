@@ -278,6 +278,25 @@ export function derivarFatos(eventos: Evento[], hoje = hojeIso()): Fatos {
   }
 }
 
+export interface PontoEmAberto {
+  tipo: 'repeticao' | Pendencia['tipo']
+  texto: string
+  ancoras: string[]
+}
+
+/* Para o profissional que abre o histórico pelo código: os mesmos fatos que viram passos do paciente, em
+   texto descritivo (sem mandar ninguém fazer nada) e calculados na hora, sem depender dos passos gravados. */
+export function pontosEmAberto({ repeticoes, pendencias }: Fatos): PontoEmAberto[] {
+  return [
+    ...repeticoes.map((r) => ({
+      tipo: 'repeticao' as const,
+      texto: `Possível exame repetido: pedido de ${r.pedidoExame} em ${dataBR(r.pedidoData)} (${r.pedidoInstituicao}), ${r.dias} dias depois de "${r.exame}" realizado em ${dataBR(r.feitoData)} (${r.feitoInstituicao}).`,
+      ancoras: [r.feito, r.pedido],
+    })),
+    ...pendencias.map(({ tipo, descricao, ancoras }) => ({ tipo, texto: descricao, ancoras })),
+  ]
+}
+
 const lista = (itens: string[]) => (itens.length ? itens.map((i) => `- ${i}`) : ['- nenhum encontrado']).join('\n')
 
 function linhaTendencia(t: Tendencia): string {
