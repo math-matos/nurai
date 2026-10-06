@@ -5,6 +5,7 @@ import { ErroConflito, type Perfil, type Repositorio, type Usuario } from '../db
 import { esquemaCadastro, esquemaLogin } from '../esquemas.js'
 import { lerCorpo } from '../http.js'
 import { chave, excedeu, limitarPorIp, muitasTentativas } from './limite.js'
+import { limpezaOportunista } from './limpeza.js'
 import { ipDe, naoAutenticado } from './middleware.js'
 import { gerarHashSenha, verificarSenha } from './senha.js'
 import { abrirSessao, encerrarSessao, sessaoDaRequisicao } from './sessao.js'
@@ -12,6 +13,8 @@ import { abrirSessao, encerrarSessao, sessaoDaRequisicao } from './sessao.js'
 const MINUTO_MS = 60_000
 const LIMITE_LOGIN = { maximo: 5, janelaMs: 15 * MINUTO_MS }
 const LIMITE_DEMO = { maximo: 10, janelaMs: 60 * MINUTO_MS }
+/* Conta toda tentativa de cadastro, válida ou não. */
+const LIMITE_CADASTRO = { maximo: 5, janelaMs: 60 * MINUTO_MS }
 
 const conta = (usuario: Usuario, perfil: Perfil) => ({ usuario: { id: usuario.id, email: usuario.email }, perfil })
 
@@ -19,6 +22,9 @@ export function rotasAuth(repo: Repositorio): Hono {
   const rotas = new Hono()
 
   rotas.post('/cadastro', async (c) => {
+    const bloqueio = await limitarPorIp(c, repo, 'cadastro', LIMITE_CADASTRO)
+    if (bloqueio) return bloqueio
+    await limpezaOportunista(repo)
     const { nome, dataNascimento, email, senha } = await lerCorpo(c, esquemaCadastro)
     const emUso = () => c.json({ erro: 'Este e-mail já tem uma conta', codigo: 'EMAIL_EM_USO' }, 409)
     if (await repo.buscarUsuarioPorEmail(email)) return emUso()
@@ -39,6 +45,7 @@ export function rotasAuth(repo: Repositorio): Hono {
   })
 
   rotas.post('/login', async (c) => {
+    await limpezaOportunista(repo)
     const { email, senha } = await lerCorpo(c, esquemaLogin)
     const chaveLogin = chave('login', ipDe(c), email)
     if (await excedeu(repo, chaveLogin, LIMITE_LOGIN)) return muitasTentativas(c, LIMITE_LOGIN)
@@ -66,6 +73,7 @@ export function rotasAuth(repo: Repositorio): Hono {
   rotas.post('/demo', async (c) => {
     const bloqueio = await limitarPorIp(c, repo, 'demo', LIMITE_DEMO)
     if (bloqueio) return bloqueio
+    await limpezaOportunista(repo)
 
     const { pacienteId } = await repo.criarPaciente(PERFIL_DEMO)
     const perfil = (await repo.aplicarOnboarding(pacienteId, 'exemplo'))!

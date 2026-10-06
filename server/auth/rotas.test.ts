@@ -4,6 +4,8 @@ import { criarLlmMock } from '../ai/mock.js'
 import { criarApp } from '../app.js'
 import { criarRepoMemoria } from '../db/memoria.js'
 import type { Repositorio } from '../db/repo.js'
+import { chave } from './limite.js'
+import { hashToken } from './sessao.js'
 import {
   SENHA, cadastrar, cadastrarComOnboarding, comSessao, cookieDe, emailNovo, json, logado, type App,
 } from '../teste/apoio.js'
@@ -81,6 +83,22 @@ describe('autenticação', () => {
       expect(body.codigo).toBe('VALIDACAO')
       expect(body.campos?.[campo]).toEqual(expect.any(String))
       expect(res.headers.get('set-cookie')).toBeNull()
+    })
+
+    it('429 após 5 cadastros por IP na hora, contando os inválidos', async () => {
+      const cadastro = (ip: string, mudanca: Record<string, unknown> = {}) => app.request('/api/auth/cadastro',
+        comSessao(null, comIp(ip, json({ nome: 'Ana', email: emailNovo(), senha: SENHA, aceiteLgpd: true, ...mudanca }))))
+      for (let i = 0; i < 4; i++) expect((await cadastro('10.2.2.2')).status).toBe(201)
+      expect((await cadastro('10.2.2.2', { senha: 'curta' })).status).toBe(400)
+      const bloqueado = await cadastro('10.2.2.2')
+      expect(bloqueado.status).toBe(429)
+      expect((await ler(bloqueado)).codigo).toBe('MUITAS_TENTATIVAS')
+      expect(bloqueado.headers.get('retry-after')).toBe('3600')
+      expect((await cadastro('10.2.2.3')).status).toBe(201)
+
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(Date.now() + HORA + 60_000)
+      expect((await cadastro('10.2.2.2')).status).toBe(201)
     })
 
     it('409 EMAIL_EM_USO, sem diferenciar maiúsculas', async () => {
@@ -244,6 +262,54 @@ describe('autenticação', () => {
 
     it('/api/acesso-medico/* fica livre de sessão (reservado)', async () => {
       expect((await app.request('/api/acesso-medico/ABC234')).status).toBe(404)
+    })
+  })
+
+  describe('limpeza oportunista', () => {
+    it('login apaga o convidado cuja sessão venceu há mais de 24 h, com os dados; titular fica', async () => {
+      const titular = await cadastrarComOnboarding(app, 'exemplo')
+      const { pacienteId } = (await ler(await post('/api/auth/demo'))).perfil as { pacienteId: string }
+      vi.useFakeTimers({ toFake: ['Date'] })
+
+      vi.setSystemTime(Date.now() + 47 * HORA)
+      expect((await login(titular.email, SENHA)).status).toBe(200)
+      expect(await repo.obterPerfil(pacienteId)).not.toBeNull()
+
+      vi.setSystemTime(Date.now() + 2 * HORA)
+      expect((await login(titular.email, SENHA)).status).toBe(200)
+      expect(await repo.obterPerfil(pacienteId)).toBeNull()
+      expect((await repo.paraPaciente(pacienteId).estado()).eventos).toEqual([])
+      expect(await repo.obterPerfil(titular.perfil.pacienteId)).not.toBeNull()
+    })
+
+    it('apaga sessões expiradas e tentativas com mais de um dia', async () => {
+      const conta = await cadastrar(app)
+      const token = conta.cookie.slice('nurai_sessao='.length)
+      await login(conta.email, 'senha-errada')
+      const chaveLogin = chave('login', '10.0.0.1', conta.email)
+      expect(await repo.contarTentativas(chaveLogin, new Date(0))).toBe(1)
+
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(Date.now() + 8 * 24 * HORA)
+      expect((await login(conta.email, SENHA, '10.0.0.9')).status).toBe(200)
+      expect(await repo.buscarSessao(hashToken(token))).toBeNull()
+      expect(await repo.contarTentativas(chaveLogin, new Date(0))).toBe(0)
+    })
+
+    it('roda no máximo a cada 10 minutos e uma falha não derruba o login', async () => {
+      const limpar = vi.spyOn(repo, 'limpar')
+      const conta = await cadastrar(app)
+      expect((await login(conta.email, SENHA)).status).toBe(200)
+      expect(limpar).toHaveBeenCalledTimes(1)
+
+      limpar.mockRejectedValueOnce(new Error('ORA-00000 falhou'))
+      const erroConsole = vi.spyOn(console, 'error').mockImplementation(() => {})
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(Date.now() + 11 * 60_000)
+      expect((await login(conta.email, SENHA)).status).toBe(200)
+      expect(limpar).toHaveBeenCalledTimes(2)
+      expect(erroConsole).toHaveBeenCalled()
+      erroConsole.mockRestore()
     })
   })
 })

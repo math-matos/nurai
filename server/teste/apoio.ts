@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { randomInt, randomUUID } from 'node:crypto'
 import { criarLlmMock } from '../ai/mock.js'
 import { criarApp } from '../app.js'
 import type { Perfil, Repositorio, RepositorioPaciente, Usuario } from '../db/repo.js'
@@ -37,11 +37,13 @@ export interface Conta {
   email: string
 }
 
+/* Cada cadastro vem de um IP novo: o limite de cadastros por IP não interfere nos testes que criam várias contas. */
 export async function cadastrar(app: App, dados: Record<string, unknown> = {}): Promise<Conta> {
   const email = (dados.email as string | undefined) ?? emailNovo()
-  const res = await app.request('/api/auth/cadastro', comSessao(null, json({
-    nome: 'Ana Teste', email, senha: SENHA, aceiteLgpd: true, ...dados,
-  })))
+  const init = comSessao(null, json({ nome: 'Ana Teste', email, senha: SENHA, aceiteLgpd: true, ...dados }))
+  const headers = new Headers(init.headers)
+  headers.set('x-forwarded-for', `10.${randomInt(256)}.${randomInt(256)}.${randomInt(1, 255)}`)
+  const res = await app.request('/api/auth/cadastro', { ...init, headers })
   if (res.status !== 201) throw new Error(`cadastro falhou: ${res.status} ${await res.text()}`)
   const corpo = await res.json() as { usuario: Usuario; perfil: Perfil }
   return { cookie: cookieDe(res), email, ...corpo }
