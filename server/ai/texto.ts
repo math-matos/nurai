@@ -7,8 +7,10 @@ import { dataBR } from './casos/comum.js'
 const ID = 'e\\d{2,}'
 const MARCADOR = `[\\[(]\\s*(${ID}(?:\\s*(?:,|;|\\be\\b)\\s*${ID})*)\\s*[\\])]`
 const DATA_ISO = /\b(\d{4})-(\d{2})-(\d{2})\b/g
-/* Só 1–2 casas: "1.500" é milhar em pt-BR e fica como está. */
-const DECIMAL_COM_PONTO = /(?<![\d.])(\d+)\.(\d{1,2})(?!\d|\.\d)/g
+/* Só 1–2 casas: "1.500" é milhar em pt-BR e fica como está; "0.125" não tem como ser milhar.
+   Colado a letra ("J45.9", "v2.5"), depois de "versão" ou de vírgula ("1,234.5") é código ou formato inglês. */
+const DECIMAL_COM_PONTO = /(?<![\p{L}\d.,])(?<!vers[aã]o\s)(\d+)\.(\d{1,2})(?!\d|\.\d)/gu
+const DECIMAL_MENOR_QUE_UM = /(?<![\p{L}\d.,])0\.(\d{3,})(?!\d|\.\d)/gu
 
 /* Artigo ou preposição logo antes do marcador = o id está no lugar do nome do registro
    ("como o [e11] e o [e18]"). Removê-lo deixaria "como o e o"; aí o id vira a descrição. */
@@ -62,6 +64,7 @@ export function limparTexto(texto: string, eventos: Evento[] = []): string {
     .replace(MARCADOR_SOLTO, '')
     .replace(DATA_ISO, '$3/$2/$1')
     .replace(DECIMAL_COM_PONTO, '$1,$2')
+    .replace(DECIMAL_MENOR_QUE_UM, '0,$1')
     .replace(/\s+([.,;:!?])/g, '$1')
     .replace(/([,;:])(?:\s*[,;:])+/g, '$1')
     .replace(/[,;:](?=[.!?])/g, '')
