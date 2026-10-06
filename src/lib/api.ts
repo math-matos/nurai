@@ -4,7 +4,8 @@ import type { AcessoLog, Consentimento, Evento, ProximoPasso } from '../data/typ
 export type FonteConectada = (typeof FONTES_CONECTADAS)[number]
 export type GeradoPor = 'oci' | 'mock'
 
-export interface Compartilhamento { codigo: string; criadoEm: string; para: string; expiraEm?: string }
+/* criadoEm e expiraEm já chegam formatados (DD/MM/AAAA HH:mm, horário de Brasília). */
+export interface Compartilhamento { codigo: string; criadoEm: string; para: string; expiraEm: string }
 
 export type Onboarding = 'pendente' | 'vazio' | 'exemplo'
 export type ModoOnboarding = Exclude<Onboarding, 'pendente'>
