@@ -57,6 +57,8 @@ const acessoMedico = {
 
 export const esquemaAcessoMedico = z.object(acessoMedico)
 
+export const esquemaVerificacaoMedico = z.object({ codigo: acessoMedico.codigo })
+
 export const esquemaResumoMedico = z.object({
   ...acessoMedico,
   especialidade: texto.max(80).optional(),

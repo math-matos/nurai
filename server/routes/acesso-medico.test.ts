@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AcessoLog, Evento, ProximoPasso } from '../../src/data/types.js'
+import { derivarFatos, pontosEmAberto } from '../ai/fatos.js'
 import { criarLlmMock } from '../ai/mock.js'
 import { criarApp } from '../app.js'
 import { fecharPool } from '../db/conexao.js'
@@ -8,7 +9,7 @@ import { criarRepoMemoria } from '../db/memoria.js'
 import { criarRepoOracle } from '../db/oracle.js'
 import type { Compartilhamento, EstadoRepositorio, Repositorio } from '../db/repo.js'
 import { aplicarSchema } from '../db/schema.js'
-import { cadastrarComOnboarding, comSessao, json, logado, type App, type Conta } from '../teste/apoio.js'
+import { cadastrar, cadastrarComOnboarding, comSessao, json, logado, type App, type Conta } from '../teste/apoio.js'
 
 type Corpo = Record<string, unknown> & { erro?: string; codigo?: string }
 const ler = async (res: Response) => (await res.json()) as Corpo
@@ -88,7 +89,7 @@ function suiteAcessoMedico(nome: string, fabrica: () => Repositorio) {
         const res = await acessar({ codigo: `  ${comp.codigo.toLowerCase()} `, profissional: '  Dra. Renata Aguiar ' })
         expect(res.status).toBe(200)
         const body = await ler(res)
-        expect(Object.keys(body).sort()).toEqual(['eventos', 'expiraEm', 'paciente', 'para', 'passos'])
+        expect(Object.keys(body).sort()).toEqual(['eventos', 'expiraEm', 'paciente', 'para', 'passos', 'pontosEmAberto'])
         expect(body.paciente).toEqual({
           nome: 'Ana Alves', idade: expect.any(Number), condicoes: ['Hipertensão'], alergias: ['Dipirona'],
         })
@@ -98,6 +99,45 @@ function suiteAcessoMedico(nome: string, fabrica: () => Repositorio) {
         const passos = body.passos as ProximoPasso[]
         expect(passos).toEqual(estado.passos.filter((p) => !p.feito))
         expect(passos.map((p) => p.id)).not.toContain(passo.id)
+        expect(body.pontosEmAberto).toEqual(pontosEmAberto(derivarFatos(estado.eventos)))
+      })
+
+      it('pontos em aberto são calculados no acesso, mesmo sem nenhum passo gravado pelo paciente', async () => {
+        await repo.paraPaciente(ana.perfil.pacienteId).substituirPassos([])
+        const comp = await gerar(ana)
+        const body = await ler(await acessar({ codigo: comp.codigo, profissional: 'Dra. Renata Aguiar' }))
+        expect(body.passos).toEqual([])
+        const pontos = body.pontosEmAberto as { texto: string; tipo: string; ancoras: string[] }[]
+        expect(pontos[0]).toEqual({
+          tipo: 'repeticao', ancoras: ['e22', 'e24'],
+          texto: expect.stringMatching(/^Possível exame repetido: pedido de ultrassom de carótidas em 08\/07\/2026/),
+        })
+        expect(pontos.map((p) => p.tipo)).toEqual(expect.arrayContaining(['retorno', 'reavaliacao']))
+        const ids = new Set((body.eventos as Evento[]).map((e) => e.id))
+        expect(pontos.flatMap((p) => p.ancoras).every((id) => ids.has(id))).toBe(true)
+
+        const vazio = await ler(await acessar({ codigo: (await gerar(bruno)).codigo, profissional: 'Dra. Renata Aguiar' }))
+        expect(vazio.pontosEmAberto).toEqual([])
+      })
+
+      it('histórico gerenciado por um responsável: o médico vê o paciente e quem enviou as informações', async () => {
+        const rafael = await cadastrar(app, { nome: 'Rafael Lima' })
+        const api = logado(app, rafael.cookie)
+        await api.request('/api/onboarding', json({
+          modo: 'vazio', paciente: { nome: 'Marcos Vinícius Teixeira', dataNascimento: '1958-03-02', relacao: 'filho' },
+        }))
+        try {
+          const comp = await gerar(rafael, 'Dr. Paulo')
+          const body = await ler(await acessar({ codigo: comp.codigo, profissional: 'Dra. Renata Aguiar' }))
+          expect(body.paciente).toEqual({
+            nome: 'Marcos Vinícius Teixeira', idade: expect.any(Number), condicoes: [], alergias: [],
+            responsavel: { nome: 'Rafael Lima', relacao: 'filho' },
+          })
+          const log = await acessosDe(rafael)
+          expect(log.find((a) => a.acao === 'Gerou acesso temporário')).toMatchObject({ quem: 'Rafael Lima', papel: 'Responsável (filho)' })
+        } finally {
+          await repo.excluirPaciente(rafael.perfil.pacienteId)
+        }
       })
 
       it('registra o acesso no log do paciente, e só no dele', async () => {
@@ -152,6 +192,39 @@ function suiteAcessoMedico(nome: string, fabrica: () => Repositorio) {
         expect(await ler(res)).toEqual(INVALIDO)
       })
 
+      it('tentativa com código revogado ou expirado vai para o log do dono, só com o fim do código', async () => {
+        const logDeAna = () => repo.paraPaciente(ana.perfil.pacienteId).listarAcessos()
+        const revogado = await gerar(ana, 'Dr. Revogado')
+        await logado(app, ana.cookie).request(`/api/compartilhamentos/${revogado.codigo}`, { method: 'DELETE' })
+        const antesBruno = await acessosDe(bruno)
+
+        const res = await acessar({ codigo: revogado.codigo.toLowerCase(), profissional: 'Dr. Curioso' })
+        expect(res.status).toBe(404)
+        expect(await ler(res)).toEqual(INVALIDO)
+        const [recusa] = await logDeAna()
+        expect(recusa).toMatchObject({
+          quem: 'Dr. Curioso', papel: PAPEL, acao: 'Tentativa recusada: código revogado', itens: `••••${revogado.codigo.slice(-2)}`,
+        })
+        expect(JSON.stringify(await logDeAna())).not.toContain(revogado.codigo)
+
+        expect((await resumir({ codigo: revogado.codigo, profissional: 'Dr. Curioso' })).status).toBe(404)
+        expect((await logDeAna())[0].acao).toBe('Tentativa recusada: código revogado')
+
+        /* Código inexistente não tem dono: não registra em lugar nenhum. */
+        const antes = await logDeAna()
+        expect((await acessar({ codigo: 'ZZZZZ9', profissional: 'Dr. Curioso' })).status).toBe(404)
+        expect(await logDeAna()).toEqual(antes)
+        expect(await acessosDe(bruno)).toEqual(antesBruno)
+
+        const expira = await gerar(ana, 'Dr. Expira')
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(Date.now() + 30 * DIA + MINUTO)
+        expect((await acessar({ codigo: expira.codigo, profissional: 'Dra. Atrasada' })).status).toBe(404)
+        expect((await logDeAna())[0]).toMatchObject({
+          quem: 'Dra. Atrasada', papel: PAPEL, acao: 'Tentativa recusada: código expirado', itens: `••••${expira.codigo.slice(-2)}`,
+        })
+      })
+
       it('400 para profissional com menos de 3 ou mais de 120 caracteres, ou sem código', async () => {
         const comp = await gerar(ana)
         for (const body of [
@@ -190,6 +263,36 @@ function suiteAcessoMedico(nome: string, fabrica: () => Repositorio) {
         vi.useFakeTimers({ toFake: ['Date'] })
         vi.setSystemTime(Date.now() + MINUTO + 1000)
         expect((await acessar(valido)).status).toBe(200)
+      })
+    })
+
+    describe('POST /api/acesso-medico/verificar', () => {
+      const verificar = (body: unknown, deIp = ip) =>
+        app.request('/api/acesso-medico/verificar', comSessao(null, comIp(json(body), deIp)))
+
+      it('204 para código ativo e 404 genérico para revogado ou inexistente, sem registrar nada', async () => {
+        const comp = await gerar(ana)
+        const antes = await acessosDe(ana)
+        const ok = await verificar({ codigo: ` ${comp.codigo.toLowerCase()} ` })
+        expect(ok.status).toBe(204)
+
+        await logado(app, ana.cookie).request(`/api/compartilhamentos/${comp.codigo}`, { method: 'DELETE' })
+        const depois = await acessosDe(ana)
+        for (const codigo of [comp.codigo, 'ZZZZZ9']) {
+          const res = await verificar({ codigo })
+          expect(res.status).toBe(404)
+          expect(await ler(res)).toEqual(INVALIDO)
+        }
+        expect(await acessosDe(ana)).toEqual(depois)
+        expect(depois.length).toBe(antes.length + 1)
+        expect((await verificar({})).status).toBe(400)
+      })
+
+      it('conta no mesmo limite por IP do acesso pelo código', async () => {
+        const comp = await gerar(ana)
+        for (let i = 0; i < 10; i++) expect((await verificar({ codigo: comp.codigo })).status).toBe(204)
+        expect((await verificar({ codigo: comp.codigo })).status).toBe(429)
+        expect((await acessar({ codigo: comp.codigo, profissional: 'Dra. Renata Aguiar' })).status).toBe(429)
       })
     })
 
