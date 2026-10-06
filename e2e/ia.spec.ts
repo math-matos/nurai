@@ -161,7 +161,9 @@ test.describe('sobre o histórico do Marcos', () => {
     expect(repetido!.porque).toMatch(/12\/03\/2026/)
     expect(repetido!.porque).toMatch(/02\/04\/2026/)
     const item = page.locator('.passo').filter({ hasText: repetido!.titulo })
-    await item.getByRole('button').filter({ hasText: 'Perfil lipídico' }).click()
+    /* A âncora diz "12 mar 2026 · <título>"; o pedido também pode ter "perfil lipídico" no título. */
+    const tituloFeito = eventos.find((e) => e.id === IDS.lipidico)!.titulo
+    await item.getByRole('button', { name: new RegExp(`· ${tituloFeito.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }).click()
     await expect(page).toHaveURL(new RegExp(`#/app/linha/${IDS.lipidico}$`))
   })
 })
