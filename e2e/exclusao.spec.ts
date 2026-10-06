@@ -68,3 +68,22 @@ test('anexar e excluir um registro: some da tela, da API e do F5, e fica no log 
   await expect(page.getByText(ACAO).first()).toBeVisible()
   await expect(page.getByText(titulo).first()).toBeVisible()
 })
+
+/* Visto em produção: logo após o F5 no detalhe, o 1º clique em "Excluir este registro" não abria a
+   confirmação; só o 2º. Clica assim que o botão aparece e confere que a confirmação fica aberta. */
+test('logo após o F5 no detalhe, um clique em "Excluir este registro" abre a confirmação @mobile', async ({ page, contas }) => {
+  await contas.criar({ request: page.request, nome: 'Paciente Recarga', modo: 'exemplo' })
+  const [{ id, titulo }] = (await lerEstado(page.request)).eventos
+  await page.goto(`/#/app/linha/${id}`)
+  await esperarApp(page)
+
+  await page.reload()
+  const detalhe = page.getByTestId('evento-detalhe')
+  await detalhe.getByTestId('evento-excluir').click()
+  const confirmacao = detalhe.getByRole('group', { name: /Excluir .* do seu histórico/ })
+  await expect(confirmacao).toBeVisible()
+  await expect(confirmacao).toContainText(titulo)
+  await page.waitForLoadState('networkidle')
+  await expect(confirmacao).toBeVisible()
+  await expect(detalhe.getByTestId('evento-excluir')).toHaveCount(0)
+})
