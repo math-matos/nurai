@@ -9,9 +9,9 @@ type Bind = Record<string, string | number | null>
 
 /* Instantes de sessão e tentativa trafegam em UTC com milissegundos: comparar com Date do Node, sem fuso. */
 const FORMATO_UTC = `'YYYY-MM-DD"T"HH24:MI:SS.FF3'`
-const instanteUtc = (bind: string) => `FROM_TZ(TO_TIMESTAMP(:${bind}, ${FORMATO_UTC}), 'UTC')`
+export const instanteUtc = (bind: string) => `FROM_TZ(TO_TIMESTAMP(:${bind}, ${FORMATO_UTC}), 'UTC')`
 const textoUtc = (coluna: string) => `TO_CHAR(SYS_EXTRACT_UTC(${coluna}), ${FORMATO_UTC})`
-const paraBindUtc = (d: Date) => d.toISOString().slice(0, 23)
+export const paraBindUtc = (d: Date) => d.toISOString().slice(0, 23)
 const deTextoUtc = (s: unknown) => new Date(`${s as string}Z`)
 
 const colunasPerfil = (p: string) => `${p}.id "pacienteId", ${p}.nome "nome",
@@ -38,6 +38,10 @@ const SQL = {
   /* Janela máxima usada é 1 h: o que passa de um dia não conta mais e não precisa ficar. */
   limparTentativas: `DELETE FROM tentativas WHERE chave = :chave AND quando < ${instanteUtc('limite')}`,
   contarTentativas: `SELECT COUNT(*) "n" FROM tentativas WHERE chave = :chave AND quando >= ${instanteUtc('desde')}`,
+  /* ON DELETE CASCADE leva usuário, sessões e todo o histórico do convidado. */
+  limparConvidados: `DELETE FROM pacientes WHERE convidado = 1 AND criado_em < ${instanteUtc('limite')}`,
+  limparSessoes: `DELETE FROM sessoes WHERE expira_em < ${instanteUtc('limite')}`,
+  limparTodasTentativas: `DELETE FROM tentativas WHERE quando < ${instanteUtc('limite')}`,
 }
 
 const DIA_MS = 86_400_000
@@ -77,7 +81,7 @@ export async function gravarPerfil(conn: oracledb.Connection, perfil: PerfilGrav
 export const violouChave = (e: unknown, constraint: string) =>
   (e as { errorNum?: number }).errorNum === 1 && (e as Error).message.toUpperCase().includes(constraint)
 
-type Contas = Omit<Repositorio, 'nome' | 'paraPaciente' | 'aplicarOnboarding'>
+type Contas = Omit<Repositorio, 'nome' | 'paraPaciente' | 'aplicarOnboarding' | 'buscarCompartilhamentoAtivo'>
 
 export function contasOracle(): Contas {
   return {
@@ -150,6 +154,16 @@ export function contasOracle(): Contas {
     contarTentativas: (chave, desde) => comConexao(async (conn) => {
       const r = await conn.execute<{ n: number }>(SQL.contarTentativas, { chave, desde: paraBindUtc(desde) })
       return r.rows?.[0].n ?? 0
+    }),
+
+    limpar: ({ sessoesExpiradasAntesDe, tentativasAntesDe, convidadosCriadosAntesDe }) => transacao(async (conn) => {
+      const apagar = async (sql: string, limite: Date) =>
+        (await conn.execute(sql, { limite: paraBindUtc(limite) })).rowsAffected ?? 0
+      return {
+        convidados: await apagar(SQL.limparConvidados, convidadosCriadosAntesDe),
+        sessoes: await apagar(SQL.limparSessoes, sessoesExpiradasAntesDe),
+        tentativas: await apagar(SQL.limparTodasTentativas, tentativasAntesDe),
+      }
     }),
   }
 }

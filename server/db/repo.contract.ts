@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Evento, ProximoPasso } from '../../src/data/types.js'
 import { dadosExemplo } from './exemplo.js'
 import {
@@ -11,6 +11,13 @@ const EXEMPLO = dadosExemplo(AUTOR)
 const FORMATO_QUANDO = /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/
 const FORMATO_DIA = /^\d{2}\/\d{2}\/\d{4}$/
 const MINUTO = 60_000
+const DIA = 24 * 60 * MINUTO
+
+/* 'DD/MM/AAAA HH:mm' para ms, no mesmo fuso para os dois lados: só serve para diferenças. */
+function quandoParaMs(quando: string) {
+  const [d, m, a, h, min] = quando.split(/[/ :]/).map(Number)
+  return Date.UTC(a, m - 1, d, h, min)
+}
 
 const EVENTO_NOVO: Evento = {
   id: 'u1', data: '2026-09-01', tipo: 'exame', titulo: 'Perfil lipídico',
@@ -161,6 +168,8 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
         expect(comp.codigo).toMatch(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/)
         expect(comp.para).toBe('Dra. Renata Aguiar')
         expect(comp.criadoEm).toMatch(FORMATO_QUANDO)
+        expect(comp.expiraEm).toMatch(FORMATO_QUANDO)
+        expect(quandoParaMs(comp.expiraEm) - quandoParaMs(comp.criadoEm)).toBe(30 * DIA)
 
         const { compartilhamento, acessos } = await repo.estado()
         expect(compartilhamento).toEqual(comp)
@@ -213,6 +222,135 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
         await repo.criarCompartilhamento('Dr. X', AUTOR)
         await repo.reiniciar()
         expect(await repo.estado()).toEqual({ ...EXEMPLO, compartilhamento: null })
+      })
+    })
+
+    describe('compartilhamentos', () => {
+      let a: { perfil: Perfil; repo: RepositorioPaciente }
+      let b: { perfil: Perfil; repo: RepositorioPaciente }
+
+      beforeEach(async () => {
+        a = await novoPaciente('exemplo', 'Ana Alves')
+        b = await novoPaciente('exemplo', 'Bruno Braga')
+      })
+
+      afterEach(() => {
+        vi.useRealTimers()
+      })
+
+      it('buscarCompartilhamentoAtivo encontra o paciente pelo código', async () => {
+        const comp = await a.repo.criarCompartilhamento('Dr. X', 'Ana Alves')
+        expect(await raiz.buscarCompartilhamentoAtivo(comp.codigo)).toEqual({
+          pacienteId: a.perfil.pacienteId, para: 'Dr. X', expiraEm: comp.expiraEm,
+        })
+        expect(await raiz.buscarCompartilhamentoAtivo('ZZZZZ9')).toBeNull()
+      })
+
+      it('estado mostra o compartilhamento ativo mais recente', async () => {
+        const primeiro = await a.repo.criarCompartilhamento('Dr. Um', 'Ana Alves')
+        const segundo = await a.repo.criarCompartilhamento('Dr. Dois', 'Ana Alves')
+        expect((await a.repo.estado()).compartilhamento).toEqual(segundo)
+        expect(await a.repo.revogarCompartilhamento(segundo.codigo, 'Ana Alves')).toBe(true)
+        expect((await a.repo.estado()).compartilhamento).toEqual(primeiro)
+        await a.repo.revogarCompartilhamento(primeiro.codigo, 'Ana Alves')
+        expect((await a.repo.estado()).compartilhamento).toBeNull()
+      })
+
+      it('revogar desativa o código e registra o acesso; repetir não duplica o log', async () => {
+        const comp = await a.repo.criarCompartilhamento('Dr. X', 'Ana Alves')
+        expect(await a.repo.revogarCompartilhamento(comp.codigo, 'Ana Alves')).toBe(true)
+        expect(await raiz.buscarCompartilhamentoAtivo(comp.codigo)).toBeNull()
+        const acessos = await a.repo.listarAcessos()
+        expect(acessos[0]).toMatchObject({
+          quem: 'Ana Alves', papel: 'Titular', acao: 'Revogou acesso temporário', itens: 'Dr. X',
+        })
+        expect(await a.repo.revogarCompartilhamento(comp.codigo, 'Ana Alves')).toBe(true)
+        expect(await a.repo.listarAcessos()).toEqual(acessos)
+      })
+
+      it('A não revoga o código de B', async () => {
+        const deB = await b.repo.criarCompartilhamento('Dr. Y', 'Bruno Braga')
+        const acessosA = await a.repo.listarAcessos()
+        expect(await a.repo.revogarCompartilhamento(deB.codigo, 'Ana Alves')).toBe(false)
+        expect(await a.repo.revogarCompartilhamento('ZZZZZ9', 'Ana Alves')).toBe(false)
+        expect(await a.repo.listarAcessos()).toEqual(acessosA)
+        expect((await raiz.buscarCompartilhamentoAtivo(deB.codigo))?.pacienteId).toBe(b.perfil.pacienteId)
+      })
+
+      it('expira 30 dias depois de criado', async () => {
+        const comp = await a.repo.criarCompartilhamento('Dr. X', 'Ana Alves')
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(Date.now() + 30 * DIA - 2 * MINUTO)
+        expect(await raiz.buscarCompartilhamentoAtivo(comp.codigo)).not.toBeNull()
+        vi.setSystemTime(Date.now() + 3 * MINUTO)
+        expect(await raiz.buscarCompartilhamentoAtivo(comp.codigo)).toBeNull()
+        expect((await a.repo.estado()).compartilhamento).toBeNull()
+      })
+
+      it('reiniciar apaga os códigos do paciente', async () => {
+        const comp = await a.repo.criarCompartilhamento('Dr. X', 'Ana Alves')
+        await a.repo.reiniciar()
+        expect(await raiz.buscarCompartilhamentoAtivo(comp.codigo)).toBeNull()
+      })
+    })
+
+    describe('limpar', () => {
+      async function comSessao(pacienteId: string, expiraEm: Date) {
+        const usuario = await raiz.criarUsuario({ email: emailUnico(), senhaHash: null, pacienteId })
+        const tokenHash = `tok-${randomUUID()}`
+        await raiz.criarSessao({ tokenHash, usuarioId: usuario.id, expiraEm })
+        return tokenHash
+      }
+
+      it('apaga sessões expiradas e tentativas antigas, mantendo as recentes', async () => {
+        const { perfil } = await novoPaciente('pendente')
+        const expirada = await comSessao(perfil.pacienteId, new Date(Date.now() - MINUTO))
+        const valida = `tok-${randomUUID()}`
+        const usuario = await raiz.buscarSessao(expirada)
+        await raiz.criarSessao({ tokenHash: valida, usuarioId: usuario!.usuario.id, expiraEm: new Date(Date.now() + DIA) })
+        const chave = `limpar-${randomUUID()}`
+        /* A antiga por último: o Oracle já descarta as antigas da mesma chave a cada registro. */
+        await raiz.registrarTentativa(chave)
+        await raiz.registrarTentativa(chave, new Date(Date.now() - 2 * DIA))
+        expect(await raiz.contarTentativas(chave, new Date(0))).toBe(2)
+
+        const r = await raiz.limpar({
+          sessoesExpiradasAntesDe: new Date(), tentativasAntesDe: new Date(Date.now() - DIA),
+          convidadosCriadosAntesDe: new Date(0),
+        })
+
+        expect(r.sessoes).toBeGreaterThanOrEqual(1)
+        expect(r.tentativas).toBeGreaterThanOrEqual(1)
+        expect(await raiz.buscarSessao(expirada)).toBeNull()
+        expect(await raiz.buscarSessao(valida)).not.toBeNull()
+        expect(await raiz.contarTentativas(chave, new Date(0))).toBe(1)
+        expect(await raiz.obterPerfil(perfil.pacienteId)).not.toBeNull()
+      })
+
+      it('exclui convidados criados antes do limite com todos os dados; titulares ficam', async () => {
+        const convidado = await raiz.criarPaciente({ nome: 'Visitante', convidado: true })
+        criados.push(convidado.pacienteId)
+        await raiz.aplicarOnboarding(convidado.pacienteId, 'exemplo')
+        const token = await comSessao(convidado.pacienteId, new Date(Date.now() + DIA))
+        const { codigo } = await raiz.paraPaciente(convidado.pacienteId).criarCompartilhamento('Dr. X', 'Visitante')
+        const titular = await novoPaciente('exemplo')
+
+        const nada = await raiz.limpar({
+          sessoesExpiradasAntesDe: new Date(0), tentativasAntesDe: new Date(0),
+          convidadosCriadosAntesDe: new Date(Date.now() - MINUTO),
+        })
+        expect(await raiz.obterPerfil(convidado.pacienteId)).not.toBeNull()
+
+        const r = await raiz.limpar({
+          sessoesExpiradasAntesDe: new Date(0), tentativasAntesDe: new Date(0),
+          convidadosCriadosAntesDe: new Date(Date.now() + MINUTO),
+        })
+        expect(r.convidados).toBeGreaterThanOrEqual(nada.convidados + 1)
+        expect(await raiz.obterPerfil(convidado.pacienteId)).toBeNull()
+        expect(await raiz.buscarSessao(token)).toBeNull()
+        expect(await raiz.buscarCompartilhamentoAtivo(codigo)).toBeNull()
+        expect((await raiz.paraPaciente(convidado.pacienteId).estado()).eventos).toEqual([])
+        expect(await raiz.obterPerfil(titular.perfil.pacienteId)).not.toBeNull()
       })
     })
 

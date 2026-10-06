@@ -5,11 +5,13 @@ import { comConexao, transacao } from './conexao.js'
 import { gerarCodigo } from './codigo.js'
 import { agora, hoje } from './datas.js'
 import { dadosIniciais } from './exemplo.js'
-import { contasOracle, gravarPerfil, lerPerfil, violouChave } from './oracle-contas.js'
+import {
+  contasOracle, gravarPerfil, instanteUtc, lerPerfil, paraBindUtc, violouChave,
+} from './oracle-contas.js'
 import { montarPerfil } from './perfil.js'
 import {
-  ErroConflito, semOpcionaisVazios, type Compartilhamento, type FonteConectada, type ModoOnboarding, type NovoAcesso,
-  type Onboarding, type Repositorio, type RepositorioPaciente,
+  ErroConflito, semOpcionaisVazios, VALIDADE_COMPARTILHAMENTO_DIAS, type Compartilhamento, type CompartilhamentoAtivo,
+  type FonteConectada, type ModoOnboarding, type NovoAcesso, type Onboarding, type Repositorio, type RepositorioPaciente,
 } from './repo.js'
 
 type Linha = Record<string, unknown>
@@ -18,6 +20,7 @@ type Bind = Record<string, string | number | null>
 const TABELAS_DO_PACIENTE = ['eventos', 'consentimentos', 'acessos', 'passos', 'fontes', 'compartilhamentos']
 /* 31^6 códigos: colisão é rara, mas o código é chave global. */
 const TENTATIVAS_CODIGO = 3
+const DIA_MS = 86_400_000
 
 /* Instantes trafegam no formato exibido (horário de Brasília) e o banco guarda TIMESTAMP WITH TIME ZONE:
    a ida e a volta usam o mesmo fuso, então o texto devolvido é exatamente o que foi gravado. */
@@ -46,8 +49,15 @@ const SQL = {
   passo: `SELECT ${COLUNAS.passo} FROM passos WHERE paciente_id = :paciente AND id = :id`,
   fontes: `SELECT ${COLUNAS.fonte} FROM fontes WHERE paciente_id = :paciente ORDER BY ordem`,
   fonte: `SELECT ${COLUNAS.fonte} FROM fontes WHERE paciente_id = :paciente AND id = :id`,
-  compartilhamento: `SELECT codigo "codigo", ${texto('criado_em')} "criadoEm", para "para" FROM compartilhamentos
-    WHERE paciente_id = :paciente ORDER BY ordem DESC FETCH FIRST 1 ROWS ONLY`,
+  compartilhamento: `SELECT codigo "codigo", ${texto('criado_em')} "criadoEm", para "para", ${texto('expira_em')} "expiraEm"
+    FROM compartilhamentos WHERE paciente_id = :paciente AND revogado = 0 AND expira_em > ${instanteUtc('agora')}
+    ORDER BY ordem DESC FETCH FIRST 1 ROWS ONLY`,
+  compartilhamentoAtivo: `SELECT paciente_id "pacienteId", para "para", ${texto('expira_em')} "expiraEm"
+    FROM compartilhamentos WHERE codigo = :codigo AND revogado = 0 AND expira_em > ${instanteUtc('agora')}`,
+  revogarCompartilhamento: `UPDATE compartilhamentos SET revogado = 1
+    WHERE paciente_id = :paciente AND codigo = :codigo AND revogado = 0`,
+  compartilhamentoDoPaciente: `SELECT para "para" FROM compartilhamentos
+    WHERE paciente_id = :paciente AND codigo = :codigo`,
 
   inserirEvento: `INSERT INTO eventos (paciente_id, id, data, tipo, titulo, instituicao, fonte, especialidade, resumo,
     sinal, medidas, tags, origem, confianca, documento, novo) VALUES (:paciente, :id, TO_DATE(:data, 'YYYY-MM-DD'),
@@ -62,7 +72,7 @@ const SQL = {
   inserirFonte: `INSERT INTO fontes (paciente_id, id, nome, fonte, estado, registros, ultima)
     VALUES (:paciente, :id, :nome, :fonte, :estado, :registros, :ultima)`,
   inserirCompartilhamento: `INSERT INTO compartilhamentos (paciente_id, codigo, criado_em, para, expira_em)
-    VALUES (:paciente, :codigo, ${instante('criadoEm')}, :para, ${instante('criadoEm')} + INTERVAL '30' DAY)`,
+    VALUES (:paciente, :codigo, ${instante('criadoEm')}, :para, ${instante('expiraEm')})`,
 }
 
 const semNulos = (l: Linha) => Object.fromEntries(Object.entries(l).filter(([, v]) => v !== null))
@@ -147,7 +157,8 @@ function repoPaciente(paciente: string): RepositorioPaciente {
       acessos: (await selecionar(conn, SQL.acessos)).map(paraAcesso),
       passos: (await selecionar(conn, SQL.passos)).map(paraPasso),
       fontes: (await selecionar(conn, SQL.fontes)).map(paraFonte),
-      compartilhamento: (await selecionar(conn, SQL.compartilhamento)).map(paraCompartilhamento)[0] ?? null,
+      compartilhamento: (await selecionar(conn, SQL.compartilhamento, { agora: paraBindUtc(new Date()) }))
+        .map(paraCompartilhamento)[0] ?? null,
     })),
 
     adicionarEvento: (evento, autor) => transacao(async (conn) => {
@@ -189,7 +200,11 @@ function repoPaciente(paciente: string): RepositorioPaciente {
 
     criarCompartilhamento: (para, autor) => transacao(async (conn) => {
       for (let tentativa = 1; ; tentativa++) {
-        const compartilhamento: Compartilhamento = { codigo: gerarCodigo(), criadoEm: agora(), para }
+        const criado = Date.now()
+        const compartilhamento: Compartilhamento = {
+          codigo: gerarCodigo(), criadoEm: agora(new Date(criado)), para,
+          expiraEm: agora(new Date(criado + VALIDADE_COMPARTILHAMENTO_DIAS * DIA_MS)),
+        }
         try {
           await conn.execute(SQL.inserirCompartilhamento, { paciente, ...compartilhamento })
         } catch (e) {
@@ -199,6 +214,16 @@ function repoPaciente(paciente: string): RepositorioPaciente {
         await registrar(conn, { quem: autor, papel: 'Titular', acao: 'Gerou acesso temporário', itens: `${para}, 30 dias` })
         return compartilhamento
       }
+    }),
+
+    revogarCompartilhamento: (codigo, autor) => transacao(async (conn) => {
+      const r = await conn.execute(SQL.revogarCompartilhamento, { paciente, codigo })
+      const [alvo] = await selecionar(conn, SQL.compartilhamentoDoPaciente, { codigo })
+      if (!alvo) return false
+      if (r.rowsAffected) {
+        await registrar(conn, { quem: autor, papel: 'Titular', acao: 'Revogou acesso temporário', itens: alvo.para as string })
+      }
+      return true
     }),
 
     conectarFonte: (id) => transacao(async (conn) => {
@@ -227,6 +252,11 @@ export function criarRepoOracle(): Repositorio {
     nome: 'oracle',
     paraPaciente: repoPaciente,
     ...contasOracle(),
+
+    buscarCompartilhamentoAtivo: (codigo) => comConexao(async (conn) => {
+      const r = await conn.execute<Linha>(SQL.compartilhamentoAtivo, { codigo, agora: paraBindUtc(new Date()) })
+      return (r.rows?.[0] as CompartilhamentoAtivo | undefined) ?? null
+    }),
 
     aplicarOnboarding: (id, modo: ModoOnboarding) => transacao(async (conn) => {
       const atual = await lerPerfil(conn, id, true)

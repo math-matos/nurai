@@ -3,10 +3,32 @@ import type { AcessoLog, Consentimento, Evento, ProximoPasso } from '../../src/d
 
 export type FonteConectada = (typeof FONTES_CONECTADAS)[number]
 
+/* criadoEm e expiraEm no formato exibido (DD/MM/AAAA HH:mm, horário de Brasília). */
 export interface Compartilhamento {
   codigo: string
   criadoEm: string
   para: string
+  expiraEm: string
+}
+
+export const VALIDADE_COMPARTILHAMENTO_DIAS = 30
+
+export interface CompartilhamentoAtivo {
+  pacienteId: string
+  para: string
+  expiraEm: string
+}
+
+export interface LimitesLimpeza {
+  sessoesExpiradasAntesDe: Date
+  tentativasAntesDe: Date
+  convidadosCriadosAntesDe: Date
+}
+
+export interface ResultadoLimpeza {
+  sessoes: number
+  tentativas: number
+  convidados: number
 }
 
 export interface EstadoRepositorio {
@@ -89,6 +111,8 @@ export interface RepositorioPaciente {
   alternarPasso(id: string): Promise<ProximoPasso | null>
   substituirPassos(passos: ProximoPasso[]): Promise<ProximoPasso[]>
   criarCompartilhamento(para: string, autor: string): Promise<Compartilhamento>
+  /* false: o código não é deste paciente. Revogar de novo devolve true sem registrar outro acesso. */
+  revogarCompartilhamento(codigo: string, autor: string): Promise<boolean>
   conectarFonte(id: string): Promise<FonteConectada | null>
   listarAcessos(): Promise<AcessoLog[]>
   registrarAcesso(log: NovoAcesso): Promise<AcessoLog>
@@ -119,6 +143,12 @@ export interface Repositorio {
 
   registrarTentativa(chave: string, quando?: Date): Promise<void>
   contarTentativas(chave: string, desde: Date): Promise<number>
+
+  /* Código exato (já normalizado); null se não existe, foi revogado ou expirou. */
+  buscarCompartilhamentoAtivo(codigo: string): Promise<CompartilhamentoAtivo | null>
+
+  /* Convidados saem com todos os dados (como excluirPaciente). Devolve quantos de cada foram apagados. */
+  limpar(limites: LimitesLimpeza): Promise<ResultadoLimpeza>
 }
 
 /* Id ou email que já existe: os dois repositórios lançam isto em vez de duplicar (memória) ou estourar ORA-00001 (Oracle). */

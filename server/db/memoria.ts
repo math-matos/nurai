@@ -2,20 +2,31 @@ import { randomUUID } from 'node:crypto'
 import type { AcessoLog } from '../../src/data/types.js'
 import { gerarCodigo } from './codigo.js'
 import { agora, hoje } from './datas.js'
-import { dadosIniciais, dadosVazios } from './exemplo.js'
+import { dadosIniciais, dadosVazios, type DadosIniciais } from './exemplo.js'
 import { montarPerfil, perfilAtualizado, perfilNovo, type PerfilGravado } from './perfil.js'
 import {
-  ErroConflito, normalizarEmail, semOpcionaisVazios, type EstadoRepositorio, type NovoAcesso, type Repositorio,
-  type RepositorioPaciente, type UsuarioComSenha,
+  ErroConflito, normalizarEmail, semOpcionaisVazios, VALIDADE_COMPARTILHAMENTO_DIAS, type Compartilhamento,
+  type NovoAcesso, type Repositorio, type RepositorioPaciente, type UsuarioComSenha,
 } from './repo.js'
+
+interface CompartilhamentoGravado extends Compartilhamento {
+  expiraMs: number
+  revogado: boolean
+}
 
 interface Paciente {
   perfil: PerfilGravado
-  estado: EstadoRepositorio
+  criadoMs: number
+  estado: DadosIniciais
+  /* Do mais antigo para o mais recente. */
+  compartilhamentos: CompartilhamentoGravado[]
 }
 
-const estadoInicial = (perfil: PerfilGravado): EstadoRepositorio =>
-  ({ ...dadosIniciais(perfil.onboarding, perfil.nome), compartilhamento: null })
+const DIA_MS = 86_400_000
+const estadoInicial = (perfil: PerfilGravado): DadosIniciais => dadosIniciais(perfil.onboarding, perfil.nome)
+const ativo = (c: CompartilhamentoGravado) => !c.revogado && c.expiraMs > Date.now()
+const publico = ({ codigo, criadoEm, para, expiraEm }: CompartilhamentoGravado): Compartilhamento =>
+  ({ codigo, criadoEm, para, expiraEm })
 
 export function criarRepoMemoria(): Repositorio {
   const pacientes = new Map<string, Paciente>()
@@ -33,8 +44,11 @@ export function criarRepoMemoria(): Repositorio {
 
   function paraPaciente(id: string): RepositorioPaciente {
     const ler = () => paciente(id).estado
-    const gravar = (estado: EstadoRepositorio) => {
+    const gravar = (estado: DadosIniciais) => {
       pacientes.set(id, { ...paciente(id), estado })
+    }
+    const gravarCompartilhamentos = (compartilhamentos: CompartilhamentoGravado[]) => {
+      pacientes.set(id, { ...paciente(id), compartilhamentos })
     }
     const registrar = (log: NovoAcesso): AcessoLog => {
       const completo = { id: `a${Date.now()}-${++sequencia}`, quando: agora(), ...log }
@@ -44,7 +58,9 @@ export function criarRepoMemoria(): Repositorio {
 
     return {
       async estado() {
-        return structuredClone(pacientes.get(id)?.estado ?? { ...dadosVazios(), compartilhamento: null })
+        const p = pacientes.get(id)
+        const atual = p?.compartilhamentos.findLast(ativo)
+        return { ...structuredClone(p?.estado ?? dadosVazios()), compartilhamento: atual ? publico(atual) : null }
       },
 
       async adicionarEvento(evento, autor) {
@@ -81,10 +97,25 @@ export function criarRepoMemoria(): Repositorio {
       },
 
       async criarCompartilhamento(para, autor) {
-        const compartilhamento = { codigo: gerarCodigo(), criadoEm: agora(), para }
-        gravar({ ...ler(), compartilhamento })
+        const agoraMs = Date.now()
+        const expiraMs = agoraMs + VALIDADE_COMPARTILHAMENTO_DIAS * DIA_MS
+        const gravado: CompartilhamentoGravado = {
+          codigo: gerarCodigo(), criadoEm: agora(new Date(agoraMs)), para, expiraEm: agora(new Date(expiraMs)),
+          expiraMs, revogado: false,
+        }
+        gravarCompartilhamentos([...paciente(id).compartilhamentos, gravado])
         registrar({ quem: autor, papel: 'Titular', acao: 'Gerou acesso temporário', itens: `${para}, 30 dias` })
-        return { ...compartilhamento }
+        return publico(gravado)
+      },
+
+      async revogarCompartilhamento(codigo, autor) {
+        const alvo = pacientes.get(id)?.compartilhamentos.find((c) => c.codigo === codigo)
+        if (!alvo) return false
+        if (alvo.revogado) return true
+        gravarCompartilhamentos(paciente(id).compartilhamentos
+          .map((c) => (c.codigo === codigo ? { ...c, revogado: true } : c)))
+        registrar({ quem: autor, papel: 'Titular', acao: 'Revogou acesso temporário', itens: alvo.para })
+        return true
       },
 
       async conectarFonte(fid) {
@@ -104,9 +135,17 @@ export function criarRepoMemoria(): Repositorio {
       },
 
       async reiniciar() {
-        gravar(estadoInicial(paciente(id).perfil))
+        pacientes.set(id, { ...paciente(id), estado: estadoInicial(paciente(id).perfil), compartilhamentos: [] })
       },
     }
+  }
+
+  async function excluirPaciente(id: string) {
+    if (!pacientes.delete(id)) return false
+    const doPaciente = new Set([...usuarios.values()].filter((u) => u.pacienteId === id).map((u) => u.id))
+    for (const [email, u] of usuarios) if (doPaciente.has(u.id)) usuarios.delete(email)
+    for (const [token, s] of sessoes) if (doPaciente.has(s.usuarioId)) sessoes.delete(token)
+    return true
   }
 
   const perfilDe = (id: string) => {
@@ -120,7 +159,7 @@ export function criarRepoMemoria(): Repositorio {
 
     async criarPaciente(dados) {
       const perfil = perfilNovo(randomUUID(), dados)
-      pacientes.set(perfil.pacienteId, { perfil, estado: estadoInicial(perfil) })
+      pacientes.set(perfil.pacienteId, { perfil, criadoMs: Date.now(), estado: estadoInicial(perfil), compartilhamentos: [] })
       return montarPerfil(perfil)
     },
 
@@ -140,18 +179,11 @@ export function criarRepoMemoria(): Repositorio {
       const p = pacientes.get(id)
       if (!p) return null
       const perfil = { ...p.perfil, onboarding: modo }
-      pacientes.set(id, { perfil, estado: estadoInicial(perfil) })
+      pacientes.set(id, { ...p, perfil, estado: estadoInicial(perfil), compartilhamentos: [] })
       return montarPerfil(perfil)
     },
 
-    async excluirPaciente(id) {
-      if (!pacientes.delete(id)) return false
-      const doPaciente = new Set([...usuarios.values()].filter((u) => u.pacienteId === id).map((u) => u.id))
-      for (const [email, u] of usuarios) if (doPaciente.has(u.id)) usuarios.delete(email)
-      for (const [token, s] of sessoes) if (doPaciente.has(s.usuarioId)) sessoes.delete(token)
-      return true
-    },
-
+    excluirPaciente,
     async criarUsuario({ email, senhaHash, pacienteId }) {
       const normalizado = normalizarEmail(email)
       if (usuarios.has(normalizado)) throw new ErroConflito('Email já cadastrado')
@@ -188,6 +220,24 @@ export function criarRepoMemoria(): Repositorio {
 
     async contarTentativas(chave, desde) {
       return tentativas.filter((t) => t.chave === chave && t.quando >= desde.getTime()).length
+    },
+
+    async buscarCompartilhamentoAtivo(codigo) {
+      for (const [pacienteId, p] of pacientes) {
+        const c = p.compartilhamentos.find((x) => x.codigo === codigo)
+        if (c) return ativo(c) ? { pacienteId, para: c.para, expiraEm: c.expiraEm } : null
+      }
+      return null
+    },
+
+    async limpar({ sessoesExpiradasAntesDe, tentativasAntesDe, convidadosCriadosAntesDe }) {
+      const convidados = [...pacientes].filter(([, p]) => p.perfil.convidado && p.criadoMs < convidadosCriadosAntesDe.getTime())
+      for (const [id] of convidados) await excluirPaciente(id)
+      const expiradas = [...sessoes].filter(([, s]) => s.expiraEm < sessoesExpiradasAntesDe)
+      for (const [token] of expiradas) sessoes.delete(token)
+      const antes = tentativas.length
+      tentativas = tentativas.filter((t) => t.quando >= tentativasAntesDe.getTime())
+      return { sessoes: expiradas.length, tentativas: antes - tentativas.length, convidados: convidados.length }
     },
   }
 }
