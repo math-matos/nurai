@@ -3,8 +3,9 @@ import { Icon, type NomeIcone } from '../components/Icon'
 import { Falha, Marca, Vazio } from '../components/ui'
 import { Link } from '../components/Link'
 import { navegar } from '../lib/router'
-import { useAcoes, useEstado } from '../lib/store'
-import { PACIENTE } from '../data/seed'
+import { concluirOnboarding, definir, sair, useAcoes, useEstado, usePerfil } from '../lib/store'
+import { mensagemDeErro } from '../lib/api'
+import { TID } from '../lib/testids'
 import { LinhaDoTempo } from './app/LinhaDoTempo'
 import { Fontes } from './app/Fontes'
 import { Copiloto } from './app/Copiloto'
@@ -25,10 +26,45 @@ const NAV: { para: string; rotulo: string; icone: NomeIcone; nota: string }[] = 
 export function AppShell({ rota }: { rota: string }) {
   const [menuAberto, setMenuAberto] = useState(false)
   const [confirmandoReinicio, setConfirmandoReinicio] = useState(false)
+  const [zerando, setZerando] = useState(false)
+  const [saindo, setSaindo] = useState(false)
   const estado = useEstado()
+  const perfil = usePerfil()
   const { carregar, descartarFalha, reiniciar } = useAcoes()
+  const exemplo = perfil.onboarding === 'exemplo'
+  const meta = [
+    perfil.idade !== undefined && `${perfil.idade} anos`,
+    perfil.cartaoSus && `Cartão SUS ${perfil.cartaoSus.slice(-4)}`,
+  ].filter(Boolean).join(' · ')
 
-  useEffect(() => { void carregar() }, [carregar])
+  const fecharReinicio = () => {
+    setConfirmandoReinicio(false)
+    setMenuAberto(false)
+    navegar('/app/linha')
+  }
+
+  /* Troca o ponto de partida: apaga tudo e recomeça sem o histórico de exemplo. */
+  const comecarDoZero = async () => {
+    if (zerando) return
+    setZerando(true)
+    try {
+      await concluirOnboarding('vazio')
+      fecharReinicio()
+    } catch (erro) {
+      setZerando(false)
+      setConfirmandoReinicio(false)
+      definir(() => ({ falhaAcao: mensagemDeErro(erro) }))
+    }
+  }
+
+  const encerrar = async (destino = '/') => {
+    if (saindo) return
+    setSaindo(true)
+    await sair(destino)
+  }
+
+  /* A sessão muda de identidade a cada troca de usuário ou de ponto de partida: aí o histórico é buscado de novo. */
+  useEffect(() => { void carregar() }, [carregar, estado.sessao])
 
   const segmentos = rota.split('/').filter(Boolean) // ['app', 'linha', 'e09']
   const secao = segmentos[1] ?? 'linha'
@@ -56,18 +92,34 @@ export function AppShell({ rota }: { rota: string }) {
           </button>
         </div>
 
-        <div className="paciente">
-          <span className="paciente__iniciais" aria-hidden="true">{PACIENTE.iniciais}</span>
+        <div className="paciente" data-testid={TID.shellPerfil}>
+          <span className="paciente__iniciais" aria-hidden="true">{perfil.iniciais}</span>
           <div>
-            <p className="paciente__nome">{PACIENTE.nome}</p>
-            <p className="paciente__meta num">
-              {PACIENTE.idade} anos · Cartão SUS {PACIENTE.cartaoSus.slice(-4)}
-            </p>
+            <p className="paciente__nome" data-testid={TID.shellPerfilNome}>{perfil.nome}</p>
+            {meta && <p className="paciente__meta num">{meta}</p>}
           </div>
         </div>
-        <ul className="paciente__condicoes">
-          {PACIENTE.condicoes.map((c) => <li key={c} className="chip">{c}</li>)}
-        </ul>
+        {perfil.condicoes.length > 0 && (
+          <ul className="paciente__condicoes" aria-label="Condições">
+            {perfil.condicoes.map((c) => <li key={c} className="chip">{c}</li>)}
+          </ul>
+        )}
+
+        {perfil.convidado && (
+          <div className="convidado" data-testid={TID.seloConvidado}>
+            <span className="chip chip--convidado"><Icon nome="olho" tamanho={12} /> Conta de demonstração</span>
+            <p className="convidado__texto">
+              Os dados desta conta são temporários. Para guardar um histórico seu, crie uma conta
+              — a demonstração não é transferida.
+            </p>
+            <button
+              type="button" className="btn btn--ghost" disabled={saindo}
+              onClick={() => { void encerrar('/cadastro') }}
+            >
+              Criar minha conta
+            </button>
+          </div>
+        )}
 
         <nav className="lateral__nav" aria-label="Seções">
           {NAV.map((n) => {
@@ -91,28 +143,34 @@ export function AppShell({ rota }: { rota: string }) {
 
         <div className="lateral__rodape">
           <p className="lateral__aviso">
-            Demonstração com dados sintéticos. Reiniciar restaura o histórico original no servidor.
+            {exemplo
+              ? 'Histórico de exemplo com dados sintéticos. Reiniciar restaura o exemplo original.'
+              : 'Use apenas documentos fictícios nesta demonstração. Reiniciar apaga o que você anexou.'}
           </p>
           {confirmandoReinicio ? (
             <div className="reinicio" role="group" aria-labelledby="reinicio-pergunta">
               <p id="reinicio-pergunta" className="reinicio__pergunta">
-                Reiniciar apaga os documentos anexados, os passos marcados e as permissões
-                alteradas, e restaura o histórico original. Continuar?
+                {exemplo
+                  ? 'Restaurar apaga os documentos anexados, os passos marcados e as permissões alteradas, e volta ao histórico de exemplo. Começar do zero apaga também o exemplo. Continuar?'
+                  : 'Reiniciar apaga todos os documentos que você anexou e deixa o histórico vazio de novo. Continuar?'}
               </p>
               <div className="reinicio__acoes">
                 <button
-                  type="button" className="btn"
-                  onClick={() => {
-                    setConfirmandoReinicio(false)
-                    setMenuAberto(false)
-                    reiniciar()
-                    navegar('/app/linha')
-                  }}
+                  type="button" className="btn" disabled={zerando} data-testid={TID.reinicioConfirmar}
+                  onClick={() => { reiniciar(); fecharReinicio() }}
                 >
-                  Reiniciar agora
+                  {exemplo ? 'Restaurar o exemplo' : 'Apagar e reiniciar'}
                 </button>
+                {exemplo && (
+                  <button
+                    type="button" className="btn btn--ghost" disabled={zerando} data-testid={TID.reinicioZerar}
+                    onClick={() => { void comecarDoZero() }}
+                  >
+                    {zerando ? 'Apagando…' : 'Começar do zero'}
+                  </button>
+                )}
                 <button
-                  type="button" className="btn btn--ghost" autoFocus
+                  type="button" className="btn btn--ghost" autoFocus disabled={zerando}
                   onClick={() => setConfirmandoReinicio(false)}
                 >
                   Cancelar
@@ -120,10 +178,19 @@ export function AppShell({ rota }: { rota: string }) {
               </div>
             </div>
           ) : (
-            <button type="button" className="btn btn--quiet" onClick={() => setConfirmandoReinicio(true)}>
-              <Icon nome="recomecar" tamanho={16} /> Reiniciar a demonstração
+            <button
+              type="button" className="btn btn--quiet" data-testid={TID.botaoReiniciar}
+              onClick={() => setConfirmandoReinicio(true)}
+            >
+              <Icon nome="recomecar" tamanho={16} /> {exemplo ? 'Reiniciar o histórico de exemplo' : 'Reiniciar meu histórico'}
             </button>
           )}
+          <button
+            type="button" className="btn btn--quiet" disabled={saindo} data-testid={TID.botaoSair}
+            onClick={() => { void encerrar() }}
+          >
+            <Icon nome="seta" tamanho={16} /> {saindo ? 'Saindo…' : 'Sair'}
+          </button>
         </div>
       </aside>
 
@@ -209,7 +276,7 @@ export function AppShell({ rota }: { rota: string }) {
                 <Vazio
                   icone="busca"
                   titulo="Página não encontrada"
-                  texto="Este endereço não corresponde a nenhuma tela da demonstração."
+                  texto="Este endereço não corresponde a nenhuma tela do app."
                   acao={<Link para="/app/linha" className="btn btn--ghost">Ir para a linha do tempo</Link>}
                 />
               )}
