@@ -1,10 +1,10 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import type { Evento, ProximoPasso } from '../src/data/types.ts'
-import { HISTORICO_MARCOS, IDS } from './fixtures/historico-marcos.ts'
+import { montarHistoricoMarcos, type ChaveMarcos } from './fixtures/historico-marcos.ts'
 import { excluirConta } from './helpers/conta.ts'
 import { afirmarAncoras, afirmarTextoDeIa, respostaDe } from './helpers/ia.ts'
 import {
-  CSRF, REAL, cabecalhosDeIp, cadastrarPorApi, entrarPorApi, esperarApp, lerEstado, type Credenciais,
+  REAL, cabecalhosDeIp, cadastrarPorApi, entrarPorApi, esperarApp, lerEstado, type Credenciais,
 } from './helpers/sessao.ts'
 import { expect, test } from './helpers/test.ts'
 
@@ -43,15 +43,15 @@ async function abrirAncora(page: Page, ui: ReturnType<Page['getByTestId']>, id: 
 test.describe('sobre o histórico do Marcos', () => {
   let conta: Credenciais
   let sessao: APIRequestContext
-  const eventos: Evento[] = HISTORICO_MARCOS
+  let eventos: Evento[]
+  let IDS: Record<ChaveMarcos, string>
 
   test.beforeAll(async ({ playwright }, info) => {
     sessao = await playwright.request.newContext({ baseURL: info.project.use.baseURL, extraHTTPHeaders: cabecalhosDeIp() })
     conta = await cadastrarPorApi(sessao, { nome: 'Marcos Vinícius Teixeira', modo: 'vazio' })
-    for (const evento of HISTORICO_MARCOS) {
-      const res = await sessao.post('/api/eventos', { headers: CSRF, data: evento })
-      expect(res.status(), evento.id).toBe(201)
-    }
+    const historico = await montarHistoricoMarcos(sessao, REAL)
+    eventos = historico.eventos
+    IDS = historico.ids
   })
 
   test.afterAll(async () => {
@@ -80,7 +80,8 @@ test.describe('sobre o histórico do Marcos', () => {
     const { json } = await perguntar(page, 'Tem algum exame que eu não preciso repetir?')
     afirmarTextoDeIa(json.texto, eventos, 'copiloto')
     afirmarAncoras(json.ancoras, eventos, 'copiloto')
-    if (REAL) expect(json.ancoras).toEqual(expect.arrayContaining([IDS.lipidico, IDS.pedidoLipidico]))
+    expect(json.ancoras, 'perfil lipídico (02) × pedido (09)').toEqual(expect.arrayContaining([IDS.lipidico, IDS.pedidoLipidico]))
+    expect(json.texto.join(' ')).toMatch(/12\/03\/2026/)
   })
 
   test('pergunta sobre parar um remédio traz o aviso de falar com o médico', async ({ page }) => {
@@ -150,11 +151,15 @@ test.describe('sobre o histórico do Marcos', () => {
       expect(p.ancoras.length, p.titulo).toBeGreaterThan(0)
       afirmarAncoras(p.ancoras, eventos, `passo "${p.titulo}"`)
       afirmarTextoDeIa([p.titulo, p.porque, p.prazo], eventos, `passo "${p.titulo}"`)
+      expect(p.porque, 'porque começa com minúscula').not.toMatch(/^\p{Ll}/u)
+      expect(p.titulo, 'título começa com minúscula').not.toMatch(/^\p{Ll}/u)
     }
     expect((await lerEstado(page.request)).passos).toEqual(passos)
 
     const repetido = passos.find((p) => p.ancoras.includes(IDS.lipidico) && p.ancoras.includes(IDS.pedidoLipidico))
     expect(repetido, 'duplicidade do perfil lipídico (02 × 09)').toBeTruthy()
+    expect(repetido!.porque).toMatch(/12\/03\/2026/)
+    expect(repetido!.porque).toMatch(/02\/04\/2026/)
     const item = page.locator('.passo').filter({ hasText: repetido!.titulo })
     await item.getByRole('button').filter({ hasText: 'Perfil lipídico' }).click()
     await expect(page).toHaveURL(new RegExp(`#/app/linha/${IDS.lipidico}$`))

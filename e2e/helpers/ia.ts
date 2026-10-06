@@ -2,6 +2,8 @@ import { expect, type Page, type Response } from '@playwright/test'
 import type { Evento } from '../../src/data/types.ts'
 
 const DATA_BR = /\b\d{2}\/\d{2}\/\d{4}\b/g
+/* "14.6 g/dL": ponto decimal em inglês antes de unidade. */
+const DECIMAL_COM_PONTO = /(?<![\p{L}\d.,])\d+\.\d+\s?(?:[mµn]?g\/[dm]?L|mmol\/L|mU?I\/m?L|mEq\/L|U\/L|%|bpm|ms|mm|cm|kg|fL|pg|mil\/µL|milhões\/µL)/u
 
 const dataBR = (iso: string) => iso.split('-').reverse().join('/')
 const hojeBR = () => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date())
@@ -13,6 +15,7 @@ export function afirmarTextoDeIa(textos: string[], eventos: Evento[], onde: stri
   expect(texto, `${onde}: marcador de id no texto`).not.toMatch(/\[\s*[a-z]{1,2}\d+/i)
   for (const { id } of eventos) expect(texto, `${onde}: id cru "${id}"`).not.toMatch(new RegExp(`\\b${id}\\b`))
   expect(texto, `${onde}: data ISO`).not.toMatch(/\b\d{4}-\d{2}-\d{2}\b/)
+  expect(texto, `${onde}: decimal com ponto antes de unidade`).not.toMatch(DECIMAL_COM_PONTO)
   const conhecidas = new Set([
     hojeBR(),
     ...eventos.flatMap((e) => [dataBR(e.data), ...(`${e.titulo} ${e.resumo}`.match(DATA_BR) ?? [])]),
