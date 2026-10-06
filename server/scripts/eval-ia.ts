@@ -6,6 +6,7 @@ import { LAUDO_EXEMPLO } from '../../src/data/exemplos.js'
 import { configOciDoAmbiente, criarLlmOci } from '../ai/oci.js'
 import { criarApp } from '../app.js'
 import { criarRepoMemoria } from '../db/memoria.js'
+import { DEMO_MARCOS } from '../teste/demo-marcos.js'
 
 try {
   process.loadEnvFile('.env.local')
@@ -239,6 +240,71 @@ await caso('passos Marcos: aponta perfil lipídico repetido, porque concreto e c
     ok: repetido && !minusculas.length,
     ms: r.ms,
     detalhe: `passos=${passos.length} repetido=${repetido} minúsculas=${minusculas.length}${minusculas.length ? ` "${minusculas[0].porque.slice(0, 50)}"` : ''}`,
+  }
+})
+
+/* Histórico do Marcos no shape real da extração (server/teste/demo-marcos.ts), gravado direto:
+   achados do teste em produção (TFG descartada, pendência de pneumologia, "agendar" exame duplicado). */
+async function contaDemoMarcos(): Promise<typeof SESSAO> {
+  const cadastro = await app.request('/api/auth/cadastro', {
+    method: 'POST',
+    headers: { 'x-nurai': '1', 'content-type': 'application/json' },
+    body: JSON.stringify({ nome: 'Marcos Vinícius Teixeira', email: 'eval-demo-marcos@nurai.test', senha: 'Nurai-eval-2026!', aceiteLgpd: true }),
+  })
+  const sessao = { cookie: cadastro.headers.get('set-cookie')?.split(';')[0] ?? '', 'x-nurai': '1' }
+  await app.request('/api/onboarding', { method: 'POST', headers: { ...sessao, 'content-type': 'application/json' }, body: JSON.stringify({ modo: 'vazio' }) })
+  for (const evento of DEMO_MARCOS) {
+    const salvo = await app.request('/api/eventos', {
+      method: 'POST', headers: { ...sessao, 'content-type': 'application/json' }, body: JSON.stringify(evento),
+    })
+    if (salvo.status !== 201) throw new Error(`evento ${evento.id}: HTTP ${salvo.status}`)
+  }
+  return sessao
+}
+const demoMarcos = await contaDemoMarcos()
+
+await caso('copiloto demo Marcos "função renal": cita TFG 101 e 85 e não nega a mudança', async () => {
+  const r = await copiloto('Como está minha função renal?', demoMarcos)
+  const texto = textoDe(r.body)
+  const serie = (r.body.serie as { pontos: { valor: number }[] } | undefined)?.pontos.map((p) => p.valor) ?? []
+  const nega = /n[aã]o (?:h[aá] |houve )?(?:registros? de )?(?:altera|mudan)/i.test(texto)
+  const ok = serie.join(',') === '101,85' && /\b85\b/.test(texto) && !nega
+  return { ok, ms: r.ms, detalhe: `serie=[${serie}] nega=${nega} texto="${texto.slice(0, 80)}"` }
+})
+
+await caso('copiloto demo Marcos "pendente": cita a consulta de pneumologia (d08)', async () => {
+  const r = await copiloto('Ficou alguma coisa pendente no meu acompanhamento?', demoMarcos)
+  const a = ancorasDe(r.body)
+  const texto = textoDe(r.body)
+  return { ok: a.includes('d08') && /espirometria|pneumolog/i.test(texto), ms: r.ms, detalhe: `ancoras=[${a.join(',')}] texto="${texto.slice(0, 80)}"` }
+})
+
+await caso('copiloto demo Marcos "LDL" 2x: série presente e igual nas duas', async () => {
+  const series = []
+  let ms = 0
+  for (let i = 0; i < 2; i++) {
+    const r = await copiloto('Como meu colesterol LDL evoluiu?', demoMarcos)
+    ms += r.ms
+    series.push(JSON.stringify(r.body.serie ?? null))
+  }
+  return { ok: series[0] !== 'null' && series[0] === series[1], ms, detalhe: series.join(' | ').slice(0, 120) }
+})
+
+await caso('passos demo Marcos: não mandam agendar exame duplicado; levam o laudo; pendência de pneumologia; sem "dosagem"', async () => {
+  const r = await chamar('/api/passos/gerar', undefined, demoMarcos)
+  if (r.status !== 200) throw new Error(`HTTP ${r.status}`)
+  const passos = r.body.passos as { titulo: string; porque: string; ancoras: string[] }[]
+  coletar('passos demo Marcos', passos.map((p) => [p.titulo, p.porque]))
+  const titulos = passos.map((p) => p.titulo)
+  const agendaDuplicado = passos.filter((p) => /agend|refaz|marcar|realizar/i.test(p.titulo)
+    && (p.ancoras.some((a) => ['f02', 'f09', 'd09', 'd11'].includes(a)) || /lip[ií]d|ultrass/i.test(p.titulo)))
+  const levaLaudo = ['f02', 'd09'].every((feito) => passos.some((p) => p.ancoras.includes(feito) && /^Levar o laudo/.test(p.titulo)))
+  const pneumo = passos.some((p) => p.ancoras.includes('d08') && /espirometria|pneumolog/i.test(p.titulo))
+  const dose = titulos.filter((t) => /dosagem|dose|posologia/i.test(t))
+  return {
+    ok: !agendaDuplicado.length && levaLaudo && pneumo && !dose.length,
+    ms: r.ms,
+    detalhe: `agenda=${agendaDuplicado.length} laudo=${levaLaudo} pneumo=${pneumo} dose=${dose.length} ${titulos.slice(0, 3).join(' / ').slice(0, 90)}`,
   }
 })
 
