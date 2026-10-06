@@ -6,7 +6,9 @@ import { Porta } from '../components/Porta'
 import { AvisoIa, ChipSinal, Falha, Marca, Regua, SeloIa, Vazio } from '../components/ui'
 import { FONTES, TIPOS } from '../data/seed'
 import type { Evento } from '../data/types'
-import { api, ErroApi, mensagemDeErro, podeRepetir, type AcessoMedico as Acesso, type ResumoIa } from '../lib/api'
+import {
+  api, ErroApi, mensagemDeErro, podeRepetir, type AcessoMedico as Acesso, type PontoEmAberto, type ResumoIa,
+} from '../lib/api'
 import { formatarData, ordenarRecentes } from '../lib/formato'
 import { focarPrimeiroErro } from '../lib/formulario'
 import { TID } from '../lib/testids'
@@ -24,6 +26,14 @@ const PERIODO_REVALIDACAO_MS = 60_000
 const INTERVALO_MINIMO_MS = 10_000
 
 const codigoRecusado = (erro: unknown): erro is ErroApi => erro instanceof ErroApi && erro.codigo === 'CODIGO_INVALIDO'
+
+/* Ordem de leitura do profissional: o que pode ser evitado (exame repetido) antes do que está pendente. */
+const GRUPOS_PONTOS: { tipo: PontoEmAberto['tipo']; titulo: string }[] = [
+  { tipo: 'repeticao', titulo: 'Possíveis exames repetidos' },
+  { tipo: 'pedido', titulo: 'Pedidos sem resultado' },
+  { tipo: 'retorno', titulo: 'Retornos sem consulta registrada' },
+  { tipo: 'reavaliacao', titulo: 'Reavaliações sem nova medição' },
+]
 
 /* Porta do profissional de saúde: sem conta, só com o código que o paciente gerou. Nenhuma ação de escrita. */
 export function AcessoMedico() {
@@ -138,11 +148,10 @@ interface AcoesVisao {
 }
 
 function VisaoMedico({ dados, codigo, profissional, aoSair, aoEncerrar }: Liberado & AcoesVisao) {
-  const { paciente, eventos, passos, expiraEm, para } = dados
+  const { paciente, eventos, pontosEmAberto, expiraEm, para } = dados
   useRevalidarCodigo(codigo, aoEncerrar)
   const [abertos, setAbertos] = useState<Set<string>>(() => new Set())
   const ordenados = ordenarRecentes(eventos)
-  const pendentes = passos.filter((p) => !p.feito)
 
   const alternar = (id: string, aberto: boolean) => setAbertos((atual) => {
     const novo = new Set(atual)
@@ -181,6 +190,11 @@ function VisaoMedico({ dados, codigo, profissional, aoSair, aoEncerrar }: Libera
               <p className="label">Paciente</p>
               <h1>{paciente.nome}</h1>
               {meta && <p className="medico__meta num">{meta}</p>}
+              {paciente.responsavel && (
+                <p className="medico__meta">
+                  Informações enviadas por {paciente.responsavel.nome} ({paciente.responsavel.relacao})
+                </p>
+              )}
               {paciente.condicoes.length > 0 && (
                 <ul className="medico__condicoes" aria-label="Condições">
                   {paciente.condicoes.map((c) => <li key={c} className="chip">{c}</li>)}
@@ -227,18 +241,7 @@ function VisaoMedico({ dados, codigo, profissional, aoSair, aoEncerrar }: Libera
             </section>
 
             <div className="medico__lateral">
-              <section className="painel" aria-labelledby="medico-pendencias" data-testid={TID.medicoPendencias}>
-                <div className="painel__cabeca">
-                  <h2 id="medico-pendencias">Pontos em aberto apontados ao paciente</h2>
-                  <p>Gerados por IA a partir do histórico; revise antes de considerar.</p>
-                </div>
-                <ul className="pendencias">
-                  {pendentes.map((p) => (
-                    <li key={p.id}><strong>{p.titulo}</strong><span>{p.prazo}</span></li>
-                  ))}
-                  {pendentes.length === 0 && <li>Nenhum ponto em aberto.</li>}
-                </ul>
-              </section>
+              <PontosEmAberto pontos={pontosEmAberto} eventos={eventos} aoAncorar={irPara} />
 
               <ResumoMedico
                 codigo={codigo} profissional={profissional} eventos={eventos} aoAncorar={irPara} aoEncerrar={aoEncerrar}
@@ -247,6 +250,60 @@ function VisaoMedico({ dados, codigo, profissional, aoSair, aoEncerrar }: Libera
           </div>
         </div>
       </main>
+    </div>
+  )
+}
+
+/* Calculados pelo servidor a partir dos registros, no acesso: não dependem de o paciente ter gerado os próximos passos. */
+function PontosEmAberto({ pontos, eventos, aoAncorar }: {
+  pontos: PontoEmAberto[]
+  eventos: Evento[]
+  aoAncorar: (id: string) => void
+}) {
+  const grupos = GRUPOS_PONTOS
+    .map((g) => ({ ...g, itens: pontos.filter((p) => p.tipo === g.tipo) }))
+    .filter((g) => g.itens.length > 0)
+
+  return (
+    <section className="painel" aria-labelledby="medico-pendencias" data-testid={TID.medicoPendencias}>
+      <div className="painel__cabeca">
+        <h2 id="medico-pendencias">Pontos em aberto nos registros</h2>
+        <p>Identificados automaticamente a partir das datas e textos dos registros, sem IA. Confira no documento de origem.</p>
+      </div>
+      {grupos.length === 0 ? (
+        <p className="medico-pontos__vazio">Nenhum ponto em aberto identificado nos registros.</p>
+      ) : (
+        <div className="medico-pontos">
+          {grupos.map((g) => (
+            <div key={g.tipo} className="medico-pontos__grupo">
+              <h3 className="label">{g.titulo}</h3>
+              <ul>
+                {g.itens.map((p, i) => (
+                  <li key={i} data-testid={TID.medicoPonto}>
+                    <p>{p.texto}</p>
+                    <Ancoras ids={p.ancoras} eventos={eventos} aoAncorar={aoAncorar} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/* Leva ao registro citado na linha do tempo; âncora para registro que não está na tela não vira chip. */
+function Ancoras({ ids, eventos, aoAncorar }: { ids: string[]; eventos: Evento[]; aoAncorar: (id: string) => void }) {
+  const citados = ids.flatMap((id) => eventos.filter((e) => e.id === id))
+  if (citados.length === 0) return null
+  return (
+    <div className="sintese-ia__ancoras">
+      {citados.map((e) => (
+        <button key={e.id} type="button" className="chip chip--botao" onClick={() => aoAncorar(e.id)}>
+          <span className="num">{formatarData(e.data)}</span> · {e.titulo}
+        </button>
+      ))}
     </div>
   )
 }
@@ -332,8 +389,6 @@ function ResumoMedico({ codigo, profissional, eventos, aoAncorar, aoEncerrar }: 
     }
   }
 
-  const evento = (id: string) => eventos.find((e) => e.id === id)
-
   return (
     <section className="painel" aria-labelledby="medico-resumo">
       <div className="painel__cabeca">
@@ -376,17 +431,7 @@ function ResumoMedico({ codigo, profissional, eventos, aoAncorar, aoEncerrar }: 
                 {resumo.pontos.map((p, i) => (
                   <li key={i}>
                     <p>{p.texto}</p>
-                    <div className="sintese-ia__ancoras">
-                      {p.ancoras.map((id) => {
-                        const e = evento(id)
-                        if (!e) return null
-                        return (
-                          <button key={id} type="button" className="chip chip--botao" onClick={() => aoAncorar(id)}>
-                            <span className="num">{formatarData(e.data)}</span> · {e.titulo}
-                          </button>
-                        )
-                      })}
-                    </div>
+                    <Ancoras ids={p.ancoras} eventos={eventos} aoAncorar={aoAncorar} />
                   </li>
                 ))}
               </ul>

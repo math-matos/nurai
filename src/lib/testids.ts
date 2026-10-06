@@ -3,7 +3,7 @@
    form-cadastro, cadastro-nome, cadastro-email, cadastro-senha, cadastro-nascimento, cadastro-lgpd,
    cadastro-enviar, botao-demo, erro-formulario, aviso-sessao.
    Onboarding: onboarding-vazio, onboarding-exemplo.
-   Shell: shell-perfil, shell-perfil-nome, selo-convidado, botao-sair, botao-reiniciar, reinicio-confirmar,
+   Shell: shell-perfil, shell-perfil-nome, shell-responsavel, selo-convidado, botao-sair, botao-reiniciar, reinicio-confirmar,
    reinicio-zerar, estado-vazio, cta-primeiro-documento.
    Linha do tempo: evento-item, evento-detalhe, ia-explicar, ia-explicacao, evento-excluir,
    evento-excluir-confirmar, evento-excluido, busca-pergunta, busca-perguntar-copiloto.
@@ -13,7 +13,7 @@
    IA: copiloto-pergunta, copiloto-enviar, copiloto-resposta, ia-passos, ia-resumo, resumo-sintese.
    Compartilhamento: acesso-gerar, acesso-painel, acesso-codigo, acesso-validade, acesso-copiar, acesso-revogar, acesso-revogado.
    Médico: medico-form, medico-codigo, medico-profissional, medico-entrar, medico-erro, medico-paciente,
-   medico-aviso, medico-evento, medico-pendencias, medico-gerar-resumo, medico-resumo, medico-sair, medico-encerrado.
+   medico-aviso, medico-evento, medico-pendencias, medico-ponto, medico-gerar-resumo, medico-resumo, medico-sair, medico-encerrado.
    Conta: perfil-form, perfil-salvar, perfil-salvo, excluir-confirmacao, excluir-botao, atalho-conta. */
 export const TID = {
   formEntrar: 'form-entrar',
@@ -37,6 +37,7 @@ export const TID = {
 
   shellPerfil: 'shell-perfil',
   shellPerfilNome: 'shell-perfil-nome',
+  shellResponsavel: 'shell-responsavel',
   seloConvidado: 'selo-convidado',
   botaoSair: 'botao-sair',
   botaoReiniciar: 'botao-reiniciar',
@@ -92,6 +93,7 @@ export const TID = {
   medicoAviso: 'medico-aviso',
   medicoEvento: 'medico-evento',
   medicoPendencias: 'medico-pendencias',
+  medicoPonto: 'medico-ponto',
   medicoGerarResumo: 'medico-gerar-resumo',
   medicoResumo: 'medico-resumo',
   medicoSair: 'medico-sair',
