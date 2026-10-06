@@ -96,6 +96,11 @@ export function AppShell({ rota }: { rota: string }) {
           <span className="paciente__iniciais" aria-hidden="true">{perfil.iniciais}</span>
           <div>
             <p className="paciente__nome" data-testid={TID.shellPerfilNome}>{perfil.nome}</p>
+            {perfil.responsavel && (
+              <p className="paciente__meta" data-testid="shell-responsavel">
+                Histórico de {perfil.nome.split(' ')[0]} · gerenciado por você ({perfil.responsavel.relacao})
+              </p>
+            )}
             {meta && <p className="paciente__meta num">{meta}</p>}
           </div>
         </div>

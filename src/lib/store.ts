@@ -3,7 +3,7 @@ import type { Evento } from '../data/types'
 import {
   api, definirAoPerderSessao, ErroApi, mensagemDeErro, podeRepetir,
   type Conta, type DadosCadastro, type EstadoServidor, type ModoOnboarding, type MudancasPerfil,
-  type Perfil, type RespostaCopiloto, type Saude, type TurnoHistorico, type Usuario,
+  type PacienteCuidado, type Perfil, type RespostaCopiloto, type Saude, type TurnoHistorico, type Usuario,
 } from './api'
 import { lerRota, navegar, separarRota } from './router'
 
@@ -189,9 +189,10 @@ export async function sair(destino = '/') {
   navegar(destino)
 }
 
-/* Vale para o primeiro acesso e para recomeçar depois: o servidor apaga e recria os dados no modo pedido. */
-export async function concluirOnboarding(modo: ModoOnboarding): Promise<Perfil> {
-  const { perfil } = await api.onboarding(modo)
+/* Vale para o primeiro acesso e para recomeçar depois: o servidor apaga e recria os dados no modo pedido.
+   Com paciente, o histórico passa a ser dele e o usuário vira o responsável. */
+export async function concluirOnboarding(modo: ModoOnboarding, paciente?: PacienteCuidado): Promise<Perfil> {
+  const { perfil } = await api.onboarding(modo, paciente)
   const pacienteId = pacienteAtual()
   if (pacienteId) apagarConversa(pacienteId)
   trocarSessao({ ...estado.sessao, perfil })

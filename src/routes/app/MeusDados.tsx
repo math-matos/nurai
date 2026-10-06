@@ -3,12 +3,12 @@ import { flushSync } from 'react-dom'
 import { Campo } from '../../components/Campo'
 import { Icon } from '../../components/Icon'
 import { Falha } from '../../components/ui'
-import { ErroApi, mensagemDeErro, type MudancasPerfil, type Perfil } from '../../lib/api'
+import { ErroApi, mensagemDeErro, RELACOES, type MudancasPerfil, type Perfil } from '../../lib/api'
 import { focarPrimeiroErro } from '../../lib/formulario'
 import { atualizarPerfil, excluirConta, isoHoje } from '../../lib/store'
 import { TID } from '../../lib/testids'
 
-type CampoPerfil = 'nome' | 'dataNascimento' | 'condicoes' | 'alergias' | 'cartaoSus' | 'plano'
+type CampoPerfil = 'nome' | 'dataNascimento' | 'condicoes' | 'alergias' | 'cartaoSus' | 'plano' | 'responsavelNome' | 'relacao'
 type Erros = Partial<Record<CampoPerfil, string>>
 
 const ORDEM: { campo: CampoPerfil; id: string }[] = [
@@ -18,13 +18,20 @@ const ORDEM: { campo: CampoPerfil; id: string }[] = [
   { campo: 'alergias', id: 'perfil-alergias' },
   { campo: 'cartaoSus', id: 'perfil-sus' },
   { campo: 'plano', id: 'perfil-plano' },
+  { campo: 'responsavelNome', id: 'perfil-responsavel' },
+  { campo: 'relacao', id: 'perfil-relacao' },
 ]
+
+const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 const linhas = (texto: string) => texto.split('\n').map((l) => l.trim()).filter(Boolean)
 
+const CAMPO_DO_RESPONSAVEL: Record<string, CampoPerfil> = { 'responsavel.nome': 'responsavelNome', 'responsavel.relacao': 'relacao' }
+
 /* O servidor aponta erro de item de lista como "condicoes.2": a mensagem vai para o campo da lista. */
 function errosDoServidor(campos: Record<string, string>): Erros {
-  return Object.fromEntries(Object.entries(campos).map(([chave, msg]) => [chave.split('.')[0], msg])) as Erros
+  return Object.fromEntries(Object.entries(campos)
+    .map(([chave, msg]) => [CAMPO_DO_RESPONSAVEL[chave] ?? chave.split('.')[0], msg])) as Erros
 }
 
 function formularioDe(p: Perfil) {
@@ -35,6 +42,9 @@ function formularioDe(p: Perfil) {
     alergias: p.alergias.join('\n'),
     cartaoSus: p.cartaoSus ?? '',
     plano: p.plano ?? '',
+    cuidador: Boolean(p.responsavel),
+    responsavelNome: p.responsavel?.nome ?? '',
+    relacao: p.responsavel?.relacao ?? '',
   }
 }
 
@@ -51,6 +61,13 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
     if (erros[campo]) setErros((e) => ({ ...e, [campo]: undefined }))
   }
 
+  /* Virar responsável: o nome de quem usa a conta sai do campo Nome, que passa a ser o do paciente. */
+  const alternarCuidador = (cuidador: boolean) => {
+    setForm((f) => ({ ...f, cuidador, responsavelNome: f.responsavelNome || (cuidador ? f.nome : '') }))
+    setSalvo(false)
+    setErros((e) => ({ ...e, responsavelNome: undefined, relacao: undefined }))
+  }
+
   const recusar = (novos: Erros) => {
     flushSync(() => setErros(novos))
     focarPrimeiroErro(ORDEM, novos)
@@ -64,6 +81,8 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
     const locais: Erros = {
       ...(form.nome.trim() === '' && { nome: 'Informe o nome' }),
       ...(form.dataNascimento > isoHoje() && { dataNascimento: 'A data de nascimento não pode estar no futuro' }),
+      ...(form.cuidador && form.responsavelNome.trim() === '' && { responsavelNome: 'Informe o seu nome' }),
+      ...(form.cuidador && form.relacao === '' && { relacao: 'Escolha o que você é dessa pessoa' }),
     }
     if (Object.keys(locais).length > 0) return recusar(locais)
 
@@ -75,6 +94,7 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
       alergias: linhas(form.alergias),
       cartaoSus: form.cartaoSus.trim(),
       plano: form.plano.trim(),
+      responsavel: form.cuidador ? { nome: form.responsavelNome.trim(), relacao: form.relacao } : null,
     }
     setSalvando(true)
     try {
@@ -104,7 +124,8 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
       <form className="formulario meus-dados" noValidate onSubmit={(e) => { void salvar(e) }}
         aria-busy={salvando} data-testid={TID.perfilForm}>
         <div className="meus-dados__grade">
-          <Campo id="perfil-nome" rotulo="Nome" value={form.nome} erro={erros.nome} autoComplete="name"
+          <Campo id="perfil-nome" rotulo={form.cuidador ? 'Nome do paciente' : 'Nome'} value={form.nome} erro={erros.nome}
+            autoComplete={form.cuidador ? 'off' : 'name'}
             onChange={(e) => mudar('nome', e.target.value)} disabled={salvando} />
           <Campo id="perfil-nascimento" rotulo="Data de nascimento" type="date" opcional max={isoHoje()}
             value={form.dataNascimento} erro={erros.dataNascimento}
@@ -120,6 +141,36 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
           <AreaLista id="perfil-alergias" rotulo="Alergias" valor={form.alergias} erro={erros.alergias}
             exemplo="Ex.: Dipirona — urticária" aoMudar={(v) => mudar('alergias', v)} desabilitado={salvando} />
         </div>
+        <label className="consentimento" htmlFor="perfil-cuidador">
+          <input
+            id="perfil-cuidador" type="checkbox" checked={form.cuidador} disabled={salvando}
+            onChange={(e) => alternarCuidador(e.target.checked)}
+          />
+          <span className="consentimento__texto">
+            <strong>Este histórico é de alguém que eu cuido.</strong> O nome acima é o do paciente; as ações
+            que você fizer ficam registradas no seu nome, como responsável. Desmarque se o histórico for seu.
+          </span>
+        </label>
+        {form.cuidador && (
+          <div className="meus-dados__grade">
+            <Campo id="perfil-responsavel" rotulo="Seu nome (responsável)" value={form.responsavelNome}
+              erro={erros.responsavelNome} autoComplete="name" disabled={salvando}
+              onChange={(e) => mudar('responsavelNome', e.target.value)} />
+            <div className={`campo${erros.relacao ? ' campo--erro' : ''}`}>
+              <label htmlFor="perfil-relacao" className="campo__rotulo">O que você é do paciente?</label>
+              <select
+                id="perfil-relacao" className="field" value={form.relacao} disabled={salvando}
+                aria-invalid={erros.relacao ? true : undefined}
+                aria-describedby={erros.relacao ? 'perfil-relacao-erro' : undefined}
+                onChange={(e) => mudar('relacao', e.target.value)}
+              >
+                <option value="">Escolha…</option>
+                {RELACOES.map((r) => <option key={r} value={r}>{maiuscula(r)}</option>)}
+              </select>
+              {erros.relacao && <p id="perfil-relacao-erro" className="campo__erro">{erros.relacao}</p>}
+            </div>
+          </div>
+        )}
         <div aria-live="polite">
           {erroGeral && <Falha mensagem={erroGeral} />}
           {salvo && (
