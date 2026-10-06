@@ -15,6 +15,10 @@ describe('recomendaConduta', () => {
     'Perguntar sobre o aumento do remédio da pressão',
     'Confirmar a suspensão de medicação antes da cirurgia',
     'Conversar sobre alteração da losartana',
+    'Confirmar a dosagem de losartana e budesonida + formoterol com o médico',
+    'Verificar a dose da budesonida na próxima consulta',
+    'Revisar a posologia do salbutamol',
+    'Perguntar ao pneumologista sobre a dose do formoterol',
   ])('detecta conduta medicamentosa: %s', (texto) => {
     expect(recomendaConduta(texto)).toBe(true)
   })
@@ -28,6 +32,8 @@ describe('recomendaConduta', () => {
     'Metformina iniciada em 2019 pela endocrinologista',
     'Endocrinologia — ajuste de tratamento',
     'Glicada em queda após o ajuste. Função renal ainda preservada.',
+    'Levar a lista de remédios em uso à consulta de 04/11/2025',
+    'Vacina pneumocócica em dose única registrada em 02/06/2025.',
   ])('não confunde fato histórico ou passo de organização: %s', (texto) => {
     expect(recomendaConduta(texto)).toBe(false)
   })

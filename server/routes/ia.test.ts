@@ -459,18 +459,22 @@ describe('rotas de IA com provider real (fake)', () => {
   })
 
   describe('POST /api/passos/gerar', () => {
-    it('persiste passos com ids estáveis, âncoras válidas e feito preservado', async () => {
-      await repo.alternarPasso('p1')
-      const { llm, chamadas } = llmFake(PASSOS)
-      const res = await app(llm).request('/api/passos/gerar', { method: 'POST' })
-      expect(res.status).toBe(200)
-      const body = CONTRATO.passos.parse(await res.json())
-      expect(body.passos.map((p) => [p.id, p.ancoras, p.feito])).toEqual([
-        ['p-ia-1', ['e22', 'e24'], true],
-        ['p-ia-2', ['e16'], false],
+    it('persiste passos com ids estáveis, âncoras válidas e feito preservado ao gerar de novo', async () => {
+      const { llm, chamadas } = llmFake(PASSOS, PASSOS)
+      const gerar = async () => CONTRATO.passos.parse(await (await app(llm).request('/api/passos/gerar', { method: 'POST' })).json())
+      const body = await gerar()
+      /* Duplicidade e pendências vêm dos fatos (passos do servidor); "Cancelar o ultrassom" e "Repetir o TSH"
+         do modelo cobrem os mesmos fatos e saem; "Sem base" não tem âncora válida. */
+      expect(body.passos.map((p) => [p.id, p.ancoras])).toEqual([
+        ['p-ia-1', ['e22', 'e24']], ['p-ia-2', ['e14']], ['p-ia-3', ['e16', 'e15']],
       ])
+      expect(body.passos[0].titulo).toMatch(/^Levar o laudo de "Ultrassom Doppler de carótidas" de 27\/05\/2026 antes de refazer/)
       expect((await repo.estado()).passos).toEqual(body.passos)
       expect(chamadas[0].at(-1)?.content).toMatch(/repetid|duplicad/i)
+
+      await repo.alternarPasso('p-ia-1')
+      const deNovo = await gerar()
+      expect(deNovo.passos.map((p) => [p.id, p.feito])).toEqual([['p-ia-1', true], ['p-ia-2', false], ['p-ia-3', false]])
     })
   })
 })

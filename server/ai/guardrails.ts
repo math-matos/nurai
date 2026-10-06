@@ -20,9 +20,13 @@ const MEDICAMENTO = `(?:${[...REMEDIOS, ...GENERICOS].join('|')})`
 const CONDUTA_NOMINAL = new RegExp(`\\b${MUDANCA}\\s+(?:d[aoe]s?|n[ao]s?)\\s+(?:[^\\s.;]+\\s+){0,3}?${MEDICAMENTO}\\b`)
 const PERGUNTA_MEDICAMENTO = new RegExp(`\\b(?:${[...REMEDIOS, 'remedio', 'medicament', 'medicac', 'dose', 'tomar', 'tomo', 'parar', 'suspender', 'interromper', 'trocar', 'tratamento', 'anticoagul'].join('|')})`)
 
+/* "Confirmar a dosagem de losartana com o médico" (visto em produção, prioridade alta): conferir,
+   rever ou discutir dose é decisão de conduta, mesmo sem verbo de mudança. */
+const SOBRE_DOSE = /\b(?:confirm|verific|avali|revis|rever|chec|discut|reavali|defin|pergunt|consult)\w*\b[^.;]{0,40}\b(?:dosage(?:m|ns)|doses?|posologia)\b/
+
 export function recomendaConduta(texto: string): boolean {
   const t = normalizar(texto)
-  return CONDUTA.test(t) || CONDUTA_NOMINAL.test(t)
+  return CONDUTA.test(t) || CONDUTA_NOMINAL.test(t) || SOBRE_DOSE.test(t)
 }
 
 export const envolveMedicamento = (pergunta: string) => PERGUNTA_MEDICAMENTO.test(normalizar(pergunta))

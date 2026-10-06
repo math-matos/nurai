@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { EVENTOS } from '../../../src/data/seed.js'
 import { PERFIL_DEMO } from '../../db/exemplo.js'
 import { criarRepoMemoria } from '../../db/memoria.js'
+import { DEMO_MARCOS } from '../../teste/demo-marcos.js'
 import { AVISO_MEDICO } from '../guardrails.js'
 import { criarLlmMock } from '../mock.js'
 import { descreverPerfil, serializarEvento } from '../prompts.js'
@@ -225,7 +226,13 @@ describe('gerarPassos', () => {
     })
     const { passos } = await gerarPassos(d)
     expect(prompt(chamadas)).toContain('FATOS DERIVADOS')
-    expect(passos.map((p) => [p.titulo, p.porque])).toEqual([['Levar o laudo do Doppler', 'Feito em 27/05/2026.']])
+    /* O passo do modelo sobre a duplicidade dá lugar ao do servidor; conduta e passo sem âncora saem. */
+    expect(passos.map((p) => p.titulo)).toEqual([
+      'Levar o laudo de "Ultrassom Doppler de carótidas" de 27/05/2026 antes de refazer o exame',
+      'Retomar o acompanhamento de oftalmologia',
+      'Repetir o TSH — a reavaliação pedida não aparece no histórico',
+    ])
+    expect(passos.map((p) => p.porque).join(' ')).not.toMatch(/\[e\d+\]|\d{4}-\d{2}-\d{2}/)
   })
 })
 
@@ -236,7 +243,7 @@ describe('gerarPassos — passos concretos', () => {
   it('começa título e porque com maiúscula', async () => {
     const { deps: d } = await deps({ passos: [repeticao, passo('levar o hemograma', 'o exame de 05/03/2026 trouxe creatinina de 1.1 mg/dL.', ['e21'])] })
     const { passos } = await gerarPassos(d)
-    expect(passos[1]).toMatchObject({ titulo: 'Levar o hemograma', porque: 'O exame de 05/03/2026 trouxe creatinina de 1,1 mg/dL.' })
+    expect(passos.at(-1)).toMatchObject({ titulo: 'Levar o hemograma', porque: 'O exame de 05/03/2026 trouxe creatinina de 1,1 mg/dL.' })
   })
 
   it('descarta passo genérico que não diz qual valor ou achado, e mantém o que cita a medida', async () => {
@@ -248,7 +255,7 @@ describe('gerarPassos — passos concretos', () => {
       ],
     })
     const { passos } = await gerarPassos(d)
-    expect(passos.map((p) => p.titulo)).toEqual(['Levar o laudo do Doppler', 'Mostrar a filtração glomerular ao nefrologista'])
+    expect(passos.map((p) => p.titulo).slice(3)).toEqual(['Mostrar a filtração glomerular ao nefrologista'])
   })
 
   it('exame repetido dos fatos derivados vira passo mesmo se o modelo não o listar', async () => {
@@ -264,6 +271,44 @@ describe('gerarPassos — passos concretos', () => {
     await gerarPassos(d)
     expect(prompt(chamadas)).toMatch(/"porque"[^\n]*valor[^\n]*data/i)
     expect(prompt(chamadas)).toMatch(/genéric/i)
+  })
+})
+
+/* Histórico do Marcos no shape real da extração; os passos do "modelo" são os vistos em produção. */
+describe('gerarPassos — histórico real do Marcos', () => {
+  const passo = (titulo: string, porque: string, ancoras: string[], prioridade = 'media') => ({ titulo, porque, ancoras, prazo: 'Próxima consulta', prioridade })
+  const DO_MODELO = [
+    passo('Agendar o exame de perfil lipídico', 'O pedido foi feito em 02/04/2026, mas o exame já havia sido realizado em 12/03/2026, e não há registro de que tenha sido feito novamente.', ['f09']),
+    passo('Agendar a ultrassonografia de abdome', 'Pedido de 22/07/2026; a ultrassonografia de 10/02/2026 mostrou esteatose leve.', ['d11', 'd09']),
+    passo('Confirmar a dosagem de losartana e budesonida + formoterol com o médico', 'Budesonida + formoterol iniciada em 04/11/2025.', ['d08', 'd01'], 'alta'),
+    passo('Levar a TFG de 85 ao nefrologista', 'TFG de 85 mL/min/1,73 m² em 15/05/2026, abaixo da referência de 90.', ['d10']),
+  ]
+
+  async function gerar() {
+    const { deps: d } = await deps({ passos: DO_MODELO }, 'vazio')
+    for (const e of DEMO_MARCOS) await d.repo.adicionarEvento(e, 'Marcos')
+    return (await gerarPassos(d)).passos
+  }
+
+  it('duplicidades viram "levar o laudo antes de refazer"; nenhum passo manda agendar exame duplicado', async () => {
+    const passos = await gerar()
+    expect(passos.slice(0, 2).map((p) => [p.titulo, p.ancoras])).toEqual([
+      ['Levar o laudo de "Perfil Lipídico" de 12/03/2026 antes de refazer o exame', ['f02', 'f09']],
+      ['Levar o laudo de "Ultrassonografia de Abdome Total" de 10/02/2026 antes de refazer o exame', ['d09', 'd11']],
+    ])
+    expect(passos[0].porque).toMatch(/feito em 12\/03\/2026.*21 dias antes do novo pedido de perfil lipídico de 02\/04\/2026/)
+    expect(passos.map((p) => p.titulo).join(' | ')).not.toMatch(/Agendar/)
+  })
+
+  it('pendências da consulta de pneumologia viram passos; "confirmar a dosagem" é barrado; o passo concreto do modelo fica', async () => {
+    const passos = await gerar()
+    expect(passos.slice(2).map((p) => [p.titulo, p.ancoras])).toEqual([
+      ['Fazer o exame pedido: nova espirometria com prova broncodilatadora', ['d08']],
+      ['Retomar o acompanhamento de pneumologia', ['d08']],
+      ['Levar a TFG de 85 ao nefrologista', ['d10']],
+    ])
+    expect(passos[3].porque).toMatch(/retorno em 6 meses.*O prazo venceu em 03\/05\/2026/)
+    expect(passos.map((p) => p.titulo).join(' | ')).not.toMatch(/dosagem/)
   })
 })
 
