@@ -1,10 +1,11 @@
 import { z } from 'zod'
+import { sinalDaFaixa } from '../../../src/data/referencia.js'
 import type { Evento, Medida } from '../../../src/data/types.js'
 import { dataIsoValida } from '../../esquemas.js'
 import { ErroIa } from '../erros.js'
 import { pedirJson } from '../json.js'
 import { mensagens } from '../prompts.js'
-import { hojeISO, sinalDaMedida, type ContextoIa } from './comum.js'
+import { hojeISO, type ContextoIa } from './comum.js'
 import { extrairPorHeuristica, lerDataDoTexto } from './extrair-mock.js'
 
 export interface EntradaExtracao {
@@ -68,26 +69,21 @@ Formato da resposta (JSON):
   - "documento": pedido de exame, guia, atestado, encaminhamento e outros documentos.
 - "titulo": o que o documento é, com o nome do exame. Em pedido, guia ou requisição, nomeie o(s) exame(s) pedido(s), ex.: "Pedido de perfil lipídico", "Guia de ultrassom de abdome" — nunca só "Pedido de exame".
 - "medidas": só valores numéricos presentes no texto, com ponto decimal; refMin/refMax da faixa de referência impressa. Não invente faixas.
-- Faixa "X a Y": refMin X e refMax Y. Faixa só com teto ("< X", "≤ X", "até X", "inferior a X"): refMin null e refMax X. Faixa só com piso ("> X", "≥ X", "acima de X", "superior a X"): refMin X e refMax null. Use null nos dois só quando o documento não trouxer referência para a medida.
+- Faixa "X a Y": refMin X e refMax Y. Faixa só com teto ("< X", "≤ X", "até X", "inferior a X"): refMin null e refMax X. Faixa só com piso ("> X", "≥ X", "acima de X", "superior a X", limite inferior da normalidade "LIN X"): refMin X e refMax null; se o documento trouxer o LIN, use o LIN. Use null nos dois só quando o documento não trouxer referência para a medida.
+- Referência em "% do previsto" (espirometria, por exemplo): registre a medida pelo valor em % do previsto, com unidade "% do previsto", para a faixa e o valor ficarem na mesma unidade.
 - "resumo": descreva o que o documento registra, sem interpretar nem diagnosticar. Em pedido ou guia, cite os exames pedidos pelo nome (ex.: "Pedido de perfil lipídico e hemograma.").
 - "confianca": de 0 a 1, o quanto o texto estava legível e completo.`
 
 type MedidaBruta = ExtracaoClinica['medidas'][number]
 
-/* "< X" é faixa 0–X (o seed já usa refMin 0 para LDL). "> X" não tem como virar Medida sem
-   inventar um teto — o tipo exige os dois limites —, então a medida é omitida com aviso exato. */
+/* Faixa unilateral ("< X", "> X", LIN) guarda só o lado impresso: nada de teto ou piso inventado.
+   Sem referência alguma não há com o que comparar, e a medida é omitida com aviso. */
 function lerMedida(m: MedidaBruta): Medida | string {
   if (m.refMin == null && m.refMax == null) {
     return `A medida "${m.nome}" foi omitida porque o documento não traz faixa de referência.`
   }
-  if (m.refMax == null) {
-    return `A medida "${m.nome}" foi omitida porque a referência tem só o limite inferior (${m.refMin}). Inclua-a manualmente se quiser guardá-la.`
-  }
-  const refMin = m.refMin ?? 0
-  return {
-    nome: m.nome, valor: m.valor, unidade: m.unidade, refMin, refMax: m.refMax,
-    sinal: sinalDaMedida(m.valor, refMin, m.refMax),
-  }
+  const faixa = { ...(m.refMin != null && { refMin: m.refMin }), ...(m.refMax != null && { refMax: m.refMax }) }
+  return { nome: m.nome, valor: m.valor, unidade: m.unidade, ...faixa, sinal: sinalDaFaixa(m.valor, faixa) }
 }
 
 /* Pós-processamento comum ao modelo e à heurística: sinal e validações ficam no servidor. */

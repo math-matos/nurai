@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { abaixoDaFaixa, acimaDaFaixa, textoDaFaixa } from '../../../src/data/referencia.js'
 import type { Evento, Medida } from '../../../src/data/types.js'
 import { pedirJson } from '../json.js'
 import { mensagens, serializarEvento, serializarEventos } from '../prompts.js'
@@ -47,8 +48,8 @@ function anterioresRelacionados(evento: Evento, eventos: Evento[]): Evento[] {
 }
 
 function descreverFaixa(m: Medida): string {
-  if (m.valor < m.refMin) return 'abaixo da faixa de referência'
-  if (m.valor > m.refMax) return 'acima da faixa de referência'
+  if (abaixoDaFaixa(m.valor, m)) return 'abaixo da faixa de referência'
+  if (acimaDaFaixa(m.valor, m)) return 'acima da faixa de referência'
   return 'dentro da faixa de referência'
 }
 
@@ -61,7 +62,7 @@ function explicarSemIa(evento: Evento, anteriores: Evento[]): Omit<RespostaExpli
       const valorAnterior = anterior?.medidas?.find((x) => x.nome === m.nome)
       if (anterior) ancoras.push(anterior.id)
       const evolucao = valorAnterior ? ` Na medição anterior (${mesAno(anterior!.data)}), era ${formatarNumero(valorAnterior.valor)}.` : ''
-      return `${m.nome}: ${formatarNumero(m.valor)} ${m.unidade}, ${descreverFaixa(m)} (${formatarNumero(m.refMin)} a ${formatarNumero(m.refMax)}).${evolucao}`
+      return `${m.nome}: ${formatarNumero(m.valor)} ${m.unidade}, ${descreverFaixa(m)} (${textoDaFaixa(m)}).${evolucao}`
     })
   const alteradas = (evento.medidas ?? []).filter((m) => m.sinal === 'alterado')
   return {

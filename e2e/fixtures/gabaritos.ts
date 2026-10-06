@@ -11,6 +11,10 @@ export interface MedidaEsperada {
   valor: number
   tolerancia: number
   unidade?: RegExp | string
+  /* Faixa de referência esperada: número = esse limite; null = o limite não pode existir
+     (faixa unilateral "> X" guarda só refMin); ausente = não confere. */
+  refMin?: number | null
+  refMax?: number | null
 }
 
 export interface ExtracaoEsperada {
@@ -18,8 +22,6 @@ export interface ExtracaoEsperada {
   data?: string | string[]
   tipo?: TipoId | TipoId[]
   medidas?: MedidaEsperada[]
-  /* Faixas "> X" ainda são omitidas pelo servidor (limitação conhecida) e viram aviso. */
-  medidasOmitidasEsperadas?: string[]
   /* Termos que precisam aparecer no texto do documento (e, idealmente, no título/resumo). */
   palavrasChave?: string[]
 }
@@ -113,8 +115,15 @@ export const GABARITOS: Gabarito[] = [
         },
         { nome: /\bldl\b/, valor: 138, tolerancia: 0.5, unidade: 'mg/dl' },
         { nome: /triglicer/, valor: 180, tolerancia: 0.5, unidade: 'mg/dl' },
+        {
+          nome: /\bhdl\b/,
+          valor: 38,
+          tolerancia: 0.5,
+          unidade: 'mg/dl',
+          refMin: 40,
+          refMax: null,
+        },
       ],
-      medidasOmitidasEsperadas: ['HDL'],
     },
   },
   {
@@ -295,6 +304,8 @@ export interface MedidaExtraida {
   nome: string
   valor: number
   unidade?: string
+  refMin?: number
+  refMax?: number
 }
 
 export interface EventoExtraido {
@@ -305,7 +316,7 @@ export interface EventoExtraido {
 
 export interface Divergencia {
   campo: string
-  motivo: 'ausente' | 'valor' | 'unidade' | 'data' | 'tipo' | 'omitida-apareceu'
+  motivo: 'ausente' | 'valor' | 'unidade' | 'faixa' | 'data' | 'tipo'
   esperado: string
   obtido?: string
 }
@@ -412,21 +423,18 @@ export function compararExtracao(evento: EventoExtraido, esperado: ExtracaoEsper
       })
       continue
     }
-    acertos++
-  }
-
-  /* Não entra no total: sinaliza que a limitação "> X" mudou e o gabarito precisa ser revisto. */
-  for (const omitida of esperado.medidasOmitidasEsperadas ?? []) {
-    const alvo = normalizar(omitida)
-    const achada = extraidas.find((e, i) => !usadas.has(i) && e.chave.includes(alvo))
-    if (achada) {
+    const faixa = (['refMin', 'refMax'] as const).find((lado) => m[lado] !== undefined
+      && (m[lado] === null ? melhor.e[lado] !== undefined : Math.abs((melhor.e[lado] ?? Number.NaN) - m[lado]) > m.tolerancia))
+    if (faixa) {
       divergencias.push({
-        campo: omitida,
-        motivo: 'omitida-apareceu',
-        esperado: 'omitida',
-        obtido: String(achada.valor),
+        campo: `${rotulo}.${faixa}`,
+        motivo: 'faixa',
+        esperado: String(m[faixa] ?? 'ausente'),
+        obtido: String(melhor.e[faixa] ?? 'ausente'),
       })
+      continue
     }
+    acertos++
   }
 
   return { acertos, total, divergencias }

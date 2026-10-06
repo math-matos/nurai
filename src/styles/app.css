@@ -208,6 +208,9 @@
   position: absolute; top: -1px; bottom: -1px;
   background: #dfeade; border: 1px solid #bfd3bd; border-radius: 2px;
 }
+/* Sem um dos limites, a faixa esmaece até a borda: não há teto (ou piso) impresso no laudo. */
+.regua__faixa--sem-teto { border-right: 0; border-radius: 2px 0 0 2px; background: linear-gradient(90deg, #dfeade 70%, transparent); }
+.regua__faixa--sem-piso { border-left: 0; border-radius: 0 2px 2px 0; background: linear-gradient(270deg, #dfeade 70%, transparent); }
 .regua__marca {
   position: absolute; top: -5px; bottom: -5px; width: 2.5px; margin-left: -1.25px;
   background: currentColor; border-radius: 1px;

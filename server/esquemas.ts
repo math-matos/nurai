@@ -30,10 +30,13 @@ export const esquemaEvento: z.ZodType<Evento> = z.object({
     nome: texto,
     valor: z.number(),
     unidade: z.string(),
-    refMin: z.number(),
-    refMax: z.number(),
+    refMin: z.number().optional(),
+    refMax: z.number().optional(),
     sinal,
-  })).optional(),
+  })
+    .refine((m) => m.refMin !== undefined || m.refMax !== undefined, 'informe ao menos um limite da faixa de referência')
+    .refine((m) => m.refMin === undefined || m.refMax === undefined || m.refMin <= m.refMax,
+      'o limite mínimo da faixa não pode passar do máximo')).optional(),
   tags: z.array(z.string()),
   origem: z.enum(['RNDS', 'API da instituição', 'OCR + IA', 'Registro manual']),
   confianca: z.number().min(0).max(1).optional(),

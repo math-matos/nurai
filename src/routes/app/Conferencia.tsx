@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '../../components/Icon'
 import { AvisoIa, Regua, SeloIa } from '../../components/ui'
+import { sinalDaFaixa } from '../../data/referencia'
 import { TIPOS } from '../../data/seed'
 import type { Evento, Medida, Sinal, TipoId } from '../../data/types'
 import type { Extracao } from '../../lib/api'
@@ -21,7 +22,7 @@ interface Linha {
   editada: boolean
 }
 
-const paraTexto = (n: number) => (Number.isFinite(n) ? String(n).replace('.', ',') : '')
+const paraTexto = (n: number | undefined) => (n !== undefined && Number.isFinite(n) ? String(n).replace('.', ',') : '')
 const paraNumero = (t: string) => (t.trim() === '' ? Number.NaN : Number(t.trim().replace(',', '.')))
 
 function linhaDe(m: Medida): Linha {
@@ -31,15 +32,25 @@ function linhaDe(m: Medida): Linha {
   }
 }
 
+/* Limite em branco = faixa unilateral ("> 40" só tem mínimo); número inválido não passa. */
+const limiteDe = (t: string): number | undefined | null => {
+  if (t.trim() === '') return undefined
+  const n = paraNumero(t)
+  return Number.isFinite(n) ? n : null
+}
+
 /* Linha editada à mão ganha o sinal da simples comparação com a faixa de
    referência da própria folha — não uma interpretação clínica. */
 function medidaDe(l: Linha): Medida | null {
   const valor = paraNumero(l.valor)
-  const refMin = paraNumero(l.refMin)
-  const refMax = paraNumero(l.refMax)
-  if (l.nome.trim() === '' || ![valor, refMin, refMax].every(Number.isFinite) || refMin > refMax) return null
-  const sinal: Sinal = l.editada ? (valor >= refMin && valor <= refMax ? 'normal' : 'alterado') : l.sinal
-  return { nome: l.nome.trim(), valor, unidade: l.unidade.trim(), refMin, refMax, sinal }
+  const refMin = limiteDe(l.refMin)
+  const refMax = limiteDe(l.refMax)
+  if (l.nome.trim() === '' || !Number.isFinite(valor) || refMin === null || refMax === null) return null
+  if (refMin === undefined && refMax === undefined) return null
+  if (refMin !== undefined && refMax !== undefined && refMin > refMax) return null
+  const faixa = { ...(refMin !== undefined && { refMin }), ...(refMax !== undefined && { refMax }) }
+  const sinal: Sinal = l.editada ? sinalDaFaixa(valor, faixa) : l.sinal
+  return { nome: l.nome.trim(), valor, unidade: l.unidade.trim(), ...faixa, sinal }
 }
 
 function piorSinal(medidas: Medida[], padrao: Sinal): Sinal {
@@ -201,7 +212,7 @@ export function Conferencia({ extracao, arquivo, salvando, aoSalvar, aoDescartar
               </div>
               {medida
                 ? <Regua medida={medida} />
-                : <p className="medida-edicao__erro">Preencha nome, valor e faixa de referência (mínimo menor ou igual ao máximo).</p>}
+                : <p className="medida-edicao__erro">Preencha nome, valor e ao menos um limite da faixa de referência (mínimo menor ou igual ao máximo).</p>}
             </li>
           )
         })}

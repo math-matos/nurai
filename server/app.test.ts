@@ -95,6 +95,27 @@ describe('API', () => {
       expect((await repo.estado()).eventos).toHaveLength(EXEMPLO.eventos.length)
     })
 
+    it('aceita medida com faixa unilateral e devolve sem o limite ausente', async () => {
+      const medidas = [
+        { nome: 'HDL', valor: 38, unidade: 'mg/dL', refMin: 40, sinal: 'alterado' },
+        { nome: 'LDL', valor: 138, unidade: 'mg/dL', refMax: 130, sinal: 'alterado' },
+      ]
+      const res = await api.request('/api/eventos', json({ ...EVENTO, medidas }))
+      expect(res.status).toBe(201)
+      expect(await res.json()).toMatchObject({ medidas })
+    })
+
+    it.each([
+      ['sem nenhum limite', { refMin: undefined, refMax: undefined }, /limite/],
+      ['com mínimo acima do máximo', { refMin: 200, refMax: 130 }, /mínimo/],
+      ['com limite null', { refMin: null, refMax: 130 }, /refMin/],
+    ])('400 para medida %s', async (_, faixa, mensagem) => {
+      const medida = { nome: 'LDL', valor: 138, unidade: 'mg/dL', sinal: 'alterado', ...faixa }
+      const res = await api.request('/api/eventos', json({ ...EVENTO, medidas: [medida] }))
+      expect(res.status).toBe(400)
+      expect((await corpo(res)).erro).toMatch(mensagem)
+    })
+
     it('413 CORPO_GRANDE para corpo acima de 256 KB', async () => {
       const res = await api.request('/api/eventos', json({ ...EVENTO, resumo: 'a'.repeat(300 * 1024) }))
       expect(res.status).toBe(413)

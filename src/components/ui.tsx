@@ -1,3 +1,4 @@
+import { geometriaRegua } from '../data/referencia'
 import { FONTES } from '../data/seed'
 import { ROTULO_SINAL, formatarData } from '../lib/formato'
 import { navegar } from '../lib/router'
@@ -44,16 +45,12 @@ export function ChipFonte({ fonte, curto = false }: { fonte: FonteId; curto?: bo
 
 /* ---------------- régua de faixa de referência ----------------
    Componente-assinatura: a mesma notação da folha de exame, e a mesma
-   régua que vira a espinha da linha do tempo.                        */
+   régua que vira a espinha da linha do tempo. Faixa só com piso ou
+   só com teto ("> 40", "< 130") fica aberta do lado sem limite.     */
 
 export function Regua({ medida }: { medida: Medida }) {
-  const { refMin, refMax, valor } = medida
-  const piso = Math.min(refMin, valor)
-  const teto = Math.max(refMax, valor)
-  const folga = (teto - piso) * 0.28 || 1
-  const dominioMin = piso - folga
-  const dominioMax = teto + folga
-  const pos = (v: number) => ((v - dominioMin) / (dominioMax - dominioMin)) * 100
+  const { faixa, marca, limites } = geometriaRegua(medida)
+  const aberta = medida.refMin === undefined ? ' regua__faixa--sem-piso' : medida.refMax === undefined ? ' regua__faixa--sem-teto' : ''
 
   return (
     <div className={`regua sinal-${medida.sinal}`}>
@@ -66,14 +63,13 @@ export function Regua({ medida }: { medida: Medida }) {
       </div>
       <div className="regua__pista">
         <div
-          className="regua__faixa"
-          style={{ left: `${pos(refMin)}%`, width: `${pos(refMax) - pos(refMin)}%` }}
+          className={`regua__faixa${aberta}`}
+          style={{ left: `${faixa.inicio}%`, width: `${faixa.fim - faixa.inicio}%` }}
         />
-        <div className="regua__marca" style={{ left: `${pos(valor)}%` }} />
+        <div className="regua__marca" style={{ left: `${marca}%` }} />
       </div>
       <div className="regua__legenda num">
-        <span style={{ left: `${pos(refMin)}%` }}>{refMin.toLocaleString('pt-BR')}</span>
-        <span style={{ left: `${pos(refMax)}%` }}>{refMax.toLocaleString('pt-BR')}</span>
+        {limites.map((l) => <span key={l.texto} style={{ left: `${l.posicao}%` }}>{l.texto}</span>)}
         <span className="regua__ref">faixa de referência</span>
       </div>
     </div>

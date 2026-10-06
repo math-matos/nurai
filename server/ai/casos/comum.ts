@@ -1,4 +1,4 @@
-import type { Evento, Sinal } from '../../../src/data/types.js'
+import type { Evento } from '../../../src/data/types.js'
 import { hojeIso } from '../../db/datas.js'
 import type { Perfil, RepositorioPaciente } from '../../db/repo.js'
 import type { LlmProvider } from '../provider.js'
@@ -33,9 +33,5 @@ export function mesAno(iso: string): string {
 }
 
 export const hojeISO = () => hojeIso()
-
-export function sinalDaMedida(valor: number, refMin: number, refMax: number): Sinal {
-  return valor < refMin || valor > refMax ? 'alterado' : 'normal'
-}
 
 export const formatarNumero = (n: number) => n.toLocaleString('pt-BR')

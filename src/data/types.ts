@@ -13,8 +13,9 @@ export interface Medida {
   nome: string
   valor: number
   unidade: string
-  refMin: number
-  refMax: number
+  /* Faixa de referência: o laudo pode trazer só um lado ("< 130", "> 40"); ao menos um existe. */
+  refMin?: number
+  refMax?: number
   sinal: Sinal
 }
 

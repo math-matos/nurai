@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { textoDaFaixa } from '../../../src/data/referencia.js'
 import type { Evento, ProximoPasso } from '../../../src/data/types.js'
 import { ErroIa } from '../erros.js'
 import { type Fatos, type Pendencia, derivarFatos, dias } from '../fatos.js'
@@ -67,7 +68,7 @@ function pendencias({ pendencias }: Fatos): PassoBruto[] {
 }
 
 const alteradas = (e: Evento) => (e.medidas ?? []).filter((m) => m.sinal === 'alterado')
-  .map((m) => `${m.nome} de ${formatarNumero(m.valor)} ${m.unidade} (referência ${formatarNumero(m.refMin)} a ${formatarNumero(m.refMax)})`)
+  .map((m) => `${m.nome} de ${formatarNumero(m.valor)} ${m.unidade} (referência ${textoDaFaixa(m)})`)
   .join('; ')
 
 function resultadosRecentes(eventos: Evento[], jaCitados: Set<string>): PassoBruto[] {

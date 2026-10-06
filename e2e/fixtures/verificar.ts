@@ -80,9 +80,9 @@ async function verificar(g: Gabarito): Promise<string[]> {
       falhas.push(`unidade ${m.unidade} (${m.nome}) não aparece`)
     }
   }
-  for (const nome of esperado.medidasOmitidasEsperadas ?? []) {
-    if (!new RegExp(`${normalizar(nome)}[^\\n]*>\\s*\\d`).test(texto)) {
-      falhas.push(`${nome} com faixa "> X" não aparece`)
+  for (const m of esperado.medidas ?? []) {
+    if (typeof m.refMin === 'number' && m.refMax === null && !new RegExp(`[>≥]\\s*${numeroBr(m.refMin)}\\b`).test(texto)) {
+      falhas.push(`faixa "> ${numeroBr(m.refMin)}" (${m.nome}) não aparece`)
     }
   }
   for (const termo of esperado.palavrasChave ?? []) {

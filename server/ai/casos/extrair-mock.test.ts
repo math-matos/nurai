@@ -20,11 +20,11 @@ describe('extrairPorHeuristica', () => {
     it('lê as medidas em formato de tabela com faixa de referência', () => {
       expect(bruto.tipo).toBe('exame')
       expect(bruto.medidas).toEqual([
-        { nome: 'Colesterol total', valor: 212, unidade: 'mg/dL', refMin: 0, refMax: 190 },
-        { nome: 'Colesterol LDL', valor: 118, unidade: 'mg/dL', refMin: 0, refMax: 100 },
+        { nome: 'Colesterol total', valor: 212, unidade: 'mg/dL', refMin: null, refMax: 190 },
+        { nome: 'Colesterol LDL', valor: 118, unidade: 'mg/dL', refMin: null, refMax: 100 },
         { nome: 'Colesterol HDL', valor: 44, unidade: 'mg/dL', refMin: 45, refMax: 90 },
-        { nome: 'Triglicérides', valor: 165, unidade: 'mg/dL', refMin: 0, refMax: 150 },
-        { nome: 'Colesterol não-HDL', valor: 168, unidade: 'mg/dL', refMin: 0, refMax: 130 },
+        { nome: 'Triglicérides', valor: 165, unidade: 'mg/dL', refMin: null, refMax: 150 },
+        { nome: 'Colesterol não-HDL', valor: 168, unidade: 'mg/dL', refMin: null, refMax: 130 },
       ])
     })
 
@@ -34,6 +34,25 @@ describe('extrairPorHeuristica', () => {
       expect(evento.medidas).toHaveLength(5)
       expect(avisos.join(' ')).not.toMatch(/omitida|data de hoje/)
     })
+  })
+
+  it('lê faixa só com piso ("Desejável: > 40", "≥ 90") como refMin, sem teto', () => {
+    const bruto = clinico([
+      'Resultado de exame — coleta 12/03/2026',
+      'HDL-colesterol      38 mg/dL     Desejável: > 40',
+      'TFG estimada        101 mL/min   ≥ 90',
+      'LDL-colesterol      138 mg/dL    Desejável: < 130',
+    ].join('\n'))
+    expect(bruto.medidas).toEqual([
+      { nome: 'HDL-colesterol', valor: 38, unidade: 'mg/dL', refMin: 40, refMax: null },
+      { nome: 'TFG estimada', valor: 101, unidade: 'mL/min', refMin: 90, refMax: null },
+      { nome: 'LDL-colesterol', valor: 138, unidade: 'mg/dL', refMin: null, refMax: 130 },
+    ])
+    const { evento, avisos } = montarEvento(bruto)
+    expect(evento.medidas!.map((m) => [m.nome, m.sinal])).toEqual([
+      ['HDL-colesterol', 'alterado'], ['TFG estimada', 'normal'], ['LDL-colesterol', 'alterado'],
+    ])
+    expect(avisos.join(' ')).not.toMatch(/omitida/)
   })
 
   it('ignora a data de nascimento sem rótulo de coleta', () => {

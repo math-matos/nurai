@@ -13,22 +13,44 @@ const m = (nome: string, valor: number, refMin: number | null, refMax: number | 
   ({ nome, valor, unidade: 'mg/dL', refMin, refMax })
 
 describe('montarEvento — faixas de referência', () => {
-  it('"< X" (só teto) vira faixa 0–X e mantém a medida', () => {
+  it('"< X" (só teto) guarda só o teto, sem inventar piso 0', () => {
     const { evento, avisos } = montarEvento(bruto([m('Colesterol total', 212, null, 190), m('Colesterol HDL', 44, 45, 90)]))
     expect(evento.medidas).toEqual([
-      { nome: 'Colesterol total', valor: 212, unidade: 'mg/dL', refMin: 0, refMax: 190, sinal: 'alterado' },
+      { nome: 'Colesterol total', valor: 212, unidade: 'mg/dL', refMax: 190, sinal: 'alterado' },
       { nome: 'Colesterol HDL', valor: 44, unidade: 'mg/dL', refMin: 45, refMax: 90, sinal: 'alterado' },
     ])
+    expect(evento.medidas![0]).not.toHaveProperty('refMin')
     expect(avisos).toEqual([])
     expect(evento.confianca).toBe(0.9)
   })
 
-  it('"> X" (só piso) não cabe no tipo Medida: omite com aviso específico, sem dizer que não há faixa', () => {
-    const { evento, avisos } = montarEvento(bruto([m('Colesterol HDL', 52, 40, null)]))
-    expect(evento.medidas).toBeUndefined()
-    expect(avisos).toHaveLength(1)
-    expect(avisos[0]).toMatch(/Colesterol HDL.*só o limite inferior \(40\)/)
-    expect(avisos[0]).not.toMatch(/não traz faixa/)
+  it('"> 40" (só piso) mantém a medida com refMin e o sinal pelo piso, sem aviso nem penalidade', () => {
+    const { evento, avisos } = montarEvento(bruto([m('Colesterol HDL', 38, 40, null), m('HDL de controle', 52, 40, null)]))
+    expect(evento.medidas).toEqual([
+      { nome: 'Colesterol HDL', valor: 38, unidade: 'mg/dL', refMin: 40, sinal: 'alterado' },
+      { nome: 'HDL de controle', valor: 52, unidade: 'mg/dL', refMin: 40, sinal: 'normal' },
+    ])
+    expect(evento.medidas![0]).not.toHaveProperty('refMax')
+    expect(evento.sinal).toBe('alterado')
+    expect(avisos).toEqual([])
+    expect(evento.confianca).toBe(0.9)
+  })
+
+  it('"≥ 0,70" e LIN da espirometria: o valor no limite é normal, abaixo é alterado', () => {
+    const espiro = (nome: string, valor: number, refMin: number) => ({ nome, valor, unidade: '% do previsto', refMin, refMax: null })
+    const { evento, avisos } = montarEvento(bruto([
+      { nome: 'VEF1/CVF', valor: 0.72, unidade: '', refMin: 0.7, refMax: null },
+      { nome: 'VEF1/CVF no limite', valor: 0.7, unidade: '', refMin: 0.7, refMax: null },
+      espiro('VEF1', 78, 80),
+      espiro('CVF', 88, 80),
+    ], { tipo: 'exame', titulo: 'Espirometria' }))
+    expect(evento.medidas!.map((x) => [x.nome, x.refMin, x.refMax, x.sinal])).toEqual([
+      ['VEF1/CVF', 0.7, undefined, 'normal'],
+      ['VEF1/CVF no limite', 0.7, undefined, 'normal'],
+      ['VEF1', 80, undefined, 'alterado'],
+      ['CVF', 80, undefined, 'normal'],
+    ])
+    expect(avisos.join(' ')).not.toMatch(/omitida|limite inferior/)
   })
 
   it('aviso de "não traz faixa" só quando não há referência alguma', () => {
@@ -120,5 +142,15 @@ describe('extrairEvento — título de pedido', () => {
     expect(prompt).toMatch(/"titulo":[^\n]*pedido[^\n]*"Pedido de perfil lipídico"/i)
     expect(prompt).toMatch(/"titulo":[^\n]*nunca[^\n]*"Pedido de exame"/i)
     expect(prompt).toMatch(/"resumo":[^\n]*exames? pedidos?/i)
+  })
+})
+
+describe('extrairEvento — faixas unilaterais no prompt', () => {
+  it('o prompt manda guardar só o piso em "> X", "≥ X" e LIN, e a espirometria em % do previsto', async () => {
+    const { llm, recebidas } = llmFixo(bruto([]))
+    await extrairEvento({ llm }, { texto: PEDIDO })
+    const prompt = instrucoes(recebidas)
+    expect(prompt).toMatch(/só com piso \("> X", "≥ X"[^\n]*LIN[^\n]*refMin X e refMax null/)
+    expect(prompt).toMatch(/% do previsto/)
   })
 })

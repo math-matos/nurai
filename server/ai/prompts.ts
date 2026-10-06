@@ -1,3 +1,4 @@
+import { textoDaFaixa } from '../../src/data/referencia.js'
 import type { Evento, Medida } from '../../src/data/types.js'
 import type { Perfil } from '../db/repo.js'
 import { dataBR, formatarNumero } from './casos/comum.js'
@@ -16,7 +17,7 @@ Regras inegociáveis:
 - Responda somente com um objeto JSON válido no formato pedido, sem texto antes ou depois.`
 
 function serializarMedida(m: Medida): string {
-  return `${m.nome} = ${formatarNumero(m.valor)} ${m.unidade} (ref ${formatarNumero(m.refMin)}–${formatarNumero(m.refMax)}; ${m.sinal})`
+  return `${m.nome} = ${formatarNumero(m.valor)} ${m.unidade} (ref ${textoDaFaixa(m)}; ${m.sinal})`
 }
 
 export function serializarEvento(e: Evento): string {

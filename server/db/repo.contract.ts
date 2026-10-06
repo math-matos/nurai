@@ -98,6 +98,24 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
           expect(salvo).not.toHaveProperty('documento')
         })
 
+        /* Medidas vão como JSON: o lado ausente da faixa não pode voltar como null. Evento antigo,
+           com os dois limites, segue igual. */
+        it('guarda faixa unilateral (só piso, só teto) sem criar o limite ausente', async () => {
+          const unilateral: Evento = {
+            ...EVENTO_NOVO, id: 'u-unilateral',
+            medidas: [
+              { nome: 'HDL', valor: 38, unidade: 'mg/dL', refMin: 40, sinal: 'alterado' },
+              { nome: 'LDL', valor: 138, unidade: 'mg/dL', refMax: 130, sinal: 'alterado' },
+              { nome: 'Glicemia', valor: 96, unidade: 'mg/dL', refMin: 70, refMax: 99, sinal: 'normal' },
+            ],
+          }
+          await repo.adicionarEvento(unilateral, AUTOR)
+          const salvo = (await repo.estado()).eventos.find((e) => e.id === 'u-unilateral')!
+          expect(salvo).toEqual(unilateral)
+          expect(salvo.medidas![0]).not.toHaveProperty('refMax')
+          expect(salvo.medidas![1]).not.toHaveProperty('refMin')
+        })
+
         it('id repetido lança ErroConflito sem gravar o evento nem o acesso', async () => {
           await repo.adicionarEvento(EVENTO_NOVO, AUTOR)
           const antes = await repo.estado()

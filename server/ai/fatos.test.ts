@@ -28,6 +28,22 @@ describe('derivarFatos — tendências', () => {
   })
 })
 
+describe('derivarFatos — tendências com faixa unilateral', () => {
+  it('série de HDL só com piso ("> 40") e de LDL só com teto ("< 130") viram tendência e serializam', () => {
+    const hdl = (valor: number) => ({ nome: 'HDL', valor, unidade: 'mg/dL', refMin: 40, sinal: valor < 40 ? 'alterado' as const : 'normal' as const })
+    const ldl = (valor: number) => ({ nome: 'LDL', valor, unidade: 'mg/dL', refMax: 130, sinal: valor > 130 ? 'alterado' as const : 'normal' as const })
+    const fatos = derivarFatos([
+      evento({ id: 'a', data: '2024-09-05', medidas: [hdl(39), ldl(168)] }),
+      evento({ id: 'b', data: '2025-09-18', medidas: [hdl(41), ldl(142)] }),
+      evento({ id: 'c', data: '2026-03-12', medidas: [hdl(38), ldl(138)] }),
+    ])
+    expect(fatos.tendencias.map((t) => [t.nome, t.variacoes])).toEqual([
+      ['HDL', ['subiu', 'caiu']], ['LDL', ['caiu', 'caiu']],
+    ])
+    expect(serializarFatos(fatos)).toMatch(/HDL \(mg\/dL\): 39 em 05\/09\/2024 \(a\); 41 em 18\/09\/2025 \(b\), subiu; 38 em 12\/03\/2026 \(c\), caiu/)
+  })
+})
+
 describe('derivarFatos — exames repetidos', () => {
   it('liga o pedido da UBS ao Doppler de carótidas feito seis semanas antes', () => {
     const { repeticoes } = derivarFatos(EVENTOS)
