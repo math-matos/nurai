@@ -112,6 +112,48 @@ describe('responderCopiloto com o provider mock', () => {
   })
 })
 
+describe('responderCopiloto — exame repetido por pedido avulso', () => {
+  /* Shape que a extração real produziu para os PDFs 02 e 09 do Marcos. */
+  async function comPedido(llm: LlmProvider) {
+    const raiz = criarRepoMemoria()
+    const { pacienteId } = await raiz.criarPaciente({ nome: 'Marcos', convidado: false })
+    const perfil = (await raiz.aplicarOnboarding(pacienteId, 'vazio'))!
+    const repo = raiz.paraPaciente(pacienteId)
+    const comum = { fonte: 'paciente', sinal: 'info', tags: [], origem: 'OCR + IA' } as const
+    await repo.adicionarEvento({
+      ...comum, id: 'r02', data: '2026-03-12', tipo: 'exame', titulo: 'Perfil lipídico', instituicao: 'Laboratório Quaresmeira',
+      resumo: 'Colesterol total, LDL e triglicerídeos acima do desejável.',
+    }, perfil.nome)
+    await repo.adicionarEvento({
+      ...comum, id: 'r09', data: '2026-04-02', tipo: 'documento', titulo: 'Pedido de exame', instituicao: 'Clínica Ipê-Roxo',
+      resumo: 'Pedido de exame de perfil lipídico para controle de dislipidemia.',
+    }, perfil.nome)
+    return { repo, perfil, llm }
+  }
+  const PERGUNTA = { pergunta: 'Tem algum exame que eu não preciso repetir?' }
+  const naoEncontrei: LlmProvider = {
+    nome: 'oci',
+    chat: async () => JSON.stringify({ texto: ['Não encontrei nada repetido.'], ancoras: [], serie: null, aviso: null }),
+  }
+
+  it('no mock, responde pelos fatos citando o perfil feito e o pedido', async () => {
+    const r = await responderCopiloto(await comPedido(criarLlmMock()), PERGUNTA)
+    expect(r.ancoras).toEqual(['r02', 'r09'])
+    expect(r.texto.join(' ')).toMatch(/Perfil lipídico.*12\/03\/2026.*02\/04\/2026.*21 dias/)
+  })
+
+  it('com o modelo dizendo que não encontrou, os fatos derivados respondem', async () => {
+    const r = await responderCopiloto(await comPedido(naoEncontrei), PERGUNTA)
+    expect(r.ancoras).toEqual(['r02', 'r09'])
+    expect(r.geradoPor).toBe('oci')
+  })
+
+  it('pergunta que não é sobre repetição segue com o "não encontrei"', async () => {
+    const r = await responderCopiloto(await comPedido(naoEncontrei), { pergunta: 'Tenho alergia a algo?' })
+    expect(r.ancoras).toEqual([])
+  })
+})
+
 describe('gerarResumo', () => {
   it('envia os fatos derivados, descarta conduta medicamentosa e limpa o texto', async () => {
     const { deps: d, chamadas } = await deps({
