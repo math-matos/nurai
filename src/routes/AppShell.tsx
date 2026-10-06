@@ -5,6 +5,7 @@ import { Link } from '../components/Link'
 import { navegar } from '../lib/router'
 import { concluirOnboarding, definir, sair, useAcoes, useEstado, usePerfil } from '../lib/store'
 import { mensagemDeErro } from '../lib/api'
+import { iniciaisDe } from '../lib/formato'
 import { TID } from '../lib/testids'
 import { LinhaDoTempo } from './app/LinhaDoTempo'
 import { Fontes } from './app/Fontes'
@@ -93,7 +94,9 @@ export function AppShell({ rota }: { rota: string }) {
         </div>
 
         <div className="paciente" data-testid={TID.shellPerfil}>
-          <span className="paciente__iniciais" aria-hidden="true">{perfil.iniciais}</span>
+          <span className="paciente__iniciais" aria-hidden="true" data-testid={TID.shellIniciais}>
+            {iniciaisDe(perfil.nome) || perfil.iniciais}
+          </span>
           <div>
             <p className="paciente__nome" data-testid={TID.shellPerfilNome}>{perfil.nome}</p>
             {perfil.responsavel && (
