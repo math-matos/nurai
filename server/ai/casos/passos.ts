@@ -35,7 +35,8 @@ Use os FATOS DERIVADOS: cada exame possivelmente repetido e cada pendência list
 Os passos são de organização (levar um laudo, agendar, perguntar, confirmar com quem pediu). Nunca sugira iniciar, manter, suspender ou mudar remédio ou tratamento — nem como pergunta ao médico.
 Formato da resposta (JSON):
 {"passos": [{"titulo": "ação curta no imperativo", "porque": "fatos e datas dos registros", "ancoras": ["e01"], "prazo": "ex.: Próxima consulta", "prioridade": "alta" | "media" | "baixa"}]}
-- 1 a ${MAX_PASSOS} passos, os mais importantes primeiro, cada um com os ids que o sustentam.`
+- 1 a ${MAX_PASSOS} passos, os mais importantes primeiro, cada um com os ids que o sustentam em "ancoras".
+- Em "titulo" e "porque", refira-se a um registro pelo nome e pela data (ex.: "o exame de 05/03/2026"), nunca pelo id.`
 
 /* Exames repetidos e pendências vêm dos fatos derivados — a mesma regra que o modelo recebe. */
 function examesRepetidos({ repeticoes }: Fatos): PassoBruto[] {
@@ -96,7 +97,7 @@ export async function gerarPassos({ repo, llm }: Deps): Promise<RespostaPassos> 
   const feitos = new Set(atuais.filter((p) => p.feito).map((p) => normalizar(p.titulo)))
   const passos: ProximoPasso[] = brutos
     .map((p) => ({
-      ...p, titulo: limparTexto(p.titulo), porque: limparTexto(p.porque), prazo: limparTexto(p.prazo),
+      ...p, titulo: limparTexto(p.titulo, eventos), porque: limparTexto(p.porque, eventos), prazo: limparTexto(p.prazo, eventos),
       ancoras: filtrarAncoras(p.ancoras, validos),
     }))
     .filter((p) => p.titulo && p.ancoras.length && !recomendaConduta(`${p.titulo} ${p.porque}`))

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { EVENTOS } from '../../src/data/seed.js'
 import { limparTexto, limparTextos } from './texto.js'
 
 describe('limparTexto', () => {
@@ -24,5 +25,26 @@ describe('limparTexto', () => {
 
   it('limparTextos descarta itens que ficaram vazios', () => {
     expect(limparTextos([' [e01] ', ' ok '])).toEqual(['ok'])
+  })
+
+  it('com os eventos, troca o id usado como nome do registro pela descrição dele', () => {
+    expect(limparTexto('Em comparação com os registros anteriores, como o [e11] e o [e18], podemos ver a evolução.', EVENTOS))
+      .toBe('Em comparação com os registros anteriores, como o exame de 11/08/2023 (Painel metabólico e função renal) e o exame de 14/09/2025 (Controle metabólico e albuminúria), podemos ver a evolução.')
+  })
+
+  it('ajusta artigo e preposição ao gênero do registro descrito', () => {
+    expect(limparTexto('Na [e11] e no (e12) a glicada caiu.', EVENTOS)).toMatch(/^No exame de 11\/08\/2023 \(.+\) e n[oa] .+ de \d{2}\/\d{2}\/\d{4} \(.+\) a glicada caiu\.$/)
+    expect(limparTexto('Comparando com [e11], a glicada subiu.', EVENTOS))
+      .toBe('Comparando com o exame de 11/08/2023 (Painel metabólico e função renal), a glicada subiu.')
+    expect(limparTexto('Os valores dos [e11, e21] mudaram.', EVENTOS))
+      .toBe('Os valores do exame de 11/08/2023 (Painel metabólico e função renal) e do exame de 05/03/2026 (Hemograma, glicada e função renal) mudaram.')
+  })
+
+  it('com os eventos, marcador de citação depois de um fato continua só sendo removido', () => {
+    expect(limparTexto('A glicada subiu [e18] e depois caiu (e21).', EVENTOS)).toBe('A glicada subiu e depois caiu.')
+  })
+
+  it('id desconhecido é removido e não deixa pontuação duplicada', () => {
+    expect(limparTexto('Veja o resultado [e99] , e siga ;; ok.', EVENTOS)).toBe('Veja o resultado, e siga; ok.')
   })
 })

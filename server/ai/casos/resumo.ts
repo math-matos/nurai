@@ -35,7 +35,8 @@ Formato da resposta (JSON):
 - "pontos": até ${MAX_PONTOS} fatos objetivos e datados (mudanças recentes, exames alterados, medicamentos, pendências), cada um com os ids que o sustentam.
 - Para dizer se uma medida subiu ou caiu, use a variação indicada nos FATOS DERIVADOS para aquela data; não calcule tendência por conta própria.
 - Descreva o que foi registrado; não recomende manter, iniciar, suspender ou mudar remédios.
-- "perguntasSugeridas": 2 a 4 perguntas para a paciente levar à consulta.`
+- "perguntasSugeridas": 2 a 4 perguntas para a paciente levar à consulta.
+- No texto, refira-se a um registro pelo nome e pela data (ex.: "o exame de 05/03/2026"), nunca pelo id; ids vão só em "ancoras".`
 
 function relevantes(eventos: Evento[], especialidade: string): Evento[] {
   const alvo = normalizar(especialidade)
@@ -76,13 +77,13 @@ export async function gerarResumo({ repo, llm }: Deps, especialidade: string): P
     const r = await pedirJson(llm, mensagens(tarefa(especialidade), PERFIL, contextoHistorico(eventos)), esquema, { maxTokens: 2000 })
     const validos = idsDe(eventos)
     /* Perguntas à médica podem falar de remédio ("Devo manter...?"); síntese e pontos não recomendam conduta. */
-    const sintese = limparTextos(r.sintese).filter((t) => !recomendaConduta(t))
+    const sintese = limparTextos(r.sintese, eventos).filter((t) => !recomendaConduta(t))
     corpo = {
       sintese: sintese.length ? sintese : resumirSemIa(eventos, especialidade).sintese,
       pontos: r.pontos
-        .map((p) => ({ texto: limparTexto(p.texto), ancoras: filtrarAncoras(p.ancoras, validos) }))
+        .map((p) => ({ texto: limparTexto(p.texto, eventos), ancoras: filtrarAncoras(p.ancoras, validos) }))
         .filter((p) => p.texto && p.ancoras.length && !recomendaConduta(p.texto)),
-      perguntasSugeridas: limparTextos(r.perguntasSugeridas),
+      perguntasSugeridas: limparTextos(r.perguntasSugeridas, eventos),
     }
   }
   await repo.registrarAcesso({

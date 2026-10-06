@@ -34,7 +34,7 @@ const TURNOS_ANTERIORES = 6
 const TAREFA = `Tarefa: responder à pergunta da paciente usando apenas os registros do histórico abaixo.
 Formato da resposta (JSON):
 {"texto": ["parágrafo curto"], "ancoras": ["e01"], "serie": {"medida": "nome exato de uma medida"} ou null, "aviso": "lembrete curto" ou null}
-- "texto": 1 a 4 parágrafos curtos, citando datas e valores dos registros.
+- "texto": 1 a 4 parágrafos curtos, citando datas e valores dos registros. Refira-se a um registro pelo nome e pela data (ex.: "o exame de 05/03/2026"), nunca pelo id.
 - "ancoras": ids de todos os registros que sustentam a resposta. Se nada no histórico sustenta uma resposta, use [] e diga que não encontrou.
 - Perguntas sobre exames repetidos ou desnecessários, pendências ou evolução de uma medida: responda a partir dos FATOS DERIVADOS e inclua nas âncoras os ids que eles citam.
 - Perguntas sobre parar, trocar ou ajustar um remédio: não diga se pode ou não; conte o que os registros mostram sobre esse remédio (com âncoras) e preencha o "aviso".
@@ -106,9 +106,9 @@ export async function responderCopiloto({ repo, llm }: Deps, entrada: EntradaCop
   ]
   const r = await pedirJson(llm, pedido, esquema)
 
-  const texto = limparTextos(r.texto)
+  const texto = limparTextos(r.texto, eventos)
   const ancoras = filtrarAncoras(r.ancoras, validos)
-  const aviso = avisoPara(entrada.pergunta, r.aviso && limparTexto(r.aviso))
+  const aviso = avisoPara(entrada.pergunta, r.aviso && limparTexto(r.aviso, eventos))
   if (!texto.length || !ancoras.length) return { texto: [SEM_BASE], ancoras: [], ...(aviso && { aviso }), geradoPor: llm.nome }
 
   const serie = serieDaPergunta(eventos, entrada.pergunta) ?? (r.serie ? montarSerie(eventos, r.serie.medida) : undefined)

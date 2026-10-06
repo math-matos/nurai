@@ -154,11 +154,20 @@ await caso('passos: todos ancorados, nenhum de conduta medicamentosa', async () 
   }
 })
 
-await caso('explicar e21: responde 200', async () => {
+/* Artigo sem nome ("como o e o,", "do ."): sobra de um id removido do meio da frase. */
+const ARTIGO_ORFAO = /\b(?:o|a|os|as|do|da|dos|das|no|na|nos|nas|ao|aos)\s+(?:e\s+(?:o|a|os|as|do|da|no|na)\b|[,;.:])|\[e\d/i
+
+await caso('explicar e21: 200, sem "[e" nem frase quebrada ("o e o", "como o ,")', async () => {
   const r = await chamar('/api/exames/e21/explicar')
   if (r.status !== 200) throw new Error(`HTTP ${r.status}`)
-  coletar('explicar e21', r.body.explicacao, r.body.pontosDeAtencao, r.body.perguntasParaMedico)
-  return { ok: true, ms: r.ms, detalhe: `ancoras=[${ancorasDe(r.body).join(',')}]` }
+  const itens = [r.body.explicacao, r.body.pontosDeAtencao, r.body.perguntasParaMedico].flat() as string[]
+  coletar('explicar e21', itens)
+  const quebrado = itens.find((t) => ARTIGO_ORFAO.test(t))
+  return {
+    ok: !quebrado,
+    ms: r.ms,
+    detalhe: quebrado ? `"…${trecho(quebrado, ARTIGO_ORFAO)}…"` : `ancoras=[${ancorasDe(r.body).join(',')}]`,
+  }
 })
 
 await caso('formato: nenhum texto com "[e" nem data AAAA-MM-DD', async () => {
