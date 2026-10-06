@@ -42,3 +42,48 @@ export const esquemaEvento: z.ZodType<Evento> = z.object({
 })
 
 export const esquemaCompartilhamento = z.object({ para: texto })
+
+/* ---- Conta e perfil ---- */
+
+const nome = ate(z.string({ error: 'Informe o nome' }).trim().min(1, 'Informe o nome'), 200)
+const email = z.string({ error: 'Informe o e-mail' }).trim().toLowerCase()
+  .pipe(z.email({ error: 'E-mail inválido' }).max(254, 'E-mail longo demais'))
+const senha = z.string({ error: 'Informe a senha' })
+  .min(8, 'A senha precisa ter pelo menos 8 caracteres')
+  .max(200, 'A senha pode ter no máximo 200 caracteres')
+const dataNascimento = z.string()
+  .refine(dataIsoValida, 'Use uma data válida no formato AAAA-MM-DD')
+  .refine((s) => s <= new Date().toISOString().slice(0, 10), 'A data de nascimento não pode estar no futuro')
+const lista = z.array(ate(z.string().trim().min(1), 200)).max(50)
+
+export const esquemaCadastro = z.object({
+  nome,
+  email,
+  senha,
+  dataNascimento: dataNascimento.optional(),
+  aceiteLgpd: z.literal(true, { error: 'É preciso aceitar o uso dos seus dados de saúde (LGPD)' }),
+})
+
+/* Login não valida formato: a resposta não pode dar pista sobre o que existe. */
+export const esquemaLogin = z.object({
+  email: z.string({ error: 'Informe o e-mail' }).trim().toLowerCase().min(1, 'Informe o e-mail'),
+  senha: z.string({ error: 'Informe a senha' }).min(1, 'Informe a senha'),
+})
+
+export const esquemaOnboarding = z.object({
+  modo: z.enum(['vazio', 'exemplo'], { error: "Use 'vazio' ou 'exemplo'" }),
+})
+
+/* '' remove um opcional. Campos fora da lista (convidado, onboarding...) são descartados. */
+export const esquemaPerfil = z.object({
+  nome: nome.optional(),
+  dataNascimento: z.union([z.literal(''), dataNascimento]).optional(),
+  condicoes: lista.optional(),
+  alergias: lista.optional(),
+  cartaoSus: ate(z.string().trim(), 40).optional(),
+  plano: ate(z.string().trim(), 200).optional(),
+})
+
+export const esquemaExclusao = z.object({
+  confirmacao: z.literal('EXCLUIR', { error: 'Digite EXCLUIR para confirmar' }),
+})
