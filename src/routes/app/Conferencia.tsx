@@ -4,6 +4,7 @@ import { AvisoIa, Regua, SeloIa } from '../../components/ui'
 import { TIPOS } from '../../data/seed'
 import type { Evento, Medida, Sinal, TipoId } from '../../data/types'
 import type { Extracao } from '../../lib/api'
+import { TID } from '../../lib/testids'
 
 const GRAVIDADE: Record<Sinal, number> = { info: 0, normal: 1, atencao: 2, alterado: 3 }
 const CONFIANCA_BAIXA = 0.75
@@ -106,7 +107,7 @@ export function Conferencia({ extracao, arquivo, salvando, aoSalvar, aoDescartar
   const baixa = confianca !== undefined && confianca < CONFIANCA_BAIXA
 
   return (
-    <div className="revisao">
+    <div className="revisao" data-testid={TID.conferencia}>
       <div className="revisao__cabeca">
         <p className="revisao__arquivo"><Icon nome="papel" tamanho={15} /> {arquivo}</p>
         <div className="revisao__selos">
@@ -124,7 +125,7 @@ export function Conferencia({ extracao, arquivo, salvando, aoSalvar, aoDescartar
       <div className="revisao__campos">
         <label>
           <span className="label">Título</span>
-          <input className="field" value={titulo} onChange={(e) => setTitulo(e.target.value)} />
+          <input className="field" value={titulo} onChange={(e) => setTitulo(e.target.value)} data-testid={TID.conferenciaTitulo} />
         </label>
         <label>
           <span className="label">Tipo</span>
@@ -215,10 +216,10 @@ export function Conferencia({ extracao, arquivo, salvando, aoSalvar, aoDescartar
       </p>
 
       <div className="revisao__acoes">
-        <button type="button" className="btn" onClick={salvar} disabled={!valido || salvando}>
+        <button type="button" className="btn" onClick={salvar} disabled={!valido || salvando} data-testid={TID.conferenciaSalvar}>
           <Icon nome="check" tamanho={16} /> {salvando ? 'Salvando…' : 'Salvar no histórico'}
         </button>
-        <button type="button" className="btn btn--ghost" onClick={aoDescartar} disabled={salvando}>
+        <button type="button" className="btn btn--ghost" onClick={aoDescartar} disabled={salvando} data-testid={TID.conferenciaDescartar}>
           Descartar
         </button>
       </div>

@@ -1,17 +1,20 @@
 import { Icon } from '../../components/Icon'
 import { useState } from 'react'
-import { Falha, SeloIa } from '../../components/ui'
+import { Falha, SeloIa, VazioHistorico } from '../../components/ui'
 import { formatarData } from '../../lib/formato'
 import { CENTROS, ENSAIOS } from '../../data/seed'
 import type { PassosGerados } from '../../lib/api'
 import { navegar } from '../../lib/router'
-import { useAcoes, useEstado } from '../../lib/store'
+import { useAcoes, useEstado, usePerfil } from '../../lib/store'
+import { TID } from '../../lib/testids'
 import { useRequisicao } from '../../lib/useRequisicao'
 
 const ROTULO_PRIORIDADE = { alta: 'Prioridade alta', media: 'Prioridade média', baixa: 'Prioridade baixa' }
 
 export function Cuidado() {
   const { passos, eventos } = useEstado()
+  /* Centros e ensaios são do caso de exemplo: não valem para um histórico que começou do zero. */
+  const exemplo = usePerfil().onboarding === 'exemplo'
   const { alternarPasso, gerarPassos } = useAcoes()
   const analise = useRequisicao<PassosGerados>()
   const [marcando, setMarcando] = useState<string | null>(null)
@@ -24,6 +27,18 @@ export function Cuidado() {
     setMarcando(id)
     await alternarPasso(id)
     setMarcando(null)
+  }
+
+  if (eventos.length === 0) {
+    return (
+      <div className="cuidado">
+        <VazioHistorico
+          icone="bussola"
+          titulo="Ainda não há o que cruzar"
+          texto="Os próximos passos nascem do cruzamento entre registros: exame repetido, retorno atrasado, reavaliação esquecida. Comece reunindo os seus documentos."
+        />
+      </div>
+    )
   }
 
   return (
@@ -41,7 +56,10 @@ export function Cuidado() {
             do profissional que atende você.
           </p>
           <div className="cuidado__analise">
-            <button type="button" className="btn btn--ghost" onClick={reanalisar} disabled={analise.carregando}>
+            <button
+              type="button" className="btn btn--ghost" onClick={reanalisar} disabled={analise.carregando}
+              data-testid={TID.iaPassos}
+            >
               <Icon nome="recomecar" tamanho={16} />
               {analise.carregando ? 'Reanalisando o histórico…' : 'Reanalisar meu histórico'}
             </button>
@@ -89,70 +107,74 @@ export function Cuidado() {
         </ol>
       </section>
 
-      <section className="painel">
-        <div className="painel__cabeca">
-          <h2>Onde tratar isso</h2>
-          <p>
-            Centros públicos e credenciados com foco no que o seu histórico mostra, ordenados
-            pela aderência ao seu caso — não por convênio nem por publicidade.
-          </p>
-        </div>
-        <ul className="centros">
-          {CENTROS.map((c) => (
-            <li key={c.id} className="centro">
-              <div>
-                <p className="centro__nome">{c.nome}</p>
-                <p className="centro__foco">{c.foco}</p>
-                <p className="centro__motivo"><Icon nome="bussola" tamanho={14} /> {c.motivo}</p>
-              </div>
-              <dl className="centro__dados">
-                <div><dt>Distância</dt><dd className="num">{c.distancia}</dd></div>
-                <div><dt>Cidade</dt><dd>{c.cidade}</dd></div>
-                <div><dt>Acesso</dt><dd>{c.convenio}</dd></div>
-              </dl>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="painel">
-        <div className="painel__cabeca">
-          <h2>Ensaios clínicos com critérios compatíveis</h2>
-          <p>
-            A elegibilidade é calculada sobre o histórico reunido. Compatibilidade não é
-            convite nem inscrição: quem confirma critério e indicação é a equipe do estudo.
-          </p>
-        </div>
-        <ul className="ensaios">
-          {ENSAIOS.map((e) => (
-            <li key={e.id} className="ensaio">
-              <div className="ensaio__cabeca">
-                <div>
-                  <p className="ensaio__codigo num">{e.codigo}</p>
-                  <h3>{e.titulo}</h3>
-                  <p className="ensaio__meta">{e.fase} · {e.local}</p>
-                </div>
-                <div className="ensaio__match">
-                  <span className="ensaio__pct num">{e.match}%</span>
-                  <span className="ensaio__barra" aria-hidden="true">
-                    <span style={{ width: `${e.match}%` }} />
-                  </span>
-                  <span className="ensaio__rotulo">critérios compatíveis</span>
-                </div>
-              </div>
-              <ul className="criterios">
-                {e.criterios.map((c) => (
-                  <li key={c.texto} className={c.atende === true ? 'ok' : c.atende === false ? 'nao' : 'talvez'}>
-                    <Icon nome={c.atende === true ? 'check' : c.atende === false ? 'fechar' : 'alerta'} tamanho={13} />
-                    {c.texto}
-                    {c.atende === null && <span className="criterios__nota">não consta no histórico</span>}
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {exemplo && (
+        <>
+          <section className="painel">
+            <div className="painel__cabeca">
+              <h2>Onde tratar isso</h2>
+              <p>
+                Centros públicos e credenciados com foco no que o seu histórico mostra, ordenados
+                pela aderência ao seu caso — não por convênio nem por publicidade.
+              </p>
+            </div>
+            <ul className="centros">
+              {CENTROS.map((c) => (
+                <li key={c.id} className="centro">
+                  <div>
+                    <p className="centro__nome">{c.nome}</p>
+                    <p className="centro__foco">{c.foco}</p>
+                    <p className="centro__motivo"><Icon nome="bussola" tamanho={14} /> {c.motivo}</p>
+                  </div>
+                  <dl className="centro__dados">
+                    <div><dt>Distância</dt><dd className="num">{c.distancia}</dd></div>
+                    <div><dt>Cidade</dt><dd>{c.cidade}</dd></div>
+                    <div><dt>Acesso</dt><dd>{c.convenio}</dd></div>
+                  </dl>
+                </li>
+              ))}
+            </ul>
+          </section>
+    
+          <section className="painel">
+            <div className="painel__cabeca">
+              <h2>Ensaios clínicos com critérios compatíveis</h2>
+              <p>
+                A elegibilidade é calculada sobre o histórico reunido. Compatibilidade não é
+                convite nem inscrição: quem confirma critério e indicação é a equipe do estudo.
+              </p>
+            </div>
+            <ul className="ensaios">
+              {ENSAIOS.map((e) => (
+                <li key={e.id} className="ensaio">
+                  <div className="ensaio__cabeca">
+                    <div>
+                      <p className="ensaio__codigo num">{e.codigo}</p>
+                      <h3>{e.titulo}</h3>
+                      <p className="ensaio__meta">{e.fase} · {e.local}</p>
+                    </div>
+                    <div className="ensaio__match">
+                      <span className="ensaio__pct num">{e.match}%</span>
+                      <span className="ensaio__barra" aria-hidden="true">
+                        <span style={{ width: `${e.match}%` }} />
+                      </span>
+                      <span className="ensaio__rotulo">critérios compatíveis</span>
+                    </div>
+                  </div>
+                  <ul className="criterios">
+                    {e.criterios.map((c) => (
+                      <li key={c.texto} className={c.atende === true ? 'ok' : c.atende === false ? 'nao' : 'talvez'}>
+                        <Icon nome={c.atende === true ? 'check' : c.atende === false ? 'fechar' : 'alerta'} tamanho={13} />
+                        {c.texto}
+                        {c.atende === null && <span className="criterios__nota">não consta no histórico</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </>
+      )}
     </div>
   )
 }

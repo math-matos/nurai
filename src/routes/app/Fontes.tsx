@@ -9,6 +9,7 @@ import { api, type Extracao, type FonteConectada } from '../../lib/api'
 import { navegar } from '../../lib/router'
 import { isoHoje, useAcoes, useEstado } from '../../lib/store'
 import { useRequisicao } from '../../lib/useRequisicao'
+import { TID } from '../../lib/testids'
 import { Conferencia } from './Conferencia'
 
 const LIMITE_PDF = 4 * 1024 * 1024
@@ -150,7 +151,7 @@ export function Fontes() {
                 </button>
               </div>
               <input
-                ref={entrada} type="file" accept="application/pdf,.pdf" className="sr-only"
+                ref={entrada} type="file" accept="application/pdf,.pdf" className="sr-only" data-testid={TID.fontesPdf}
                 onChange={(e) => {
                   lerPdf(e.target.files?.[0])
                   e.target.value = ''
@@ -162,12 +163,12 @@ export function Fontes() {
               <span className="label">Ou cole o texto do documento</span>
               <textarea
                 className="field colar__texto" rows={8} value={texto}
-                placeholder="Cole aqui o texto de um laudo, resultado de exame ou receita"
+                placeholder="Cole aqui o texto de um laudo, resultado de exame ou receita" data-testid={TID.fontesTexto}
                 onChange={(e) => setTexto(e.target.value)}
               />
             </label>
             <div className="colar__acoes">
-              <button type="button" className="btn" onClick={lerTexto} disabled={!texto.trim()}>
+              <button type="button" className="btn" onClick={lerTexto} disabled={!texto.trim()} data-testid={TID.fontesLerTexto}>
                 Ler texto com IA
               </button>
               <button type="button" className="btn btn--ghost" onClick={carregarExemplo}>
@@ -194,6 +195,11 @@ export function Fontes() {
           </p>
         </div>
 
+        {fontes.length === 0 && (
+          <p className="painel__nada">
+            Nenhuma fonte conectada. Por enquanto, o seu histórico cresce com os documentos que você envia acima.
+          </p>
+        )}
         <ul className="fontes__lista">
           {conectadas.map((f) => {
             const revogada = consentimentoDa(f, consentimentos)?.ativo === false

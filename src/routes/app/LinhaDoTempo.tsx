@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { Ancoras, AvisoIa, ChipFonte, ChipSinal, Falha, Regua, SeloIa, Vazio } from '../../components/ui'
+import { Ancoras, AvisoIa, ChipFonte, ChipSinal, Falha, Regua, SeloIa, Vazio, VazioHistorico } from '../../components/ui'
 import { ICONE_TIPO, ano, formatarData, ordenarRecentes } from '../../lib/formato'
 import { FONTES, TIPOS } from '../../data/seed'
 import type { Evento, FonteId, TipoId } from '../../data/types'
@@ -8,6 +8,7 @@ import { api, type Explicacao } from '../../lib/api'
 import { navegar } from '../../lib/router'
 import { perguntar, useEstado } from '../../lib/store'
 import { useRequisicao } from '../../lib/useRequisicao'
+import { TID } from '../../lib/testids'
 
 const TIPOS_FILTRO: TipoId[] = ['exame', 'consulta', 'imagem', 'internacao', 'cirurgia', 'vacina', 'documento']
 const FONTES_FILTRO: FonteId[] = ['sus', 'laboratorio', 'hospital', 'clinica', 'operadora', 'paciente']
@@ -75,6 +76,16 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
     set(atuais.includes(valor) ? atuais.filter((v) => v !== valor) : [...atuais, valor])
 
   const filtrando = tipos.length > 0 || fontes.length > 0 || busca.trim() !== ''
+
+  if (eventos.length === 0) {
+    return (
+      <VazioHistorico
+        icone="linha"
+        titulo="Seu histórico ainda está vazio"
+        texto="Anexe um laudo, resultado de exame ou receita. A IA lê o documento, você confere, e ele vira o primeiro ponto desta linha do tempo."
+      />
+    )
+  }
 
   return (
     <div className="linha">
@@ -155,6 +166,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
                     style={{ ['--c' as string]: FONTES[e.fonte].cor }}
                     onClick={() => (e.id === selecionado ? mostrarDetalhe() : navegar(`/app/linha/${e.id}`))}
                     aria-current={atual?.id === e.id ? 'true' : undefined}
+                    data-testid={TID.eventoItem}
                   >
                     <span className="evento__no" />
                     <span className="evento__data num">{formatarData(e.data)}</span>
@@ -189,7 +201,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
           />
         )}
         {atual && (
-          <div className="detalhe__caixa">
+          <div className="detalhe__caixa" data-testid={TID.eventoDetalhe}>
             <button type="button" className="btn btn--quiet detalhe__voltar" onClick={voltarALista}>
               <Icon nome="linha" tamanho={16} /> Voltar à lista
             </button>
@@ -273,7 +285,7 @@ function ExplicarEvento({ evento, eventos }: { evento: Evento; eventos: Evento[]
   return (
     <section className="explicacao" aria-live="polite">
       {!dados && (
-        <button type="button" className="btn btn--ghost" onClick={explicar} disabled={carregando}>
+        <button type="button" className="btn btn--ghost" onClick={explicar} disabled={carregando} data-testid={TID.iaExplicar}>
           <Icon nome="copiloto" tamanho={16} />
           {carregando ? 'Preparando a explicação…' : 'Explicar em linguagem simples'}
         </button>
@@ -290,7 +302,7 @@ function ExplicarEvento({ evento, eventos }: { evento: Evento; eventos: Evento[]
       {erro && <Falha mensagem={erro} aoTentar={repetivel ? explicar : undefined} tentando={carregando} />}
 
       {dados && (
-        <div className="explicacao__corpo">
+        <div className="explicacao__corpo" data-testid={TID.iaExplicacao}>
           <p className="label">Em linguagem simples</p>
           {dados.explicacao.map((p, i) => <p key={i} className="explicacao__texto">{p}</p>)}
 
