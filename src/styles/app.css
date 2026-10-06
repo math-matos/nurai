@@ -365,7 +365,7 @@
 .lendo__passos li.ativo .lendo__ponto { background: var(--accent); animation: pulsar 1.1s var(--ease) infinite; }
 @keyframes pulsar { 50% { opacity: .25; transform: scale(.8); } }
 
-.revisao { display: grid; gap: var(--sp-4); padding: var(--sp-5); background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.revisao { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); padding: var(--sp-5); background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); }
 .revisao__cabeca { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
 .revisao__arquivo { display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; }
 .revisao__campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--sp-3); }
