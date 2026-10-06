@@ -1,8 +1,8 @@
-import { Hono, type Context } from 'hono'
+import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import { gerarResumo } from '../ai/casos/resumo.js'
 import { derivarFatos, pontosEmAberto } from '../ai/fatos.js'
 import type { LlmProvider } from '../ai/provider.js'
-import { limitarPorIp } from '../auth/limite.js'
+import { limitarPorIp, type Limite } from '../auth/limite.js'
 import { normalizarCodigo } from '../db/codigo.js'
 import type { Perfil, Repositorio } from '../db/repo.js'
 import { esquemaAcessoMedico, esquemaResumoMedico, esquemaVerificacaoMedico } from '../esquemas.js'
@@ -10,6 +10,9 @@ import { lerCorpo } from '../http.js'
 
 /* Toda requisição conta, válida ou não: 31^6 códigos com 10 tentativas por minuto inviabilizam a varredura. */
 const LIMITE = { maximo: 10, janelaMs: 60_000 }
+/* Balde próprio: a tela aberta revalida a cada minuto, e vários profissionais atrás do mesmo IP (clínica)
+   não podem gastar o limite de abertura. 60 por minuto ainda inviabiliza varrer 31^6 códigos. */
+const LIMITE_VERIFICAR = { maximo: 60, janelaMs: 60_000 }
 const PAPEL = 'Profissional de saúde (via código)'
 const ESPECIALIDADE_PADRAO = 'Clínica geral'
 
@@ -29,11 +32,12 @@ const codigoParcial = (codigo: string) => `••••${codigo.slice(-2)}`
 export function rotasAcessoMedico(repo: Repositorio, llm: LlmProvider): Hono {
   const rotas = new Hono()
 
-  rotas.use('*', async (c, next) => {
-    const bloqueio = await limitarPorIp(c, repo, 'acesso-medico', LIMITE)
+  const limitar = (nome: string, limite: Limite): MiddlewareHandler => async (c, next) => {
+    const bloqueio = await limitarPorIp(c, repo, nome, limite)
     if (bloqueio) return bloqueio
     await next()
-  })
+  }
+  const limiteAbertura = limitar('acesso-medico', LIMITE)
 
   /* Código que existiu mas foi revogado ou expirou: a tentativa vai para o log do dono (a Privacidade promete
      registrar inclusive as recusadas). Código inexistente não tem dono, então não há onde registrar. */
@@ -52,7 +56,7 @@ export function rotasAcessoMedico(repo: Repositorio, llm: LlmProvider): Hono {
     return perfil ? { ...encontrado, perfil, repoPaciente } : null
   }
 
-  rotas.post('/', async (c) => {
+  rotas.post('/', limiteAbertura, async (c) => {
     const { codigo, profissional } = await lerCorpo(c, esquemaAcessoMedico)
     const acesso = await abrir(codigo, profissional)
     if (!acesso) return codigoInvalido(c)
@@ -72,14 +76,14 @@ export function rotasAcessoMedico(repo: Repositorio, llm: LlmProvider): Hono {
     })
   })
 
-  /* A tela do médico revalida o código sem abrir o histórico de novo: sem log, mas com o mesmo limite por IP. */
-  rotas.post('/verificar', async (c) => {
+  /* A tela do médico revalida o código sem abrir o histórico de novo: sem log e com limite por IP próprio. */
+  rotas.post('/verificar', limitar('acesso-medico-verificar', LIMITE_VERIFICAR), async (c) => {
     const { codigo } = await lerCorpo(c, esquemaVerificacaoMedico)
     const ativo = await repo.buscarCompartilhamentoAtivo(normalizarCodigo(codigo))
     return ativo ? c.body(null, 204) : codigoInvalido(c)
   })
 
-  rotas.post('/resumo', async (c) => {
+  rotas.post('/resumo', limiteAbertura, async (c) => {
     const { codigo, profissional, especialidade = ESPECIALIDADE_PADRAO } = await lerCorpo(c, esquemaResumoMedico)
     const acesso = await abrir(codigo, profissional)
     if (!acesso) return codigoInvalido(c)

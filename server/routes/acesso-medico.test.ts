@@ -288,11 +288,26 @@ function suiteAcessoMedico(nome: string, fabrica: () => Repositorio) {
         expect((await verificar({})).status).toBe(400)
       })
 
-      it('conta no mesmo limite por IP do acesso pelo código', async () => {
+      /* Tela aberta revalidando (vários profissionais atrás do mesmo IP) não pode bloquear a abertura, e vice-versa. */
+      it('tem limite por IP próprio, separado do acesso pelo código', async () => {
         const comp = await gerar(ana)
-        for (let i = 0; i < 10; i++) expect((await verificar({ codigo: comp.codigo })).status).toBe(204)
-        expect((await verificar({ codigo: comp.codigo })).status).toBe(429)
-        expect((await acessar({ codigo: comp.codigo, profissional: 'Dra. Renata Aguiar' })).status).toBe(429)
+        const valido = { codigo: comp.codigo, profissional: 'Dra. Renata Aguiar' }
+        for (let i = 0; i < 15; i++) expect((await verificar({ codigo: comp.codigo })).status).toBe(204)
+        expect((await acessar(valido)).status).toBe(200)
+
+        for (let i = 0; i < 9; i++) expect((await acessar(valido)).status).toBe(200)
+        expect((await acessar(valido)).status).toBe(429)
+        expect((await verificar({ codigo: comp.codigo })).status).toBe(204)
+      })
+
+      it('429 na 61ª verificação do IP no minuto', async () => {
+        const comp = await gerar(ana)
+        for (let i = 0; i < 60; i++) expect((await verificar({ codigo: i % 2 ? comp.codigo : 'ZZZZZ9' })).status).toBe(i % 2 ? 204 : 404)
+        const res = await verificar({ codigo: comp.codigo })
+        expect(res.status).toBe(429)
+        expect((await ler(res)).codigo).toBe('MUITAS_TENTATIVAS')
+        expect((await verificar({ codigo: comp.codigo }, ipNovo())).status).toBe(204)
+        expect((await acessar({ codigo: comp.codigo, profissional: 'Dra. Renata Aguiar' })).status).toBe(200)
       })
     })
 
