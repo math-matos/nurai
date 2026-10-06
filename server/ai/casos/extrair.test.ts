@@ -213,3 +213,29 @@ describe('extrairEvento — paciente do documento', () => {
     expect((await extrairEvento({ llm: mock, perfil: MARCOS }, { texto })).alertas).toEqual([])
   })
 })
+
+describe('montarEvento — texto do modelo', () => {
+  it('avisos começam com maiúscula e resumo/avisos saem com decimal e data em pt-BR', () => {
+    const { evento, avisos } = montarEvento(bruto([], {
+      resumo: 'TFG de 94.4 mL/min/1,73 m² em 2026-05-15.',
+      avisos: ['a mensagem não é um documento formal', '  ', 'valor de 1.08 parcialmente ilegível'],
+    }))
+    expect(evento.resumo).toBe('TFG de 94,4 mL/min/1,73 m² em 15/05/2026.')
+    expect(avisos.slice(0, 2)).toEqual(['A mensagem não é um documento formal', 'Valor de 1,08 parcialmente ilegível'])
+  })
+})
+
+describe('extrairEvento — prompt de grafia e de conduta', () => {
+  it('pede a grafia com acentos mesmo em documento em maiúsculas', async () => {
+    const { llm, recebidas } = llmFixo(bruto([]))
+    await extrairEvento({ llm, perfil: MARCOS }, { texto: PEDIDO })
+    expect(instrucoes(recebidas)).toMatch(/acentos[^\n]*"Monitorização Ambulatorial da Pressão Arterial"/)
+  })
+
+  it('pede que o resumo de consulta traga remédio iniciado, exames solicitados e retorno com prazo', async () => {
+    const { llm, recebidas } = llmFixo(bruto([]))
+    await extrairEvento({ llm, perfil: MARCOS }, { texto: PEDIDO })
+    const prompt = instrucoes(recebidas)
+    expect(prompt).toMatch(/consulta[^\n]*"resumo"[^\n]*remédio iniciado[^\n]*exame solicitado[^\n]*retorno com o prazo/)
+  })
+})

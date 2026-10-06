@@ -5,6 +5,7 @@ import { dataIsoValida } from '../../esquemas.js'
 import { ErroIa } from '../erros.js'
 import { pedirJson } from '../json.js'
 import { mensagens } from '../prompts.js'
+import { limparTexto } from '../texto.js'
 import { hojeISO, type ContextoIa } from './comum.js'
 import { extrairPorHeuristica, lerDataDoTexto } from './extrair-mock.js'
 import { alertaDeIdentidade, type AlertaExtracao } from './identidade.js'
@@ -73,14 +74,18 @@ Formato da resposta (JSON):
   - "cirurgia": descrição de cirurgia ou procedimento.
   - "vacina": comprovante ou registro de vacinação.
   - "documento": pedido de exame, guia, atestado, encaminhamento e outros documentos.
+- Copie nomes, títulos e termos com a grafia do documento, com acentos e cedilha, mesmo que o documento esteja em maiúsculas (ex.: "MONITORIZAÇÃO AMBULATORIAL DA PRESSÃO ARTERIAL" vira "Monitorização Ambulatorial da Pressão Arterial", nunca "Monitorizacao").
 - "titulo": o que o documento é, com o nome do exame. Em pedido, guia ou requisição, nomeie o(s) exame(s) pedido(s), ex.: "Pedido de perfil lipídico", "Guia de ultrassom de abdome" — nunca só "Pedido de exame".
 - "medidas": só valores numéricos presentes no texto, com ponto decimal; refMin/refMax da faixa de referência impressa. Não invente faixas.
 - Faixa "X a Y": refMin X e refMax Y. Faixa só com teto ("< X", "≤ X", "até X", "inferior a X"): refMin null e refMax X. Faixa só com piso ("> X", "≥ X", "acima de X", "superior a X", limite inferior da normalidade "LIN X"): refMin X e refMax null; se o documento trouxer o LIN, use o LIN. Use null nos dois só quando o documento não trouxer referência para a medida.
 - Referência em "% do previsto" (espirometria, por exemplo): registre a medida pelo valor em % do previsto, com unidade "% do previsto", para a faixa e o valor ficarem na mesma unidade.
 - "resumo": descreva o que o documento registra, sem interpretar nem diagnosticar. Em pedido ou guia, cite os exames pedidos pelo nome (ex.: "Pedido de perfil lipídico e hemograma.").
+- Em consulta, relatório ou alta, o "resumo" (até 4 frases) precisa trazer o que o documento registra de conduta, com os nomes como estão no texto: remédio iniciado, trocado ou suspenso, com a dose (ex.: "Iniciada losartana 50 mg."); cada exame solicitado pelo nome (ex.: "Solicitados MAPA de 24 horas, perfil lipídico e nova espirometria."); e o retorno com o prazo (ex.: "Retorno em 6 meses."). Esses itens são fatos do registro, não recomendações.
+- "avisos": frases completas, começando com letra maiúscula.
 - "confianca": de 0 a 1, o quanto o texto estava legível e completo.`
 
 type MedidaBruta = ExtracaoClinica['medidas'][number]
+const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 type Montado = Omit<ResultadoExtracao, 'geradoPor' | 'alertas' | 'pacienteNoDocumento'>
 
 /* Faixa unilateral ("< X", "> X", LIN) guarda só o lado impresso: nada de teto ou piso inventado.
@@ -95,7 +100,7 @@ function lerMedida(m: MedidaBruta): Medida | string {
 
 /* Pós-processamento comum ao modelo e à heurística: sinal e validações ficam no servidor. */
 export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string): Montado {
-  const avisos = bruto.avisos.map((a) => a.trim()).filter(Boolean)
+  const avisos = bruto.avisos.map((a) => maiuscula(limparTexto(a))).filter(Boolean)
   const lidas = bruto.medidas.map(lerMedida)
   const medidas = lidas.filter((m): m is Medida => typeof m !== 'string')
   const omitidas = lidas.filter((m): m is string => typeof m === 'string')
@@ -115,7 +120,7 @@ export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string): Mont
     instituicao: bruto.instituicao?.trim() || 'Não identificada',
     fonte: 'paciente',
     ...(especialidade && { especialidade }),
-    resumo: bruto.resumo.trim(),
+    resumo: limparTexto(bruto.resumo),
     sinal: medidas.some((m) => m.sinal === 'alterado') ? 'alterado' : medidas.length ? 'normal' : 'info',
     ...(medidas.length && { medidas }),
     tags: bruto.tags.map((t) => t.trim()).filter(Boolean),

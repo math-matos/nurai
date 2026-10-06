@@ -26,6 +26,21 @@ describe('limparTexto', () => {
     expect(limparTexto('Microalbumina 0.125 g/L e hemácias 4.85 milhões/µL.')).toBe('Microalbumina 0,125 g/L e hemácias 4,85 milhões/µL.')
   })
 
+  /* Visto em produção: "A sua TFG foi de 94.4 mL/min/1,73 m²". */
+  it.each([
+    ['A sua TFG foi de 94.4 mL/min/1,73 m² em 20/01/2025.', 'A sua TFG foi de 94,4 mL/min/1,73 m² em 20/01/2025.'],
+    ['TFG 94.4 mL/min/1.73 m²', 'TFG 94,4 mL/min/1,73 m²'],
+    ['PA média de 13.5 mmHg', 'PA média de 13,5 mmHg'],
+    ['TGO 32.5 UI/L', 'TGO 32,5 UI/L'],
+    ['potássio 4.7 mEq/L', 'potássio 4,7 mEq/L'],
+    ['leucócitos 8.4 x10³/µL', 'leucócitos 8,4 x10³/µL'],
+    ['hemácias 4.52 milhões/μL', 'hemácias 4,52 milhões/μL'],
+    ['LDL de 162.5mg/dL', 'LDL de 162,5mg/dL'],
+    ['(TFG: 94.4 mL/min/1,73 m²)', '(TFG: 94,4 mL/min/1,73 m²)'],
+  ])('unidade composta: %s', (entrada, saida) => {
+    expect(limparTexto(entrada)).toBe(saida)
+  })
+
   it('não mexe em datas, versões, códigos, IPs nem números com milhar', () => {
     for (const texto of [
       'Coleta em 10.03.2026.', 'App na versão 1.2 e na v2.5.', 'CID J45.9 registrado.', 'Código 40.30.13.97.',
