@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test'
+import { montarHistoricoMarcos } from './fixtures/historico-marcos.ts'
 import { respostaDe } from './helpers/ia.ts'
-import { CSRF, cabecalhosDeIp, esperarApp, ipAleatorio, lerEstado } from './helpers/sessao.ts'
+import { CSRF, REAL, cabecalhosDeIp, esperarApp, ipAleatorio, lerEstado } from './helpers/sessao.ts'
 import { expect, test } from './helpers/test.ts'
 
 const PROFISSIONAL = 'Dra. Ana Lima — CRM-FIC 123456'
@@ -165,4 +166,48 @@ test('a 11ª tentativa de código no mesmo minuto responde 429', async ({ novoNa
   expect(bloqueio.status()).toBe(429)
   expect(bloqueio.headers()['retry-after']).toBe('60')
   await expect(pagina.getByTestId('medico-erro')).toHaveText('Muitas tentativas seguidas. Tente de novo em 1 min.')
+})
+
+/* Simulação de usabilidade: a visão do médico dizia "Nenhum ponto em aberto" com um exame repetido no
+   histórico, porque lia os passos gravados — que só existem depois de o paciente clicar em "Reanalisar". */
+test('pontos em aberto vêm do histórico mesmo sem "Reanalisar"; tentativa com código revogado fica no log', async ({
+  page, contas, novoNavegador,
+}) => {
+  await contas.criar({ request: page.request, nome: 'Marcos Vinícius Teixeira', modo: 'vazio' })
+  const { ids } = await montarHistoricoMarcos(page.request, REAL)
+  expect((await lerEstado(page.request)).passos).toEqual([])
+  const comp = await page.request.post('/api/compartilhamentos', { headers: CSRF, data: { para: 'Dra. Ana Lima' } })
+  const { codigo } = await comp.json() as { codigo: string }
+
+  const { contexto, pagina } = await novoNavegador()
+  await pagina.goto('/#/acesso')
+  const abertura = await informarCodigo(pagina, codigo)
+  expect(abertura.status()).toBe(200)
+  const corpo = await abertura.json() as { passos: unknown[]; pontosEmAberto: { tipo: string; texto: string; ancoras: string[] }[] }
+  expect(corpo.passos).toEqual([])
+  /* Perfil lipídico pedido 21 dias depois de feito. */
+  expect(corpo.pontosEmAberto).toContainEqual({
+    tipo: 'repeticao', ancoras: [ids.lipidico, ids.pedidoLipidico], texto: expect.stringMatching(/^Possível exame repetido: pedido de perfil lipídico/),
+  })
+
+  const verificar = () => contexto.request.post('/api/acesso-medico/verificar', { headers: CSRF, data: { codigo } })
+  expect((await verificar()).status()).toBe(204)
+
+  await page.goto('/#/app/resumo')
+  await esperarApp(page)
+  await page.getByTestId('acesso-revogar').click()
+  await expect(page.getByTestId('acesso-painel')).toHaveCount(0)
+  expect((await verificar()).status()).toBe(404)
+
+  await pagina.reload()
+  expect((await informarCodigo(pagina, codigo)).status()).toBe(404)
+  await expect(pagina.locator('#medico-codigo-erro')).toHaveText(CODIGO_INVALIDO)
+
+  const [recusa] = (await lerEstado(page.request)).acessos
+  expect(recusa).toMatchObject({
+    quem: PROFISSIONAL, papel: 'Profissional de saúde (via código)', acao: 'Tentativa recusada: código revogado',
+    itens: `••••${codigo.slice(-2)}`,
+  })
+  await page.goto('/#/app/privacidade')
+  await expect(page.locator('.auditoria li').filter({ hasText: 'Tentativa recusada: código revogado' })).toContainText(PROFISSIONAL)
 })
