@@ -137,6 +137,8 @@ Antes de mexer no código, confirme que o modelo responde na sua conta:
 3. Selecione o **compartment** (o mesmo de `OCI_COMPARTMENT_OCID`).
 4. Clique em **Playground** → **Chat**.
 5. Escolha o modelo **meta.llama-3.3-70b-instruct** e mande uma mensagem curta (ex.: "Olá, responda em uma frase").
+
+   > **Licença da Meta (passo único, obrigatório):** o Llama 3.3 só responde depois que a licença da Meta é aceita no Playground. No primeiro uso do modelo, o console mostra os termos; aceite-os antes de rodar `pnpm smoke:genai` ou o back-end. Sem isso, a primeira chamada pela API falha. Vale para cada conta/tenancy nova.
 6. Clique em **View code**, escolha **TypeScript** e confira no código gerado:
    - o `modelId` (deve ser `meta.llama-3.3-70b-instruct`) → `OCI_GENAI_MODEL_ID`;
    - o `compartmentId` → deve bater com `OCI_COMPARTMENT_OCID`;
@@ -278,6 +280,44 @@ No projeto da Vercel: **Settings → Environment Variables**. Cadastre **as mesm
 - **`OCI_PRIVATE_KEY`**: na Vercel, **cole o conteúdo do `.pem` direto**, com as quebras de linha reais e sem aspas (o campo aceita várias linhas). O formato com `\n` também funciona, porque o back-end aceita os dois.
 - `ORACLE_DB_CONNECT_STRING`: use o **descriptor completo** (ver 5.4), já que não há `tnsnames.ora` no deploy.
 - Depois de alterar variáveis, faça um **redeploy**. Os deploys já existentes não pegam os valores novos.
+
+### 6.3 Deploy na Vercel pela CLI
+
+Foi assim que a versão em produção (`https://nurai-iota.vercel.app`) foi publicada. Rode na raiz do repositório, com o `.env.local` já preenchido (seção 6.1):
+
+```bash
+npx vercel@latest login
+npx vercel link --project nurai
+```
+
+Cadastre as variáveis no ambiente de produção lendo do `.env.local`, **sem imprimir os valores** (o `node --env-file` entende aspas e o PEM multilinha; variáveis vazias são puladas):
+
+```bash
+for NOME in OCI_TENANCY_OCID OCI_USER_OCID OCI_FINGERPRINT OCI_PRIVATE_KEY \
+  OCI_PRIVATE_KEY_PASSPHRASE OCI_REGION OCI_COMPARTMENT_OCID OCI_GENAI_MODEL_ID \
+  OCI_GENAI_ENDPOINT ORACLE_DB_USER ORACLE_DB_PASSWORD ORACLE_DB_CONNECT_STRING \
+  ORACLE_DB_WALLET_PEM_BASE64 ORACLE_DB_WALLET_PASSWORD; do
+  VALOR_OK=$(node --env-file=.env.local -e 'process.stdout.write(process.env[process.argv[1]] ? "1" : "")' "$NOME")
+  [ -n "$VALOR_OK" ] || { echo "pulando $NOME (vazia)"; continue; }
+  node --env-file=.env.local -e 'process.stdout.write(process.env[process.argv[1]])' "$NOME" \
+    | npx vercel env add "$NOME" production
+done
+```
+
+Publique e confira:
+
+```bash
+npx vercel deploy --prod
+curl -s https://<seu-projeto>.vercel.app/api/health
+# esperado: {"ok":true,"genai":"oci","db":"oracle",...}
+```
+
+Para mudanças de roteamento ou de `vercel.json`, valide antes num deploy de preview (`npx vercel deploy`, sem `--prod`): o ambiente local (Hono puro) não reproduz o roteamento da Vercel. Foi num deploy assim que apareceu o 404 das rotas aninhadas corrigido no commit `3640cdd`.
+
+Depois do `link`/`deploy`, confira o `git status`:
+
+- A Vercel CLI pode acrescentar `VERCEL_OIDC_TOKEN` ao `.env.local`. O arquivo não é versionado (`*.local` no `.gitignore`), mas o token é uma credencial: não o copie para outro lugar.
+- A CLI pode acrescentar `.env*` ao `.gitignore`. **Reverta essa linha**: ela esconderia o `.env.example`, que precisa continuar versionado. O `.gitignore` do projeto já ignora `.env`, `*.local` e `.vercel`.
 
 ---
 
