@@ -15,7 +15,7 @@ async function informarCodigo(pagina: Page, codigo: string, profissional = PROFI
   return resposta
 }
 
-test('profissional abre o histórico pelo código, só lê, e perde o acesso quando a paciente revoga', async ({
+test('profissional abre o histórico pelo código, só lê, e perde o acesso quando a paciente revoga @smoke', async ({
   page, contas, novoNavegador,
 }) => {
   const conta = await contas.criar({ request: page.request, nome: 'Helena Duarte Nogueira', modo: 'exemplo' })

@@ -25,7 +25,7 @@ const ROTAS_PROTEGIDAS: { metodo: 'GET' | 'POST' | 'PATCH' | 'DELETE'; caminho: 
   { metodo: 'POST', caminho: '/api/passos/gerar' },
 ]
 
-test('B não vê na tela nem na API o documento que A anexou', async ({ page, contas, novoNavegador }) => {
+test('B não vê na tela nem na API o documento que A anexou @smoke', async ({ page, contas, novoNavegador }) => {
   await contas.criar({ request: page.request, nome: 'Paciente A', modo: 'vazio' })
   const titulo = `Documento só da A ${Date.now()}`
 

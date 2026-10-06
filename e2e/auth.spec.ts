@@ -199,7 +199,7 @@ test.describe('sessão', () => {
     await esperarApp(page)
   })
 
-  test('"Experimentar sem cadastro" abre a conta demo com 24 registros', async ({ page, contas }) => {
+  test('"Experimentar sem cadastro" abre a conta demo com 24 registros @smoke @mobile', async ({ page, contas }) => {
     contas.apagarAoFim(page.request)
     await page.goto('/#/entrar')
     const resposta = page.waitForResponse('**/api/auth/demo')
