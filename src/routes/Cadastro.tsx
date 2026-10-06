@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Campo } from '../components/Campo'
 import { Icon } from '../components/Icon'
 import { Link } from '../components/Link'
@@ -50,7 +51,7 @@ export function Cadastro({ volta }: { volta: string | null }) {
   }
 
   const recusar = (novos: Erros) => {
-    setErros(novos)
+    flushSync(() => setErros(novos))
     focarPrimeiroErro(ORDEM, novos)
   }
 
@@ -71,7 +72,7 @@ export function Cadastro({ volta }: { volta: string | null }) {
         aceiteLgpd: true,
       })
     } catch (erro) {
-      setEnviando(false)
+      flushSync(() => setEnviando(false))
       if (erro instanceof ErroApi && erro.codigo === 'EMAIL_EM_USO') return recusar({ email: erro.message })
       if (erro instanceof ErroApi && erro.codigo === 'VALIDACAO' && Object.keys(erro.campos).length > 0) {
         return recusar(erro.campos)

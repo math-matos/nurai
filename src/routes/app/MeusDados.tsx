@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Campo } from '../../components/Campo'
 import { Icon } from '../../components/Icon'
 import { Falha } from '../../components/ui'
@@ -51,7 +52,7 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
   }
 
   const recusar = (novos: Erros) => {
-    setErros(novos)
+    flushSync(() => setErros(novos))
     focarPrimeiroErro(ORDEM, novos)
   }
 
@@ -80,14 +81,14 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
       const atualizado = await atualizarPerfil(mudancas)
       setForm(formularioDe(atualizado))
       setSalvo(true)
+      setSalvando(false)
     } catch (erro) {
+      flushSync(() => setSalvando(false))
       if (erro instanceof ErroApi && erro.codigo === 'VALIDACAO' && Object.keys(erro.campos).length > 0) {
         recusar(errosDoServidor(erro.campos))
       } else {
         setErroGeral(mensagemDeErro(erro))
       }
-    } finally {
-      setSalvando(false)
     }
   }
 

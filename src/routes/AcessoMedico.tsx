@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Campo } from '../components/Campo'
 import { Icon } from '../components/Icon'
 import { Porta } from '../components/Porta'
@@ -32,7 +33,7 @@ function FormularioCodigo({ aoLiberar }: { aoLiberar: (l: Liberado) => void }) {
   const [enviando, setEnviando] = useState(false)
 
   const recusar = (novos: Erros) => {
-    setErros(novos)
+    flushSync(() => setErros(novos))
     focarPrimeiroErro(ORDEM, novos)
   }
 
@@ -53,7 +54,7 @@ function FormularioCodigo({ aoLiberar }: { aoLiberar: (l: Liberado) => void }) {
       const dados = await api.acessoMedico(limpo, nome)
       aoLiberar({ dados, codigo: limpo, profissional: nome })
     } catch (erro) {
-      setEnviando(false)
+      flushSync(() => setEnviando(false))
       if (erro instanceof ErroApi && erro.codigo === 'CODIGO_INVALIDO') return recusar({ codigo: erro.message })
       if (erro instanceof ErroApi && erro.codigo === 'VALIDACAO' && Object.keys(erro.campos).length > 0) {
         return recusar(erro.campos)

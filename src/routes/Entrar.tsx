@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import { BotaoDemo } from '../components/BotaoDemo'
 import { Campo } from '../components/Campo'
 import { Icon } from '../components/Icon'
@@ -35,8 +36,8 @@ export function Entrar({ volta }: { volta: string | null }) {
     e.preventDefault()
     if (enviando) return
     const locais = validar(email, senha)
-    setErros(locais)
     setErroGeral(null)
+    flushSync(() => setErros(locais))
     if (Object.keys(locais).length > 0) {
       focarPrimeiroErro(ORDEM, locais)
       return
@@ -46,17 +47,18 @@ export function Entrar({ volta }: { volta: string | null }) {
     try {
       await entrar(email.trim(), senha)
     } catch (erro) {
-      setEnviando(false)
+      flushSync(() => setEnviando(false))
       if (erro instanceof ErroApi && erro.codigo === 'VALIDACAO' && Object.keys(erro.campos).length > 0) {
-        setErros(erro.campos)
+        flushSync(() => setErros(erro.campos))
         focarPrimeiroErro(ORDEM, erro.campos)
         return
       }
-      setErroGeral(mensagemDeErro(erro))
-      if (erro instanceof ErroApi && erro.codigo === 'CREDENCIAIS_INVALIDAS') {
-        setSenha('')
-        focar('entrar-senha')
-      }
+      const credenciais = erro instanceof ErroApi && erro.codigo === 'CREDENCIAIS_INVALIDAS'
+      flushSync(() => {
+        setErroGeral(mensagemDeErro(erro))
+        if (credenciais) setSenha('')
+      })
+      if (credenciais) focar('entrar-senha')
     }
   }
 
