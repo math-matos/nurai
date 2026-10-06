@@ -6,6 +6,7 @@ import { pedirJson } from '../json.js'
 import { autorDe, type NovoAcesso } from '../../db/repo.js'
 import { contextoHistorico, descreverPerfil, mensagens } from '../prompts.js'
 import { limparTexto, limparTextos } from '../texto.js'
+import { naVozDoResponsavel, textosNaVoz } from '../voz.js'
 import { dataBR, filtrarAncoras, idsDe, mesAno, normalizar, porData, type ContextoIa } from './comum.js'
 
 export interface RespostaResumo {
@@ -117,7 +118,8 @@ export async function gerarResumo(
   const fatos = derivarFatos(eventos)
   const abertos = pontosEmAberto(fatos)
   const semBase = (sintese: string): RespostaResumo => ({
-    especialidade, sintese: [sintese], pontos: [], perguntasSugeridas: [], pontosEmAberto: abertos, aviso: AVISO, geradoPor: llm.nome,
+    especialidade, sintese: [naVozDoResponsavel(sintese, perfil)], pontos: [], perguntasSugeridas: [], pontosEmAberto: abertos,
+    aviso: naVozDoResponsavel(AVISO, perfil), geradoPor: llm.nome,
   })
   if (!eventos.length) {
     return semBase(`Seu histórico ainda está vazio, então não há registros para montar um resumo de ${especialidade}. Anexe exames ou laudos em Fontes e gere o resumo de novo.`)
@@ -147,5 +149,14 @@ export async function gerarResumo(
     }
   }
   await repo.registrarAcesso({ ...autor, itens: especialidade })
-  return { especialidade, ...corpo, pontosEmAberto: abertos, aviso: AVISO, geradoPor: llm.nome }
+  /* Os pontos em aberto ficam como o médico os vê; o resto vai na voz de quem usa a conta. */
+  return {
+    especialidade,
+    sintese: textosNaVoz(corpo.sintese, perfil),
+    pontos: corpo.pontos.map((p) => ({ ...p, texto: naVozDoResponsavel(p.texto, perfil) })),
+    perguntasSugeridas: textosNaVoz(corpo.perguntasSugeridas, perfil),
+    pontosEmAberto: abertos,
+    aviso: naVozDoResponsavel(AVISO, perfil),
+    geradoPor: llm.nome,
+  }
 }
