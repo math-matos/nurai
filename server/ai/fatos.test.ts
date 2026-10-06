@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { EVENTOS } from '../../src/data/seed.js'
 import type { Evento } from '../../src/data/types.js'
 import { DEMO_MARCOS } from '../teste/demo-marcos.js'
-import { derivarFatos, serializarFatos } from './fatos.js'
+import { derivarFatos, pontosEmAberto, serializarFatos } from './fatos.js'
 
 const base = { instituicao: 'Lab', fonte: 'laboratorio', sinal: 'info', tags: [], origem: 'RNDS' } as const
 const evento = (e: Partial<Evento> & Pick<Evento, 'id' | 'data'>): Evento =>
@@ -290,5 +290,24 @@ describe('derivarFatos — retorno vencido (evento real de produção)', () => {
     expect(retornos([SEGUIMENTO, consulta('x3', '2026-04-20', ' pneumologia ')])).toEqual([])
     expect(retornos([SEGUIMENTO, consulta('x4', '2026-01-10')])).toHaveLength(1)
     expect(retornos([SEGUIMENTO, consulta('x5', '2026-05-20', 'Cardiologia')])).toHaveLength(1)
+  })
+})
+
+describe('pontosEmAberto', () => {
+  it('no seed: o Doppler repetido e as duas pendências, em texto descritivo e com as âncoras dos fatos', () => {
+    const pontos = pontosEmAberto(derivarFatos(EVENTOS, '2026-09-01'))
+    expect(pontos.map(({ tipo, ancoras }) => ({ tipo, ancoras }))).toEqual([
+      { tipo: 'repeticao', ancoras: ['e22', 'e24'] },
+      { tipo: 'retorno', ancoras: ['e14'] },
+      { tipo: 'reavaliacao', ancoras: ['e16', 'e15'] },
+    ])
+    expect(pontos[0].texto).toBe('Possível exame repetido: pedido de ultrassom de carótidas em 08/07/2026 (UBS Vila Mariana), 42 dias depois de "Ultrassom Doppler de carótidas" realizado em 27/05/2026 (Instituto de Imagem Anhangá).')
+    expect(pontos[2].texto).toContain('Reavaliação de TSH pedida em 10/02/2025')
+    /* O profissional lê fatos, não ordens ao paciente. */
+    for (const { texto } of pontos) expect(texto).not.toMatch(/^(Levar|Fazer|Repetir|Retomar|Agendar)/)
+  })
+
+  it('histórico sem fatos não tem pontos em aberto', () => {
+    expect(pontosEmAberto(derivarFatos([]))).toEqual([])
   })
 })
