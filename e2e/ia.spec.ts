@@ -124,8 +124,15 @@ test.describe('sobre o histórico do Marcos', () => {
     const json = await res.json()
     expect(json.especialidade).toBe('Clínica médica')
 
+    /* A síntese com IA é o passo principal: botão primário, e a tela vai até ela quando fica pronta. */
+    await expect(page.getByText('resumo automático dos registros', { exact: false }).first()).toBeVisible()
+    await expect(page.getByTestId('ia-resumo')).not.toHaveClass(/btn--ghost/)
+    await expect(page.getByTestId('acesso-gerar')).toHaveClass(/btn--ghost/)
     const sintese = page.getByTestId('resumo-sintese')
-    await expect(sintese).toContainText('Síntese para clínica médica')
+    await expect(sintese).toContainText('Síntese com IA para clínica médica')
+    await expect(sintese).toBeFocused()
+    await expect(sintese).toBeInViewport()
+    await expect(page.locator('[aria-live="polite"]').filter({ hasText: 'Síntese para clínica médica pronta' })).toHaveCount(1)
     await expect(sintese).toContainText(json.sintese[0])
     const pontos: { texto: string; ancoras: string[] }[] = json.pontos
     afirmarTextoDeIa([...json.sintese, ...pontos.map((p) => p.texto), ...json.perguntasSugeridas], eventos, 'resumo')

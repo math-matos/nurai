@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Icon } from '../../components/Icon'
 import { AvisoIa, Falha, Regua, SeloIa, VazioHistorico } from '../../components/ui'
 import { formatarData, ordenarRecentes } from '../../lib/formato'
@@ -18,6 +19,7 @@ const FOCOS_EXEMPLO: Record<string, { medico: string; desde: string; ids: string
 }
 
 const CLINICA = 'Clínica médica'
+const ID_SINTESE = 'resumo-sintese'
 const OUTRA = 'outra'
 const MAX_ESPECIALIDADE = 80
 
@@ -56,6 +58,9 @@ function FolhaResumo() {
   const [gerandoPara, setGerandoPara] = useState<string | null>(null)
   const [erroIa, setErroIa] = useState<{ foco: string; mensagem: string; repetivel: boolean } | null>(null)
   const [compartilhando, setCompartilhando] = useState(false)
+  const [revogado, setRevogado] = useState<{ codigo: string; quando: string } | null>(null)
+  const [sintesePronta, setSintesePronta] = useState('')
+  const avisoRevogado = useRef<HTMLParagraphElement>(null)
 
   const foco = escolha === OUTRA ? outra.trim() : escolha
   const rotuloFoco = foco || 'outra especialidade'
@@ -84,7 +89,17 @@ function FolhaResumo() {
     setErroIa(null)
     try {
       const resumo = await api.resumo(alvoAtual)
-      setSinteses((s) => ({ ...s, [alvoAtual]: resumo }))
+      flushSync(() => {
+        setSinteses((s) => ({ ...s, [alvoAtual]: resumo }))
+        setGerandoPara(null)
+        setSintesePronta(`Síntese para ${alvoAtual.toLowerCase()} pronta, logo abaixo.`)
+      })
+      /* A síntese nasce abaixo da dobra no celular: leva a pessoa até ela. */
+      const secao = document.getElementById(ID_SINTESE)
+      if (secao?.dataset.foco === alvoAtual) {
+        secao.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        secao.focus({ preventScroll: true })
+      }
     } catch (erro) {
       setErroIa({ foco: alvoAtual, mensagem: mensagemDeErro(erro), repetivel: podeRepetir(erro) })
     } finally {
@@ -95,11 +110,19 @@ function FolhaResumo() {
   const compartilhar = async () => {
     if (compartilhando) return
     setCompartilhando(true)
+    setRevogado(null)
     await gerarCompartilhamento(alvo ? alvo.medico : foco ? `Profissional de ${foco.toLowerCase()}` : 'Profissional de saúde')
     setCompartilhando(false)
   }
 
   const eventoPorId = (id: string) => eventos.find((e) => e.id === id)
+
+  /* O painel do código some ao revogar: a confirmação fica aqui, e o foco vem junto. */
+  const aposRevogar = (codigo: string) => {
+    const quando = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).replace(', ', ' às ')
+    flushSync(() => setRevogado({ codigo, quando }))
+    avisoRevogado.current?.focus()
+  }
 
   return (
     <div className="resumo">
@@ -130,14 +153,14 @@ function FolhaResumo() {
             <Icon nome="papel" tamanho={16} /> Imprimir
           </button>
           <button
-            type="button" className="btn btn--ghost" disabled={gerandoPara !== null || !foco}
+            type="button" className="btn" disabled={gerandoPara !== null || !foco}
             onClick={() => { void gerarResumo() }} data-testid={TID.iaResumo}
           >
             <Icon nome="copiloto" tamanho={16} />
             {gerandoPara === foco ? 'Gerando resumo…' : sintese ? 'Gerar de novo com IA' : 'Gerar resumo com IA'}
           </button>
           <button
-            type="button" className="btn" disabled={compartilhando}
+            type="button" className="btn btn--ghost" disabled={compartilhando}
             onClick={() => { void compartilhar() }} data-testid={TID.acessoGerar}
           >
             <Icon nome="chave" tamanho={16} /> {compartilhando ? 'Gerando acesso…' : 'Gerar acesso temporário'}
@@ -145,12 +168,32 @@ function FolhaResumo() {
         </div>
       </div>
 
-      {compartilhamento && <PainelAcesso key={compartilhamento.codigo} compartilhamento={compartilhamento} />}
+      <p className="resumo__explica">
+        A folha abaixo é o <strong>resumo automático dos registros</strong>, montado sem IA. Para
+        acrescentar uma síntese com os pontos de atenção para a especialidade escolhida, use
+        {' '}<strong>Gerar resumo com IA</strong>.
+      </p>
+      <span className="sr-only" aria-live="polite">{sintesePronta}</span>
+
+      {compartilhamento && (
+        <PainelAcesso key={compartilhamento.codigo} compartilhamento={compartilhamento} aoRevogar={aposRevogar} />
+      )}
+      <div aria-live="polite">
+        {revogado && !compartilhamento && (
+          <p className="recado-app" tabIndex={-1} ref={avisoRevogado} data-testid={TID.acessoRevogado}>
+            <Icon nome="cadeado" tamanho={16} />
+            <span>
+              Acesso revogado em <span className="num">{revogado.quando}</span>. O código{' '}
+              <strong className="num">{revogado.codigo}</strong> não abre mais o histórico.
+            </span>
+          </p>
+        )}
+      </div>
 
       <article className="folha-resumo">
         <header className="folha-resumo__cabeca">
           <div>
-            <p className="label">Resumo pré-consulta · {rotuloFoco}</p>
+            <p className="label">Resumo automático dos registros · {rotuloFoco}</p>
             <h2>{perfil.nome}</h2>
             {identificacao && <p className="folha-resumo__ident num">{identificacao}</p>}
           </div>
@@ -180,8 +223,11 @@ function FolhaResumo() {
         )}
 
         {(sintese || gerandoPara === foco || erroIa?.foco === foco) && (
-          <section className="folha-resumo__bloco sintese-ia" aria-live="polite" data-testid={TID.resumoSintese}>
-            <h3>Síntese para {rotuloFoco.toLowerCase()}</h3>
+          <section
+            id={ID_SINTESE} data-foco={foco} className="folha-resumo__bloco sintese-ia" tabIndex={-1}
+            aria-labelledby={`${ID_SINTESE}-titulo`} aria-busy={gerandoPara === foco} data-testid={TID.resumoSintese}
+          >
+            <h3 id={`${ID_SINTESE}-titulo`}>Síntese com IA para {rotuloFoco.toLowerCase()}</h3>
             {gerandoPara === foco && (
               <div className="sintese-ia__carregando">
                 <span className="esqueleto" style={{ width: '90%' }} />
@@ -317,7 +363,10 @@ function FolhaResumo() {
 }
 
 /* Código de acesso do profissional: validade, onde usar, copiar e revogar. */
-function PainelAcesso({ compartilhamento }: { compartilhamento: Compartilhamento }) {
+function PainelAcesso({ compartilhamento, aoRevogar }: {
+  compartilhamento: Compartilhamento
+  aoRevogar: (codigo: string) => void
+}) {
   const { revogarCompartilhamento } = useAcoes()
   const [copia, setCopia] = useState<'ok' | 'falhou' | null>(null)
   const [revogando, setRevogando] = useState(false)
@@ -336,7 +385,8 @@ function PainelAcesso({ compartilhamento }: { compartilhamento: Compartilhamento
     if (revogando) return
     setRevogando(true)
     const ok = await revogarCompartilhamento(compartilhamento.codigo)
-    if (!ok) setRevogando(false)
+    if (ok) aoRevogar(compartilhamento.codigo)
+    else setRevogando(false)
   }
 
   return (
