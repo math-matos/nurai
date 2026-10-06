@@ -1,6 +1,6 @@
 import type {
   AcessoLog, Centro, Consentimento, Ensaio, Evento, FonteId, ProximoPasso, TipoId,
-} from './types'
+} from './types.js'
 
 /* ------------------------------------------------------------------ *
  * Dados sintéticos. Nenhuma pessoa, instituição ou resultado é real.  *

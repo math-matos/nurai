@@ -399,11 +399,11 @@ export function Projeto() {
             <h2>Estrutura tecnológica</h2>
 
             <p className="doc__lead">
-              O protótipo desta entrega roda inteiro no navegador: React com TypeScript sobre
-              Vite, sem servidor e sem banco, com todo o estado em <code>localStorage</code>.
-              A decisão é deliberada — nesta fase o que precisa ser testado é o produto, não a
-              infraestrutura. O desenho abaixo separa o que já existe do que a fase seguinte
-              precisa construir.
+              O protótipo desta entrega tem front em React com TypeScript sobre Vite e uma API
+              em Hono na Vercel, que chama o OCI Generative AI (São Paulo) e grava o histórico no
+              Oracle Autonomous Database. Sem credenciais, a mesma API sobe com IA simulada e
+              banco em memória — o produto segue testável em qualquer máquina. O desenho abaixo
+              separa o que já existe do que a fase seguinte precisa construir.
             </p>
 
             <figure className="doc__figura">
@@ -422,10 +422,10 @@ export function Projeto() {
                   <tr><th>Camada</th><th>Implementação atual</th><th>Por quê</th></tr>
                 </thead>
                 <tbody>
-                  <tr><th scope="row">Interface</th><td>React 19 + TypeScript, roteamento por hash, CSS próprio com tokens</td><td>Zero dependência de runtime: o protótipo abre em qualquer lugar, inclusive offline</td></tr>
-                  <tr><th scope="row">Domínio</th><td>Modelo de evento clínico tipado, com fonte, origem, medidas e faixa de referência</td><td>É o mesmo formato que a versão com servidor vai persistir — o modelo já nasce estável</td></tr>
-                  <tr><th scope="row">Estado</th><td>Store própria em memória espelhada em <code>localStorage</code>, com assinatura</td><td>Troca por chamada de API na fase seguinte sem tocar em nenhuma tela</td></tr>
-                  <tr><th scope="row">Inteligência</th><td>Motor de intenção determinístico que sempre devolve as âncoras da resposta</td><td>Fixa o contrato de produto antes do modelo: nenhuma frase sem registro que a sustente</td></tr>
+                  <tr><th scope="row">Interface</th><td>React 19 + TypeScript, roteamento por hash, CSS próprio com tokens</td><td>Nenhum framework de UI além do React: as telas ficam leves e sob controle do time</td></tr>
+                  <tr><th scope="row">Domínio</th><td>Modelo de evento clínico tipado, com fonte, origem, medidas e faixa de referência</td><td>É o mesmo formato que a API valida e o Oracle Database persiste — o modelo já nasce estável</td></tr>
+                  <tr><th scope="row">Estado</th><td>Store própria com assinatura, alimentada pela API; histórico no Oracle Autonomous Database</td><td>As telas falam só com a store — a API e o banco ficam atrás dela</td></tr>
+                  <tr><th scope="row">Inteligência</th><td>OCI Generative AI (Llama 3.3 70B) para extração, explicação, copiloto, resumo e pendências; motor determinístico no modo simulado</td><td>Âncoras que não existem no histórico são descartadas: nenhuma frase sem registro que a sustente</td></tr>
                 </tbody>
               </table>
             </div>
@@ -462,8 +462,8 @@ export function Projeto() {
             <h3>A camada que a próxima fase precisa ocupar</h3>
             <p>
               A arquitetura foi desenhada com um encaixe explícito: as telas conversam com uma
-              store, e não com o navegador. Trocar essa store por uma API é a única mudança
-              necessária para o protótipo virar produto. O que essa camada precisa entregar:
+              store, e não com o banco. Essa store já fala com a API; para o protótipo virar
+              produto, falta o restante da camada gerenciada. O que ela precisa entregar:
             </p>
             <div className="rolagem-x">
               <table className="doc__tabela">
@@ -481,10 +481,10 @@ export function Projeto() {
               </table>
             </div>
             <p className="doc__nota">
-              O Challenge pede a incorporação de uma tecnologia da empresa parceira. Este é o
-              ponto exato do desenho onde ela entra — a camada gerenciada acima, e não a
-              interface. A escolha do serviço fica registrada como a próxima decisão de
-              arquitetura, para ser feita com o requisito na mão em vez de encaixada depois.
+              O Challenge pede a incorporação de uma tecnologia da empresa parceira. Ela entra
+              exatamente na camada gerenciada, e não na interface: OCI Generative AI e Oracle
+              Autonomous Database já atendem a API. Documentos, busca semântica, fila e
+              segredos gerenciados seguem como a próxima decisão de arquitetura.
             </p>
           </section>
 

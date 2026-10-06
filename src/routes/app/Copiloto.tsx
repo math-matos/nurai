@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { Marca, Serie } from '../../components/ui'
-import { formatarData } from '../../lib/formato'
-import { SUGESTOES } from '../../data/copiloto'
-import { navegar } from '../../lib/router'
-import { perguntar, useEstado } from '../../lib/store'
+import { Ancoras, AvisoIa, Falha, Marca, SeloIa, Serie, VazioHistorico } from '../../components/ui'
+import { SUGESTOES } from '../../data/sugestoes'
+import { perguntar, tentarTurnoDeNovo, useEstado } from '../../lib/store'
+import { TID } from '../../lib/testids'
 
 export function Copiloto() {
   const { eventos, conversa } = useEstado()
   const [texto, setTexto] = useState('')
   const fim = useRef<HTMLDivElement>(null)
-  const pensando = conversa.some((t) => !t.resposta)
+  const pensando = conversa.some((t) => t.carregando)
 
   useEffect(() => {
     fim.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -29,8 +28,9 @@ export function Copiloto() {
           <Marca tamanho={22} com={false} />
           <div>
             <p className="copiloto__saudacao">
-              Posso responder sobre os <span className="num">{eventos.length}</span> registros
-              que estão reunidos aqui — e só sobre eles.
+              {eventos.length > 0
+                ? <>Posso responder sobre os <span className="num">{eventos.length}</span> registros que estão reunidos aqui — e só sobre eles.</>
+                : 'Ainda não há registros reunidos aqui, então ainda não tenho sobre o que responder.'}
             </p>
             <p className="copiloto__regra">
               Toda resposta vem com os registros que a sustentam. Quando a informação não
@@ -40,7 +40,15 @@ export function Copiloto() {
           </div>
         </div>
 
-        {conversa.length === 0 && (
+        {conversa.length === 0 && eventos.length === 0 && (
+          <VazioHistorico
+            icone="copiloto"
+            titulo="Anexe um documento para começar a conversa"
+            texto="O copiloto só responde com base no que está no seu histórico. Envie um laudo ou resultado de exame e volte para perguntar sobre ele."
+          />
+        )}
+
+        {conversa.length === 0 && eventos.length > 0 && (
           <div className="sugestoes">
             <p className="label">Perguntas para começar</p>
             <div className="sugestoes__lista">
@@ -61,50 +69,31 @@ export function Copiloto() {
               {t.pergunta}
             </p>
 
-            {t.resposta ? (
-              <div className="turno__resposta">
-                {t.resposta.texto.map((p) => <p key={p.slice(0, 24)}>{p}</p>)}
-
-                {t.resposta.serie && <Serie {...t.resposta.serie} />}
-
-                {t.resposta.aviso && (
-                  <p className="turno__aviso">
-                    <Icon nome="alerta" tamanho={15} />
-                    {t.resposta.aviso}
-                  </p>
-                )}
-
-                {t.resposta.ancoras.length > 0 && (
-                  <div className="ancoras">
-                    <p className="label">Registros que sustentam esta resposta</p>
-                    <ul>
-                      {t.resposta.ancoras.map((id) => {
-                        const e = eventos.find((ev) => ev.id === id)
-                        if (!e) return null
-                        return (
-                          <li key={id}>
-                            <button
-                              type="button" className="ancora"
-                              onClick={() => navegar(`/app/linha/${id}`)}
-                            >
-                              <span className="ancora__data num">{formatarData(e.data)}</span>
-                              <span className="ancora__titulo">{e.titulo}</span>
-                              <span className="ancora__onde">{e.instituicao}</span>
-                              <Icon nome="setaCurta" tamanho={14} />
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            ) : (
+            {t.carregando ? (
               <div className="turno__resposta turno__resposta--carregando" aria-live="polite">
                 <span className="sr-only">Consultando o histórico</span>
                 <span className="esqueleto" style={{ width: '92%' }} />
                 <span className="esqueleto" style={{ width: '78%' }} />
                 <span className="esqueleto" style={{ width: '86%' }} />
+              </div>
+            ) : t.resposta ? (
+              <div className="turno__resposta" data-testid={TID.copilotoResposta}>
+                {t.resposta.texto.map((p, i) => <p key={i}>{p}</p>)}
+
+                {t.resposta.serie && t.resposta.serie.pontos.length > 0 && <Serie {...t.resposta.serie} />}
+
+                {t.resposta.aviso && <AvisoIa>{t.resposta.aviso}</AvisoIa>}
+
+                <Ancoras ids={t.resposta.ancoras} eventos={eventos} />
+
+                <SeloIa geradoPor={t.resposta.geradoPor} />
+              </div>
+            ) : (
+              <div className="turno__resposta">
+                <Falha
+                  mensagem={t.erro ?? 'Não foi possível responder a esta pergunta.'}
+                  aoTentar={pensando || t.repetivel === false ? undefined : () => tentarTurnoDeNovo(t.id)}
+                />
               </div>
             )}
           </article>
@@ -119,14 +108,10 @@ export function Copiloto() {
         <input
           className="field" value={texto} onChange={(e) => setTexto(e.target.value)}
           placeholder="Pergunte sobre exames, remédios, pendências…"
-          aria-label="Sua pergunta"
+          aria-label="Sua pergunta" data-testid={TID.copilotoPergunta}
         />
-        <button
-          type="submit"
-          className={`btn${pensando ? ' btn--busy' : ''}`}
-          disabled={!texto.trim() || pensando}
-        >
-          Perguntar <Icon nome="seta" tamanho={16} />
+        <button type="submit" className="btn" disabled={!texto.trim() || pensando} data-testid={TID.copilotoEnviar}>
+          {pensando ? 'Consultando o histórico…' : <>Perguntar <Icon nome="seta" tamanho={16} /></>}
         </button>
       </form>
     </div>

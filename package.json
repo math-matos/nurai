@@ -5,20 +5,47 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "tsx watch server/dev.ts",
+    "dev:all": "pnpm run --parallel \"/^dev:(web|api)$/\"",
+    "dev:web": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke:genai": "tsx server/scripts/smoke-genai.ts",
+    "smoke:db": "tsx server/scripts/smoke-db.ts",
+    "db:setup": "tsx server/scripts/db-setup.ts",
+    "test:oci": "pnpm smoke:genai && pnpm smoke:db",
+    "eval:ia": "tsx server/scripts/eval-ia.ts",
+    "e2e": "playwright test",
+    "e2e:real": "node -e \"if(!process.env.E2E_BASE_URL){console.error('defina E2E_BASE_URL');process.exit(1)}\" && playwright test",
+    "e2e:real:local": "E2E_REAL=1 playwright test --project=desktop",
+    "e2e:prod": "E2E_BASE_URL=https://nurai-iota.vercel.app E2E_REAL=1 playwright test --grep @smoke --project=desktop --retries=0 && E2E_BASE_URL=https://nurai-iota.vercel.app E2E_REAL=1 playwright test --grep @mobile --project=mobile --retries=0",
+    "e2e:contas": "tsx server/scripts/contas-e2e.ts",
+    "e2e:fixtures": "tsx e2e/fixtures/gerar.ts",
+    "e2e:verificar": "tsx e2e/fixtures/verificar.ts",
+    "e2e:typecheck": "tsc -p e2e/tsconfig.json"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.3",
+    "hono": "^4.13.13",
+    "oci-common": "^2.142.1",
+    "oci-generativeaiinference": "^2.142.1",
+    "oracledb": "^7.0.1",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "unpdf": "^1.8.1",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@rolldown/plugin-babel": "^0.2.3",
     "@types/babel__core": "^7.20.5",
     "@types/node": "^24.13.3",
+    "@types/oracledb": "^7.0.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
@@ -27,8 +54,10 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.4",
     "globals": "^17.11.0",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.67.0",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "vitest": "^5.0.3"
   }
 }

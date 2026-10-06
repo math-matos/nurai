@@ -1,20 +1,44 @@
+import { useEffect, useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { ChipFonte } from '../../components/ui'
+import { ChipFonte, VazioHistorico } from '../../components/ui'
 import { formatarDataCurta } from '../../lib/formato'
-import { useAcoes, useEstado } from '../../lib/store'
+import { useAcoes, useEstado, usePerfil } from '../../lib/store'
+import { ExcluirConta, MeusDados } from './MeusDados'
 
 export function Privacidade() {
-  const { consentimentos, acessos } = useEstado()
-  const { alternarConsentimento } = useAcoes()
+  const { consentimentos, acessos, eventos } = useEstado()
+  const perfil = usePerfil()
+  const { alternarConsentimento, atualizarAcessos } = useAcoes()
+  const [alternando, setAlternando] = useState<string | null>(null)
   const ativos = consentimentos.filter((c) => c.ativo).length
+
+  useEffect(() => { void atualizarAcessos() }, [atualizarAcessos])
+
+  const alternar = async (id: string) => {
+    if (alternando) return
+    setAlternando(id)
+    await alternarConsentimento(id)
+    setAlternando(null)
+  }
 
   return (
     <div className="privacidade">
+      {eventos.length === 0 && (
+        <VazioHistorico
+          icone="escudo"
+          titulo="Ainda não há dados de saúde para proteger aqui"
+          texto="As permissões e o registro de acessos ganham sentido quando o histórico tem documentos. Comece anexando um laudo ou resultado de exame."
+        />
+      )}
+
+      <MeusDados key={perfil.pacienteId} perfil={perfil} />
+
       <section className="painel">
         <div className="painel__cabeca">
           <h2>
-            <span className="num">{ativos}</span> de <span className="num">{consentimentos.length}</span> permissões
-            estão ativas agora
+            {consentimentos.length > 0
+              ? <><span className="num">{ativos}</span> de <span className="num">{consentimentos.length}</span> permissões estão ativas agora</>
+              : 'Nenhuma instituição tem permissão no momento'}
           </h2>
           <p>
             Cada instituição vê apenas o escopo que você concedeu, pelo tempo que você
@@ -23,6 +47,9 @@ export function Privacidade() {
           </p>
         </div>
 
+        {consentimentos.length === 0 && (
+          <p className="painel__nada">As permissões aparecem aqui quando você conecta uma instituição em Fontes e anexos.</p>
+        )}
         <ul className="permissoes">
           {consentimentos.map((c) => (
             <li key={c.id} className={`permissao${c.ativo ? '' : ' permissao--off'}`}>
@@ -36,8 +63,8 @@ export function Privacidade() {
               <ChipFonte fonte={c.fonte} curto />
               <label className="interruptor">
                 <input
-                  type="checkbox" checked={c.ativo}
-                  onChange={() => alternarConsentimento(c.id)}
+                  type="checkbox" checked={c.ativo} disabled={alternando === c.id}
+                  onChange={() => { void alternar(c.id) }}
                 />
                 <span className="interruptor__trilho" aria-hidden="true"><span /></span>
                 <span className="interruptor__estado">{c.ativo ? 'ativo' : 'revogado'}</span>
@@ -57,6 +84,7 @@ export function Privacidade() {
           </p>
         </div>
 
+        {acessos.length === 0 && <p className="painel__nada">Nenhum acesso registrado ainda.</p>}
         <ol className="auditoria">
           {acessos.map((a) => (
             <li key={a.id}>
@@ -82,7 +110,7 @@ export function Privacidade() {
           </div>
           <div>
             <dt>Titularidade</dt>
-            <dd>O histórico pertence à paciente. Instituições recebem acesso, nunca posse — e todo acesso é temporário por padrão.</dd>
+            <dd>O histórico pertence ao titular da conta. Instituições recebem acesso, nunca posse — e todo acesso é temporário por padrão.</dd>
           </div>
           <div>
             <dt>Revogação</dt>
@@ -94,10 +122,12 @@ export function Privacidade() {
           </div>
           <div>
             <dt>Neste protótipo</dt>
-            <dd>Nada trafega: todo o estado vive no armazenamento local do seu navegador e some quando você reinicia a demonstração.</dd>
+            <dd>O histórico fica no servidor da demonstração (Oracle Database ou memória, conforme o selo no topo), separado por conta, e cada concessão, revogação e anexo entra neste registro. Só a conversa com o copiloto fica no seu navegador, e é apagada ao sair. Excluir a conta apaga tudo.</dd>
           </div>
         </dl>
       </section>
+
+      <ExcluirConta convidado={perfil.convidado} />
     </div>
   )
 }

@@ -1,0 +1,18 @@
+# Oracle local só para testes (pnpm db:setup / ORACLE_DB_TEST=1 pnpm test server/db).
+# ORACLE_DB_USER=nurai ORACLE_DB_PASSWORD=<APP_USER_PASSWORD> ORACLE_DB_CONNECT_STRING=localhost:1521/FREEPDB1
+services:
+  oracle:
+    image: gvenzl/oracle-free:slim
+    container_name: nurai-oracle
+    ports:
+      - '1521:1521'
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_LOCAL_SYS_PASSWORD:-NuraiSys123}
+      APP_USER: nurai
+      APP_USER_PASSWORD: ${ORACLE_LOCAL_APP_PASSWORD:-NuraiApp123}
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s

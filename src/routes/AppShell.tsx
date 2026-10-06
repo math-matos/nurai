@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon, type NomeIcone } from '../components/Icon'
-import { Marca } from '../components/ui'
+import { Falha, Marca, Vazio } from '../components/ui'
 import { Link } from '../components/Link'
 import { navegar } from '../lib/router'
-import { useAcoes, useEstado } from '../lib/store'
-import { PACIENTE } from '../data/seed'
+import { concluirOnboarding, definir, sair, useAcoes, useEstado, usePerfil } from '../lib/store'
+import { mensagemDeErro } from '../lib/api'
+import { TID } from '../lib/testids'
 import { LinhaDoTempo } from './app/LinhaDoTempo'
 import { Fontes } from './app/Fontes'
 import { Copiloto } from './app/Copiloto'
@@ -24,15 +25,56 @@ const NAV: { para: string; rotulo: string; icone: NomeIcone; nota: string }[] = 
 
 export function AppShell({ rota }: { rota: string }) {
   const [menuAberto, setMenuAberto] = useState(false)
+  const [confirmandoReinicio, setConfirmandoReinicio] = useState(false)
+  const [zerando, setZerando] = useState(false)
+  const [saindo, setSaindo] = useState(false)
   const estado = useEstado()
-  const { reiniciar } = useAcoes()
+  const perfil = usePerfil()
+  const { carregar, descartarFalha, reiniciar } = useAcoes()
+  const exemplo = perfil.onboarding === 'exemplo'
+  const meta = [
+    perfil.idade !== undefined && `${perfil.idade} anos`,
+    perfil.cartaoSus && `Cartão SUS ${perfil.cartaoSus.slice(-4)}`,
+  ].filter(Boolean).join(' · ')
+
+  const fecharReinicio = () => {
+    setConfirmandoReinicio(false)
+    setMenuAberto(false)
+    navegar('/app/linha')
+  }
+
+  /* Troca o ponto de partida: apaga tudo e recomeça sem o histórico de exemplo. */
+  const comecarDoZero = async () => {
+    if (zerando) return
+    setZerando(true)
+    try {
+      await concluirOnboarding('vazio')
+      fecharReinicio()
+    } catch (erro) {
+      setZerando(false)
+      setConfirmandoReinicio(false)
+      definir(() => ({ falhaAcao: mensagemDeErro(erro) }))
+    }
+  }
+
+  const encerrar = async (destino = '/') => {
+    if (saindo) return
+    setSaindo(true)
+    await sair(destino)
+  }
+
+  /* A sessão muda de identidade a cada troca de usuário ou de ponto de partida: aí o histórico é buscado de novo. */
+  useEffect(() => { void carregar() }, [carregar, estado.sessao])
 
   const segmentos = rota.split('/').filter(Boolean) // ['app', 'linha', 'e09']
   const secao = segmentos[1] ?? 'linha'
   const parametro = segmentos[2]
 
-  const atual = NAV.find((n) => n.para === `/app/${secao}`) ?? NAV[0]
+  const atual = NAV.find((n) => n.para === `/app/${secao}`)
+  const titulo = atual?.rotulo ?? 'Página não encontrada'
   const pendencias = estado.passos.filter((p) => !p.feito).length
+
+  useEffect(() => { document.title = `${titulo} · Nurai` }, [titulo])
 
   return (
     <div className="app">
@@ -50,18 +92,34 @@ export function AppShell({ rota }: { rota: string }) {
           </button>
         </div>
 
-        <div className="paciente">
-          <span className="paciente__iniciais" aria-hidden="true">{PACIENTE.iniciais}</span>
+        <div className="paciente" data-testid={TID.shellPerfil}>
+          <span className="paciente__iniciais" aria-hidden="true">{perfil.iniciais}</span>
           <div>
-            <p className="paciente__nome">{PACIENTE.nome}</p>
-            <p className="paciente__meta num">
-              {PACIENTE.idade} anos · Cartão SUS {PACIENTE.cartaoSus.slice(-4)}
-            </p>
+            <p className="paciente__nome" data-testid={TID.shellPerfilNome}>{perfil.nome}</p>
+            {meta && <p className="paciente__meta num">{meta}</p>}
           </div>
         </div>
-        <ul className="paciente__condicoes">
-          {PACIENTE.condicoes.map((c) => <li key={c} className="chip">{c}</li>)}
-        </ul>
+        {perfil.condicoes.length > 0 && (
+          <ul className="paciente__condicoes" aria-label="Condições">
+            {perfil.condicoes.map((c) => <li key={c} className="chip">{c}</li>)}
+          </ul>
+        )}
+
+        {perfil.convidado && (
+          <div className="convidado" data-testid={TID.seloConvidado}>
+            <span className="chip chip--convidado"><Icon nome="olho" tamanho={12} /> Conta de demonstração</span>
+            <p className="convidado__texto">
+              Os dados desta conta são temporários. Para guardar um histórico seu, crie uma conta
+              — a demonstração não é transferida.
+            </p>
+            <button
+              type="button" className="btn btn--ghost" disabled={saindo}
+              onClick={() => { void encerrar('/cadastro') }}
+            >
+              Criar minha conta
+            </button>
+          </div>
+        )}
 
         <nav className="lateral__nav" aria-label="Seções">
           {NAV.map((n) => {
@@ -85,16 +143,53 @@ export function AppShell({ rota }: { rota: string }) {
 
         <div className="lateral__rodape">
           <p className="lateral__aviso">
-            Demonstração com dados sintéticos, guardados só neste navegador.
+            {exemplo
+              ? 'Histórico de exemplo com dados sintéticos. Reiniciar restaura o exemplo original.'
+              : 'Use apenas documentos fictícios nesta demonstração. Reiniciar apaga o que você anexou.'}
           </p>
+          {confirmandoReinicio ? (
+            <div className="reinicio" role="group" aria-labelledby="reinicio-pergunta">
+              <p id="reinicio-pergunta" className="reinicio__pergunta">
+                {exemplo
+                  ? 'Restaurar apaga os documentos anexados, os passos marcados e as permissões alteradas, e volta ao histórico de exemplo. Começar do zero apaga também o exemplo. Continuar?'
+                  : 'Reiniciar apaga todos os documentos que você anexou e deixa o histórico vazio de novo. Continuar?'}
+              </p>
+              <div className="reinicio__acoes">
+                <button
+                  type="button" className="btn" disabled={zerando} data-testid={TID.reinicioConfirmar}
+                  onClick={() => { reiniciar(); fecharReinicio() }}
+                >
+                  {exemplo ? 'Restaurar o exemplo' : 'Apagar e reiniciar'}
+                </button>
+                {exemplo && (
+                  <button
+                    type="button" className="btn btn--ghost" disabled={zerando} data-testid={TID.reinicioZerar}
+                    onClick={() => { void comecarDoZero() }}
+                  >
+                    {zerando ? 'Apagando…' : 'Começar do zero'}
+                  </button>
+                )}
+                <button
+                  type="button" className="btn btn--ghost" autoFocus disabled={zerando}
+                  onClick={() => setConfirmandoReinicio(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button" className="btn btn--quiet" data-testid={TID.botaoReiniciar}
+              onClick={() => setConfirmandoReinicio(true)}
+            >
+              <Icon nome="recomecar" tamanho={16} /> {exemplo ? 'Reiniciar o exemplo' : 'Reiniciar meu histórico'}
+            </button>
+          )}
           <button
-            type="button" className="btn btn--quiet"
-            onClick={() => {
-              reiniciar()
-              navegar('/app/linha')
-            }}
+            type="button" className="btn btn--quiet" disabled={saindo} data-testid={TID.botaoSair}
+            onClick={() => { void encerrar() }}
           >
-            <Icon nome="recomecar" tamanho={16} /> Reiniciar a demonstração
+            <Icon nome="seta" tamanho={16} /> {saindo ? 'Saindo…' : 'Sair'}
           </button>
         </div>
       </aside>
@@ -116,21 +211,77 @@ export function AppShell({ rota }: { rota: string }) {
             <span className="sr-only">Abrir menu</span>
           </button>
           <div className="barra__titulo">
-            <h1>{atual.rotulo}</h1>
-            <p>{atual.nota}</p>
+            <h1>{titulo}</h1>
+            {atual && <p>{atual.nota}</p>}
           </div>
+          {estado.saude && (
+            <div className="selos" aria-label="Infraestrutura em uso">
+              <span className={`selo selo--${estado.saude.genai}`}>
+                <span className="chip__dot" />
+                IA: {estado.saude.genai === 'oci' ? 'OCI Generative AI' : 'simulada'}
+              </span>
+              <span className={`selo selo--${estado.saude.db}`}>
+                <span className="chip__dot" />
+                Dados: {estado.saude.db === 'oracle' ? 'Oracle DB' : 'memória'}
+              </span>
+            </div>
+          )}
           <Link para="/projeto" className="btn btn--ghost barra__dossie">
             Dossiê do projeto
           </Link>
         </header>
 
         <main id="conteudo" className="palco__corpo">
-          {secao === 'linha' && <LinhaDoTempo selecionado={parametro} />}
-          {secao === 'fontes' && <Fontes />}
-          {secao === 'copiloto' && <Copiloto />}
-          {secao === 'cuidado' && <Cuidado />}
-          {secao === 'resumo' && <Resumo />}
-          {secao === 'privacidade' && <Privacidade />}
+          {estado.falhaAcao && (
+            <div className="palco__falha">
+              <Falha mensagem={estado.falhaAcao} />
+              <button type="button" className="btn btn--quiet" onClick={descartarFalha}>
+                <Icon nome="fechar" tamanho={14} /> Fechar
+              </button>
+            </div>
+          )}
+
+          {estado.erro ? (
+            <Vazio
+              icone="alerta"
+              titulo="Não foi possível carregar o histórico"
+              texto={estado.erro}
+              acao={
+                <button
+                  type="button" className="btn" disabled={estado.carregando}
+                  onClick={() => { void carregar(true) }}
+                >
+                  <Icon nome="recomecar" tamanho={16} />
+                  {estado.carregando ? 'Tentando…' : 'Tentar de novo'}
+                </button>
+              }
+            />
+          ) : estado.carregando ? (
+            <div className="carregando-app" aria-live="polite">
+              <p className="label">Reunindo o histórico</p>
+              <span className="esqueleto" style={{ width: '64%' }} />
+              <span className="esqueleto" style={{ width: '82%' }} />
+              <span className="esqueleto" style={{ width: '71%' }} />
+              <span className="esqueleto" style={{ width: '58%' }} />
+            </div>
+          ) : (
+            <>
+              {secao === 'linha' && <LinhaDoTempo selecionado={parametro} />}
+              {secao === 'fontes' && <Fontes />}
+              {secao === 'copiloto' && <Copiloto />}
+              {secao === 'cuidado' && <Cuidado />}
+              {secao === 'resumo' && <Resumo />}
+              {secao === 'privacidade' && <Privacidade />}
+              {!atual && (
+                <Vazio
+                  icone="busca"
+                  titulo="Página não encontrada"
+                  texto="Este endereço não corresponde a nenhuma tela do app."
+                  acao={<Link para="/app/linha" className="btn btn--ghost">Ir para a linha do tempo</Link>}
+                />
+              )}
+            </>
+          )}
         </main>
       </div>
     </div>

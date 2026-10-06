@@ -42,7 +42,20 @@
   font-size: clamp(1rem, 1.25vw, 1.13rem); line-height: 1.6; color: var(--ink-2);
   max-width: 56ch;
 }
-.hero__acoes { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-6); }
+.hero__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin-top: var(--sp-6); }
+.hero__acoes .falha { flex-basis: 100%; }
+.hero__entrar { font-size: 14px; font-weight: 600; color: var(--ink-2); padding: 0 var(--sp-2); }
+.hero__profissional { margin-top: var(--sp-3); font-size: 13px; color: var(--ink-3); }
+.hero__profissional a { color: var(--ink-2); }
+.fecho .falha { max-width: 52ch; margin: var(--sp-3) auto 0; text-align: left; }
+
+.lp__recado {
+  max-width: var(--lp-max); width: calc(100% - 2 * var(--sp-5)); margin: var(--sp-4) auto 0; padding: 10px 12px 10px 16px;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--r-md);
+  color: var(--accent-deep); font-size: 14px;
+}
+.lp__recado p { flex: 1; }
 .hero__nota {
   margin-top: var(--sp-4); font-size: 13px; color: var(--ink-3); max-width: 46ch;
   border-top: 1px solid var(--line); padding-top: var(--sp-3);

@@ -1,91 +1,158 @@
 import { useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { Regua } from '../../components/ui'
-import { formatarData } from '../../lib/formato'
-import { MEDICACOES, PACIENTE } from '../../data/seed'
-import { hoje, useAcoes, useEstado } from '../../lib/store'
+import { AvisoIa, Falha, Regua, SeloIa, VazioHistorico } from '../../components/ui'
+import { formatarData, ordenarRecentes } from '../../lib/formato'
+import { agruparEspecialidades, chaveEspecialidade } from '../../data/especialidades'
+import { MEDICACOES } from '../../data/seed'
+import type { Evento } from '../../data/types'
+import { api, mensagemDeErro, podeRepetir, type Compartilhamento, type ResumoIa } from '../../lib/api'
+import { navegar } from '../../lib/router'
+import { hoje, useAcoes, useEstado, usePerfil } from '../../lib/store'
+import { TID } from '../../lib/testids'
 
-type Foco = 'cardiologia' | 'endocrinologia' | 'clinica'
+/* Médico, data de referência e destaques fixos só existem para a paciente de exemplo. */
+const FOCOS_EXEMPLO: Record<string, { medico: string; desde: string; ids: string[] }> = {
+  Cardiologia: { medico: 'Dra. Renata Aguiar', desde: 'a consulta de 18 fev 2026', ids: ['e23', 'e22', 'e21'] },
+  Endocrinologia: { medico: 'Dr. Paulo Sarmento', desde: 'a consulta de 10 fev 2025', ids: ['e18', 'e21', 'e14'] },
+  'Clínica médica': { medico: 'UBS Vila Mariana', desde: 'a consulta de 08 jul 2026', ids: ['e23', 'e22', 'e21'] },
+}
 
-const FOCOS: { id: Foco; rotulo: string; medico: string; desde: string; ids: string[] }[] = [
-  {
-    id: 'cardiologia', rotulo: 'Cardiologia', medico: 'Dra. Renata Aguiar',
-    desde: 'a consulta de 18 fev 2026', ids: ['e23', 'e22', 'e21'],
-  },
-  {
-    id: 'endocrinologia', rotulo: 'Endocrinologia', medico: 'Dr. Paulo Sarmento',
-    desde: 'a consulta de 10 fev 2025', ids: ['e18', 'e21', 'e14'],
-  },
-  {
-    id: 'clinica', rotulo: 'Clínica médica', medico: 'UBS Vila Mariana',
-    desde: 'a consulta de 08 jul 2026', ids: ['e23', 'e22', 'e21'],
-  },
-]
+const CLINICA = 'Clínica médica'
+const OUTRA = 'outra'
+const MAX_ESPECIALIDADE = 80
+
+/* Abas a partir do próprio histórico: mais frequentes primeiro, grafias agrupadas, e sempre clínica médica. */
+function especialidadesDe(eventos: Evento[]): string[] {
+  const grupos = agruparEspecialidades(eventos.map((e) => e.especialidade), Object.keys(FOCOS_EXEMPLO))
+  const rotulos = grupos.map((g) => g.rotulo)
+  const temClinica = rotulos.some((r) => chaveEspecialidade(r) === chaveEspecialidade(CLINICA))
+  return temClinica ? rotulos : [...rotulos, CLINICA]
+}
 
 export function Resumo() {
-  const { eventos, passos, compartilhamento } = useEstado()
-  const { gerarCompartilhamento } = useAcoes()
-  const [foco, setFoco] = useState<Foco>('cardiologia')
+  const { eventos } = useEstado()
+  if (eventos.length === 0) {
+    return (
+      <VazioHistorico
+        icone="resumo"
+        titulo="O resumo nasce do seu histórico"
+        texto="Quando houver documentos reunidos, esta página vira uma folha de uma página para levar à consulta — e um código de acesso temporário para o profissional."
+      />
+    )
+  }
+  return <FolhaResumo />
+}
 
-  const alvo = FOCOS.find((f) => f.id === foco)!
-  const destaques = alvo.ids
+function FolhaResumo() {
+  const { eventos, passos, compartilhamento } = useEstado()
+  const perfil = usePerfil()
+  /* Médicos, datas e medicamentos fixos só fazem sentido no histórico de exemplo. */
+  const exemplo = perfil.onboarding === 'exemplo'
+  const { gerarCompartilhamento } = useAcoes()
+  const especialidades = especialidadesDe(eventos)
+  const [escolha, setEscolha] = useState(especialidades[0])
+  const [outra, setOutra] = useState('')
+  const [sinteses, setSinteses] = useState<Record<string, ResumoIa>>({})
+  const [gerandoPara, setGerandoPara] = useState<string | null>(null)
+  const [erroIa, setErroIa] = useState<{ foco: string; mensagem: string; repetivel: boolean } | null>(null)
+  const [compartilhando, setCompartilhando] = useState(false)
+
+  const foco = escolha === OUTRA ? outra.trim() : escolha
+  const rotuloFoco = foco || 'outra especialidade'
+  const alvo = exemplo ? FOCOS_EXEMPLO[foco] : undefined
+  const doExemplo = (alvo?.ids ?? [])
     .map((id) => eventos.find((e) => e.id === id))
     .filter((e): e is NonNullable<typeof e> => Boolean(e))
+  const usaExemplo = alvo !== undefined && doExemplo.length > 0
+  const destaques = usaExemplo ? doExemplo : ordenarRecentes(eventos).slice(0, 3)
+  const tituloDestaques = usaExemplo ? `O que mudou desde ${alvo.desde}` : 'Registros mais recentes'
+  const medicacoes = ordenarRecentes(eventos).filter((e) => e.tipo === 'medicacao')
+  const identificacao = [
+    perfil.idade !== undefined && `${perfil.idade} anos`,
+    perfil.dataNascimento && `nascimento ${formatarData(perfil.dataNascimento)}`,
+    perfil.cartaoSus && `cartão SUS ${perfil.cartaoSus}`,
+    perfil.plano,
+  ].filter(Boolean).join(' · ')
   const pendentes = passos.filter((p) => !p.feito)
   const fontesDistintas = new Set(eventos.map((e) => e.fonte)).size
+  const sintese = foco ? sinteses[foco] : undefined
+
+  const gerarResumo = async () => {
+    if (gerandoPara || !foco) return
+    const alvoAtual = foco
+    setGerandoPara(alvoAtual)
+    setErroIa(null)
+    try {
+      const resumo = await api.resumo(alvoAtual)
+      setSinteses((s) => ({ ...s, [alvoAtual]: resumo }))
+    } catch (erro) {
+      setErroIa({ foco: alvoAtual, mensagem: mensagemDeErro(erro), repetivel: podeRepetir(erro) })
+    } finally {
+      setGerandoPara(null)
+    }
+  }
+
+  const compartilhar = async () => {
+    if (compartilhando) return
+    setCompartilhando(true)
+    await gerarCompartilhamento(alvo ? alvo.medico : foco ? `Profissional de ${foco.toLowerCase()}` : 'Profissional de saúde')
+    setCompartilhando(false)
+  }
+
+  const eventoPorId = (id: string) => eventos.find((e) => e.id === id)
 
   return (
     <div className="resumo">
       <div className="resumo__controles">
-        <div className="seletor" role="group" aria-label="Especialidade de destino">
-          {FOCOS.map((f) => (
-            <button
-              key={f.id} type="button"
-              className={`seletor__opcao${foco === f.id ? ' seletor__opcao--ativa' : ''}`}
-              aria-pressed={foco === f.id}
-              onClick={() => setFoco(f.id)}
-            >
-              {f.rotulo}
-            </button>
-          ))}
+        <div className="resumo__foco">
+          <div className="seletor" role="group" aria-label="Especialidade de destino">
+            {[...especialidades, OUTRA].map((f) => (
+              <button
+                key={f} type="button"
+                className={`seletor__opcao${escolha === f ? ' seletor__opcao--ativa' : ''}`}
+                aria-pressed={escolha === f}
+                onClick={() => setEscolha(f)}
+              >
+                {f === OUTRA ? 'Outra…' : f}
+              </button>
+            ))}
+          </div>
+          {escolha === OUTRA && (
+            <input
+              className="field resumo__outra" value={outra} maxLength={MAX_ESPECIALIDADE} autoFocus
+              aria-label="Qual especialidade?" placeholder="Ex.: Pneumologia"
+              onChange={(e) => setOutra(e.target.value)}
+            />
+          )}
         </div>
         <div className="resumo__acoes">
           <button type="button" className="btn btn--ghost" onClick={() => window.print()}>
             <Icon nome="papel" tamanho={16} /> Imprimir
           </button>
           <button
-            type="button" className="btn"
-            onClick={() => gerarCompartilhamento(alvo.medico)}
+            type="button" className="btn btn--ghost" disabled={gerandoPara !== null || !foco}
+            onClick={() => { void gerarResumo() }} data-testid={TID.iaResumo}
           >
-            <Icon nome="chave" tamanho={16} /> Gerar acesso temporário
+            <Icon nome="copiloto" tamanho={16} />
+            {gerandoPara === foco ? 'Gerando resumo…' : sintese ? 'Gerar de novo com IA' : 'Gerar resumo com IA'}
+          </button>
+          <button
+            type="button" className="btn" disabled={compartilhando}
+            onClick={() => { void compartilhar() }} data-testid={TID.acessoGerar}
+          >
+            <Icon nome="chave" tamanho={16} /> {compartilhando ? 'Gerando acesso…' : 'Gerar acesso temporário'}
           </button>
         </div>
       </div>
 
-      {compartilhamento && (
-        <div className="acesso" role="status">
-          <div>
-            <p className="acesso__titulo">
-              Acesso de 30 dias criado para {compartilhamento.para}
-            </p>
-            <p className="acesso__texto">
-              Ela abre exatamente esta página — e nada além dela. Você pode revogar quando
-              quiser em Acessos e consentimento. Criado em {compartilhamento.criadoEm}.
-            </p>
-          </div>
-          <p className="acesso__codigo num">{compartilhamento.codigo}</p>
-        </div>
-      )}
+      {compartilhamento && <PainelAcesso key={compartilhamento.codigo} compartilhamento={compartilhamento} />}
 
       <article className="folha-resumo">
         <header className="folha-resumo__cabeca">
           <div>
-            <p className="label">Resumo pré-consulta · {alvo.rotulo}</p>
-            <h2>{PACIENTE.nome}</h2>
-            <p className="folha-resumo__ident num">
-              {PACIENTE.idade} anos · nascimento {formatarData(PACIENTE.nascimento)} ·
-              cartão SUS {PACIENTE.cartaoSus} · {PACIENTE.plano}
-            </p>
+            <p className="label">Resumo pré-consulta · {rotuloFoco}</p>
+            <h2>{perfil.nome}</h2>
+            {identificacao && <p className="folha-resumo__ident num">{identificacao}</p>}
           </div>
           <p className="folha-resumo__origem">
             Gerado em {hoje()} a partir de <span className="num">{eventos.length}</span> registros
@@ -93,23 +160,92 @@ export function Resumo() {
           </p>
         </header>
 
-        <section className="folha-resumo__alerta">
-          <Icon nome="alerta" tamanho={16} />
-          <div>
-            <p className="label">Alergias</p>
-            <p>{PACIENTE.alergias.join(' · ')}</p>
-          </div>
-        </section>
+        {/* Lista vazia é "não informado", não "sem alergias": o alerta vermelho só aparece com alergia registrada. */}
+        {perfil.alergias.length > 0 ? (
+          <section className="folha-resumo__alerta">
+            <Icon nome="alerta" tamanho={16} />
+            <div>
+              <p className="label">Alergias</p>
+              <p>{perfil.alergias.join(' · ')}</p>
+            </div>
+          </section>
+        ) : (
+          <section className="folha-resumo__alerta folha-resumo__alerta--neutra">
+            <Icon nome="pessoa" tamanho={16} />
+            <p><strong>Alergias:</strong> não informadas</p>
+            <button type="button" className="folha-resumo__informar" onClick={() => navegar('/app/privacidade')}>
+              Informar em Meus dados
+            </button>
+          </section>
+        )}
+
+        {(sintese || gerandoPara === foco || erroIa?.foco === foco) && (
+          <section className="folha-resumo__bloco sintese-ia" aria-live="polite" data-testid={TID.resumoSintese}>
+            <h3>Síntese para {rotuloFoco.toLowerCase()}</h3>
+            {gerandoPara === foco && (
+              <div className="sintese-ia__carregando">
+                <span className="esqueleto" style={{ width: '90%' }} />
+                <span className="esqueleto" style={{ width: '76%' }} />
+                <span className="esqueleto" style={{ width: '84%' }} />
+              </div>
+            )}
+            {erroIa?.foco === foco && gerandoPara !== foco && (
+              <Falha mensagem={erroIa.mensagem} aoTentar={erroIa.repetivel ? () => { void gerarResumo() } : undefined} />
+            )}
+            {sintese && gerandoPara !== foco && (
+              <>
+                {sintese.sintese.map((p, i) => <p key={i} className="sintese-ia__texto">{p}</p>)}
+                {sintese.pontos.length > 0 && (
+                  <ul className="sintese-ia__pontos">
+                    {sintese.pontos.map((p, i) => (
+                      <li key={i}>
+                        <p>{p.texto}</p>
+                        <div className="sintese-ia__ancoras">
+                          {p.ancoras.map((id) => {
+                            const e = eventoPorId(id)
+                            if (!e) return null
+                            return (
+                              <button
+                                key={id} type="button" className="chip chip--botao"
+                                onClick={() => navegar(`/app/linha/${id}`)}
+                              >
+                                <span className="num">{formatarData(e.data)}</span> · {e.titulo}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {sintese.perguntasSugeridas.length > 0 && (
+                  <>
+                    <p className="label">Perguntas para levar à consulta</p>
+                    <ul className="sintese-ia__perguntas">
+                      {sintese.perguntasSugeridas.map((p, i) => <li key={i}>{p}</li>)}
+                    </ul>
+                  </>
+                )}
+                {sintese.aviso && <AvisoIa>{sintese.aviso}</AvisoIa>}
+                <SeloIa geradoPor={sintese.geradoPor} />
+              </>
+            )}
+          </section>
+        )}
 
         <section className="folha-resumo__bloco">
           <h3>Condições ativas</h3>
-          <ul className="lista-inline">
-            {PACIENTE.condicoes.map((c) => <li key={c} className="chip">{c}</li>)}
-          </ul>
+          {perfil.condicoes.length > 0 ? (
+            <ul className="lista-inline">
+              {perfil.condicoes.map((c) => <li key={c} className="chip">{c}</li>)}
+            </ul>
+          ) : (
+            <p className="painel__nada">Nenhuma condição registrada em Meus dados.</p>
+          )}
         </section>
 
         <section className="folha-resumo__bloco">
-          <h3>O que mudou desde {alvo.desde}</h3>
+          <h3>{tituloDestaques}</h3>
           <ul className="mudancas">
             {destaques.map((e) => (
               <li key={e.id}>
@@ -119,7 +255,7 @@ export function Resumo() {
                   <span>{e.instituicao}</span>
                 </p>
                 <p className="mudancas__texto">{e.resumo}</p>
-                {e.medidas?.map((m) => <Regua key={m.nome} medida={m} />)}
+                {e.medidas?.map((m, i) => <Regua key={`${i}-${m.nome}`} medida={m} />)}
               </li>
             ))}
           </ul>
@@ -127,24 +263,34 @@ export function Resumo() {
 
         <section className="folha-resumo__bloco">
           <h3>Medicamentos em uso contínuo</h3>
-          <div className="rolagem-x">
-            <table className="tabela-med">
-              <thead>
-                <tr><th>Medicamento</th><th>Dose</th><th>Posologia</th><th>Desde</th><th>Prescrito por</th></tr>
-              </thead>
-              <tbody>
-                {MEDICACOES.map((m) => (
-                  <tr key={m.nome}>
-                    <th scope="row">{m.nome}</th>
-                    <td className="num">{m.dose}</td>
-                    <td>{m.posologia}</td>
-                    <td className="num">{m.desde}</td>
-                    <td>{m.prescritor}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {exemplo ? (
+            <div className="rolagem-x">
+              <table className="tabela-med">
+                <thead>
+                  <tr><th>Medicamento</th><th>Dose</th><th>Posologia</th><th>Desde</th><th>Prescrito por</th></tr>
+                </thead>
+                <tbody>
+                  {MEDICACOES.map((m) => (
+                    <tr key={m.nome}>
+                      <th scope="row">{m.nome}</th>
+                      <td className="num">{m.dose}</td>
+                      <td>{m.posologia}</td>
+                      <td className="num">{m.desde}</td>
+                      <td>{m.prescritor}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : medicacoes.length > 0 ? (
+            <ul className="pendencias">
+              {medicacoes.map((m) => (
+                <li key={m.id}><strong>{m.titulo}</strong><span className="num">{formatarData(m.data)} · {m.instituicao}</span></li>
+              ))}
+            </ul>
+          ) : (
+            <p className="painel__nada">Nenhuma receita ou medicação registrada no histórico.</p>
+          )}
         </section>
 
         <section className="folha-resumo__bloco">
@@ -161,11 +307,65 @@ export function Resumo() {
         </section>
 
         <footer className="folha-resumo__pe">
-          Documento gerado pela Nurai a partir do histórico da própria paciente. Dados
-          sintéticos, para demonstração acadêmica. Não é laudo, não é prescrição e não
-          substitui a avaliação do profissional que assina o atendimento.
+          Documento gerado pela Nurai a partir do histórico reunido pelo próprio titular.
+          Demonstração acadêmica. Não é laudo, não é prescrição e não substitui a avaliação
+          do profissional que assina o atendimento.
         </footer>
       </article>
+    </div>
+  )
+}
+
+/* Código de acesso do profissional: validade, onde usar, copiar e revogar. */
+function PainelAcesso({ compartilhamento }: { compartilhamento: Compartilhamento }) {
+  const { revogarCompartilhamento } = useAcoes()
+  const [copia, setCopia] = useState<'ok' | 'falhou' | null>(null)
+  const [revogando, setRevogando] = useState(false)
+  const endereco = `${window.location.origin}/#/acesso`
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(`Acesse ${endereco} e informe o código ${compartilhamento.codigo}.`)
+      setCopia('ok')
+    } catch {
+      setCopia('falhou')
+    }
+  }
+
+  const revogar = async () => {
+    if (revogando) return
+    setRevogando(true)
+    const ok = await revogarCompartilhamento(compartilhamento.codigo)
+    if (!ok) setRevogando(false)
+  }
+
+  return (
+    <div className="acesso" role="region" aria-label="Acesso temporário para o profissional" data-testid={TID.acessoPainel}>
+      <div>
+        <p className="acesso__titulo">Acesso temporário criado para {compartilhamento.para}</p>
+        <p className="acesso__texto" data-testid={TID.acessoValidade}>
+          Válido até <strong className="num">{compartilhamento.expiraEm}</strong> (criado em{' '}
+          <span className="num">{compartilhamento.criadoEm}</span>). O profissional acessa em{' '}
+          <strong>{endereco}</strong> e informa o código — vê o histórico só para leitura, e
+          cada acesso entra no seu registro.
+        </p>
+        <div className="acesso__acoes">
+          <button type="button" className="btn btn--ghost" onClick={() => { void copiar() }} data-testid={TID.acessoCopiar}>
+            <Icon nome="papel" tamanho={15} /> Copiar código e endereço
+          </button>
+          <button
+            type="button" className="btn btn--ghost" onClick={() => { void revogar() }} disabled={revogando}
+            data-testid={TID.acessoRevogar}
+          >
+            <Icon nome="cadeado" tamanho={15} /> {revogando ? 'Revogando…' : 'Revogar acesso'}
+          </button>
+          <span className="acesso__copia" aria-live="polite">
+            {copia === 'ok' && 'Copiado.'}
+            {copia === 'falhou' && 'Não foi possível copiar. Selecione o código e copie manualmente.'}
+          </span>
+        </div>
+      </div>
+      <p className="acesso__codigo num" data-testid={TID.acessoCodigo}>{compartilhamento.codigo}</p>
     </div>
   )
 }

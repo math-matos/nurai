@@ -1,6 +1,9 @@
+import { BotaoDemo } from '../components/BotaoDemo'
 import { Icon } from '../components/Icon'
 import { ChipFonte, Marca } from '../components/ui'
 import { Link } from '../components/Link'
+import { descartarAviso, useSessao } from '../lib/store'
+import { TID } from '../lib/testids'
 import '../styles/landing.css'
 
 const FRAGMENTOS = [
@@ -64,6 +67,9 @@ const COMPARATIVO = [
 ]
 
 export function Landing() {
+  const { status, aviso } = useSessao()
+  const logado = status === 'autenticado'
+
   return (
     <div className="lp">
       <a className="skip" href="#/">Pular para o conteúdo</a>
@@ -74,9 +80,26 @@ export function Landing() {
           <a href="#problema">O problema</a>
           <a href="#como">Como funciona</a>
           <Link para="/projeto">Dossiê do projeto</Link>
-          <Link para="/app" className="btn btn--ghost">Abrir a demonstração</Link>
+          {logado ? (
+            <Link para="/app/linha" className="btn btn--ghost">Abrir meu histórico</Link>
+          ) : (
+            <>
+              <Link para="/entrar">Entrar</Link>
+              <Link para="/cadastro" className="btn btn--ghost">Criar conta</Link>
+            </>
+          )}
         </nav>
       </header>
+
+      {aviso && (
+        <div className="lp__recado" role="status" data-testid={TID.avisoSessao}>
+          <Icon nome="check" tamanho={15} />
+          <p>{aviso}</p>
+          <button type="button" className="btn btn--quiet" onClick={descartarAviso}>
+            <Icon nome="fechar" tamanho={14} /> <span className="sr-only">Fechar aviso</span>
+          </button>
+        </div>
+      )}
 
       <main id="conteudo">
         <section className="hero grid-paper">
@@ -92,14 +115,26 @@ export function Landing() {
               transforma o contexto reunido no próximo passo do cuidado.
             </p>
             <div className="hero__acoes">
-              <Link para="/app" className="btn btn--lg">
-                Abrir a demonstração <Icon nome="seta" tamanho={17} />
-              </Link>
-              <Link para="/projeto" className="btn btn--lg btn--ghost">Ver o dossiê do projeto</Link>
+              {logado ? (
+                <Link para="/app/linha" className="btn btn--lg">
+                  Abrir meu histórico <Icon nome="seta" tamanho={17} />
+                </Link>
+              ) : (
+                <>
+                  <Link para="/cadastro" className="btn btn--lg">
+                    Criar conta <Icon nome="seta" tamanho={17} />
+                  </Link>
+                  <BotaoDemo className="btn btn--lg btn--ghost" />
+                  <Link para="/entrar" className="hero__entrar">Já tenho conta · Entrar</Link>
+                </>
+              )}
             </div>
             <p className="hero__nota">
-              Protótipo navegável, sem servidor. Dados sintéticos de uma paciente fictícia,
-              guardados apenas no seu navegador.
+              Protótipo navegável com back-end, IA da OCI e Oracle Database. A demonstração usa
+              dados sintéticos de uma paciente fictícia — não envie dados reais.
+            </p>
+            <p className="hero__profissional">
+              <Link para="/acesso">Sou profissional de saúde — tenho um código</Link>
             </p>
           </div>
 
@@ -211,11 +246,17 @@ export function Landing() {
           <h2>A demonstração abre no histórico da Helena.</h2>
           <p>
             Sete anos de registros já carregados, o copiloto pronto para responder e as
-            pendências que ninguém tinha visto. Nada sai do seu navegador.
+            pendências que ninguém tinha visto. Tudo fictício, pronto para explorar — sem cadastro.
           </p>
-          <Link para="/app" className="btn btn--lg">
-            Abrir a demonstração <Icon nome="seta" tamanho={17} />
-          </Link>
+          {logado ? (
+            <Link para="/app/linha" className="btn btn--lg">
+              Abrir meu histórico <Icon nome="seta" tamanho={17} />
+            </Link>
+          ) : (
+            <BotaoDemo className="btn btn--lg">
+              <Icon nome="seta" tamanho={17} />
+            </BotaoDemo>
+          )}
         </section>
       </main>
 

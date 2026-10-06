@@ -1,6 +1,9 @@
+import { geometriaRegua } from '../data/referencia'
 import { FONTES } from '../data/seed'
-import { ROTULO_SINAL } from '../lib/formato'
-import type { FonteId, Medida, Sinal } from '../data/types'
+import { ROTULO_SINAL, formatarData } from '../lib/formato'
+import { navegar } from '../lib/router'
+import { TID } from '../lib/testids'
+import type { Evento, FonteId, Medida, Sinal } from '../data/types'
 import { Icon, type NomeIcone } from './Icon'
 
 /* ---------------- marca ---------------- */
@@ -42,16 +45,12 @@ export function ChipFonte({ fonte, curto = false }: { fonte: FonteId; curto?: bo
 
 /* ---------------- régua de faixa de referência ----------------
    Componente-assinatura: a mesma notação da folha de exame, e a mesma
-   régua que vira a espinha da linha do tempo.                        */
+   régua que vira a espinha da linha do tempo. Faixa só com piso ou
+   só com teto ("> 40", "< 130") fica aberta do lado sem limite.     */
 
 export function Regua({ medida }: { medida: Medida }) {
-  const { refMin, refMax, valor } = medida
-  const piso = Math.min(refMin, valor)
-  const teto = Math.max(refMax, valor)
-  const folga = (teto - piso) * 0.28 || 1
-  const dominioMin = piso - folga
-  const dominioMax = teto + folga
-  const pos = (v: number) => ((v - dominioMin) / (dominioMax - dominioMin)) * 100
+  const { faixa, marca, limites } = geometriaRegua(medida)
+  const aberta = medida.refMin === undefined ? ' regua__faixa--sem-piso' : medida.refMax === undefined ? ' regua__faixa--sem-teto' : ''
 
   return (
     <div className={`regua sinal-${medida.sinal}`}>
@@ -64,14 +63,13 @@ export function Regua({ medida }: { medida: Medida }) {
       </div>
       <div className="regua__pista">
         <div
-          className="regua__faixa"
-          style={{ left: `${pos(refMin)}%`, width: `${pos(refMax) - pos(refMin)}%` }}
+          className={`regua__faixa${aberta}`}
+          style={{ left: `${faixa.inicio}%`, width: `${faixa.fim - faixa.inicio}%` }}
         />
-        <div className="regua__marca" style={{ left: `${pos(valor)}%` }} />
+        <div className="regua__marca" style={{ left: `${marca}%` }} />
       </div>
       <div className="regua__legenda num">
-        <span style={{ left: `${pos(refMin)}%` }}>{refMin.toLocaleString('pt-BR')}</span>
-        <span style={{ left: `${pos(refMax)}%` }}>{refMax.toLocaleString('pt-BR')}</span>
+        {limites.map((l) => <span key={l.texto} style={{ left: `${l.posicao}%` }}>{l.texto}</span>)}
         <span className="regua__ref">faixa de referência</span>
       </div>
     </div>
@@ -87,7 +85,8 @@ export function Serie({
   const min = Math.min(...valores)
   const max = Math.max(...valores)
   const span = max - min || 1
-  const L = 44, R = 14, T = 16, B = 26, W = 420, H = 132
+  /* R cobre meia largura do rótulo "MM/AAAA" centrado no último ponto; com 14 ele era cortado. */
+  const L = 44, R = 28, T = 16, B = 26, W = 420, H = 132
   const x = (i: number) => L + (i / Math.max(pontos.length - 1, 1)) * (W - L - R)
   const y = (v: number) => T + (1 - (v - min) / span) * (H - T - B)
   const linha = pontos.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(p.valor)}`).join(' ')
@@ -128,6 +127,87 @@ export function Vazio({
       <p className="vazio__titulo">{titulo}</p>
       <p className="vazio__texto">{texto}</p>
       {acao}
+    </div>
+  )
+}
+
+/* Histórico ainda sem nenhum registro: toda tela do app aponta para o mesmo primeiro passo. */
+export function VazioHistorico({ titulo, texto, icone = 'anexar' }: { titulo: string; texto: string; icone?: NomeIcone }) {
+  return (
+    <div className="vazio-historico" data-testid={TID.estadoVazio}>
+      <Vazio
+        icone={icone} titulo={titulo} texto={texto}
+        acao={
+          <button
+            type="button" className="btn" data-testid={TID.ctaPrimeiroDocumento}
+            onClick={() => navegar('/app/fontes')}
+          >
+            <Icon nome="anexar" tamanho={16} /> Anexar primeiro documento
+          </button>
+        }
+      />
+    </div>
+  )
+}
+
+/* ---------------- IA: proveniência, aviso, falha ---------------- */
+
+export function SeloIa({ geradoPor }: { geradoPor: 'oci' | 'mock' }) {
+  return (
+    <span className={`selo selo--${geradoPor}`}>
+      <span className="chip__dot" />
+      {geradoPor === 'oci' ? 'Gerado por OCI Generative AI' : 'Gerado por IA simulada'}
+    </span>
+  )
+}
+
+export function AvisoIa({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="turno__aviso">
+      <Icon nome="alerta" tamanho={15} />
+      {children}
+    </p>
+  )
+}
+
+export function Falha({
+  mensagem, aoTentar, tentando = false,
+}: { mensagem: string; aoTentar?: () => void; tentando?: boolean }) {
+  return (
+    <div className="falha" role="alert">
+      <Icon nome="alerta" tamanho={15} />
+      <p className="falha__texto">{mensagem}</p>
+      {aoTentar && (
+        <button type="button" className="btn btn--ghost falha__acao" onClick={aoTentar} disabled={tentando}>
+          <Icon nome="recomecar" tamanho={14} /> {tentando ? 'Tentando…' : 'Tentar de novo'}
+        </button>
+      )}
+    </div>
+  )
+}
+
+export function Ancoras({
+  ids, eventos, titulo = 'Registros que sustentam esta resposta',
+}: { ids: string[]; eventos: Evento[]; titulo?: string }) {
+  const encontrados = ids
+    .map((id) => eventos.find((e) => e.id === id))
+    .filter((e): e is Evento => Boolean(e))
+  if (encontrados.length === 0) return null
+  return (
+    <div className="ancoras">
+      <p className="label">{titulo}</p>
+      <ul>
+        {encontrados.map((e) => (
+          <li key={e.id}>
+            <button type="button" className="ancora" onClick={() => navegar(`/app/linha/${e.id}`)}>
+              <span className="ancora__data num">{formatarData(e.data)}</span>
+              <span className="ancora__titulo">{e.titulo}</span>
+              <span className="ancora__onde">{e.instituicao}</span>
+              <Icon nome="setaCurta" tamanho={14} />
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

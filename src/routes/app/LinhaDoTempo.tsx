@@ -1,20 +1,38 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { ChipFonte, ChipSinal, Regua, Vazio } from '../../components/ui'
+import { Ancoras, AvisoIa, ChipFonte, ChipSinal, Falha, Regua, SeloIa, Vazio, VazioHistorico } from '../../components/ui'
 import { ICONE_TIPO, ano, formatarData, ordenarRecentes } from '../../lib/formato'
 import { FONTES, TIPOS } from '../../data/seed'
 import type { Evento, FonteId, TipoId } from '../../data/types'
+import { api, type Explicacao } from '../../lib/api'
 import { navegar } from '../../lib/router'
-import { perguntar, useEstado } from '../../lib/store'
+import { perguntar, useAcoes, useEstado } from '../../lib/store'
+import { useRequisicao } from '../../lib/useRequisicao'
+import { TID } from '../../lib/testids'
 
 const TIPOS_FILTRO: TipoId[] = ['exame', 'consulta', 'imagem', 'internacao', 'cirurgia', 'vacina', 'documento']
 const FONTES_FILTRO: FonteId[] = ['sus', 'laboratorio', 'hospital', 'clinica', 'operadora', 'paciente']
 
+/* Mesmo ponto de quebra de `.linha` em app.css: abaixo dele o detalhe vai para baixo da lista. */
+const EMPILHADO = '(max-width: 1180px)'
+
+const empilhado = () => window.matchMedia(EMPILHADO).matches
+const idDoItem = (id: string) => `evento-${id}`
+
+/* Desconta a barra superior grudenta, que no celular pode passar de 100px. */
+function rolarAte(alvo: HTMLElement | null) {
+  if (!alvo) return
+  const barra = document.querySelector('.barra')?.getBoundingClientRect().height ?? 0
+  const topo = alvo.getBoundingClientRect().top + window.scrollY - barra - 12
+  window.scrollTo({ top: Math.max(topo, 0) })
+}
+
 export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
-  const { eventos } = useEstado()
+  const { eventos, novos } = useEstado()
   const [busca, setBusca] = useState('')
   const [tipos, setTipos] = useState<TipoId[]>([])
   const [fontes, setFontes] = useState<FonteId[]>([])
+  const [excluido, setExcluido] = useState<string | null>(null)
 
   const lista = useMemo(() => {
     const termo = busca.trim().toLowerCase()
@@ -28,17 +46,76 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
     })
   }, [eventos, busca, tipos, fontes])
 
-  const atual: Evento | undefined =
-    lista.find((e) => e.id === selecionado) ?? eventos.find((e) => e.id === selecionado) ?? lista[0]
+  const naoEncontrado = selecionado !== undefined && !eventos.some((e) => e.id === selecionado)
+  const atual: Evento | undefined = naoEncontrado
+    ? undefined
+    : lista.find((e) => e.id === selecionado) ?? eventos.find((e) => e.id === selecionado) ?? lista[0]
+
+  const detalhe = useRef<HTMLElement>(null)
+  const tituloDetalhe = useRef<HTMLHeadingElement>(null)
+
+  /* Em tela estreita o detalhe fica empilhado abaixo da lista inteira: ao escolher
+     um registro, leva a pessoa até ele em vez de deixá-lo milhares de pixels abaixo. */
+  const mostrarDetalhe = () => {
+    if (!empilhado()) return
+    rolarAte(detalhe.current)
+    tituloDetalhe.current?.focus({ preventScroll: true })
+  }
+
+  useEffect(() => {
+    if (selecionado) mostrarDetalhe()
+  }, [selecionado])
+
+  const coluna = useRef<HTMLDivElement>(null)
+  const aviso = useRef<HTMLDivElement>(null)
+
+  /* Depois de excluir, volta ao topo da lista: no celular o detalhe ficava abaixo dela. */
+  const aposExcluir = (titulo: string) => {
+    setExcluido(titulo)
+    navegar('/app/linha')
+    requestAnimationFrame(() => {
+      if (empilhado()) rolarAte(coluna.current)
+      aviso.current?.focus({ preventScroll: true })
+    })
+  }
+
+  const avisoExcluido = excluido && (
+    <div className="recado-app" role="status" tabIndex={-1} ref={aviso} data-testid={TID.eventoExcluido}>
+      <Icon nome="papel" tamanho={16} />
+      <p>“{excluido}” foi excluído do seu histórico. Resumos e próximos passos gerados antes podem citá-lo até serem refeitos.</p>
+      <button type="button" className="btn btn--quiet" onClick={() => setExcluido(null)}>Fechar</button>
+    </div>
+  )
+
+  const voltarALista = () => {
+    const item = atual && document.getElementById(idDoItem(atual.id))
+    if (!item) return
+    rolarAte(item)
+    item.focus({ preventScroll: true })
+  }
 
   const alterna = <T,>(valor: T, atuais: T[], set: (v: T[]) => void) =>
     set(atuais.includes(valor) ? atuais.filter((v) => v !== valor) : [...atuais, valor])
 
   const filtrando = tipos.length > 0 || fontes.length > 0 || busca.trim() !== ''
 
+  if (eventos.length === 0) {
+    return (
+      <>
+        {avisoExcluido}
+        <VazioHistorico
+        icone="linha"
+        titulo="Seu histórico ainda está vazio"
+        texto="Anexe um laudo, resultado de exame ou receita. A IA lê o documento, você confere, e ele vira o primeiro ponto desta linha do tempo."
+        />
+      </>
+    )
+  }
+
   return (
     <div className="linha">
-      <div className="linha__coluna">
+      <div className="linha__coluna" ref={coluna}>
+        {avisoExcluido}
         <div className="filtros">
           <label className="filtros__busca">
             <Icon nome="busca" tamanho={17} />
@@ -58,7 +135,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
                   onClick={() => alterna(t, tipos, setTipos)}
                 >
                   <Icon nome={ICONE_TIPO[t]} tamanho={13} />
-                  {TIPOS[t].replace(' laboratorial', '').replace(' de imagem', '')}
+                  {TIPOS[t]}
                 </button>
               ))}
             </div>
@@ -94,7 +171,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
           <Vazio
             icone="busca"
             titulo="Nenhum registro com esses filtros"
-            texto="O histórico tem 24 eventos entre 2019 e 2026. Tente afrouxar a busca ou desmarcar um filtro."
+            texto={`O histórico tem ${eventos.length} registros. Tente afrouxar a busca ou desmarcar um filtro.`}
             acao={
               <button type="button" className="btn btn--ghost"
                 onClick={() => { setBusca(''); setTipos([]); setFontes([]) }}>
@@ -110,11 +187,16 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
                 <li key={e.id}>
                   {novoAno && <p className="tempo__ano num">{ano(e.data)}</p>}
                   <button
-                    type="button"
+                    type="button" id={idDoItem(e.id)}
                     className={`evento${atual?.id === e.id ? ' evento--ativo' : ''}`}
                     style={{ ['--c' as string]: FONTES[e.fonte].cor }}
-                    onClick={() => navegar(`/app/linha/${e.id}`)}
+                    onClick={() => {
+                      setExcluido(null)
+                      if (e.id === selecionado) mostrarDetalhe()
+                      else navegar(`/app/linha/${e.id}`)
+                    }}
                     aria-current={atual?.id === e.id ? 'true' : undefined}
+                    data-testid={TID.eventoItem}
                   >
                     <span className="evento__no" />
                     <span className="evento__data num">{formatarData(e.data)}</span>
@@ -123,8 +205,10 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
                       <span className="evento__titulo">{e.titulo}</span>
                       <span className="evento__onde">{e.instituicao}</span>
                     </span>
-                    {e.sinal === 'alterado' && <span className="evento__sinal sinal-alterado" aria-label="Fora da faixa" />}
-                    {e.novo && <span className="chip chip--novo">novo</span>}
+                    <span className="evento__marcas">
+                      {e.sinal === 'alterado' && <span className="evento__sinal sinal-alterado" aria-label="Fora da faixa" />}
+                      {novos.includes(e.id) && <span className="chip chip--novo">novo</span>}
+                    </span>
                   </button>
                 </li>
               )
@@ -133,9 +217,24 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
         )}
       </div>
 
-      <aside className="detalhe" aria-label="Detalhe do registro">
+      <aside className="detalhe" aria-label="Detalhe do registro" ref={detalhe}>
+        {naoEncontrado && (
+          <Vazio
+            icone="alerta"
+            titulo="Registro não encontrado"
+            texto={`Não há um registro “${selecionado}” neste histórico. O endereço pode estar incompleto ou o registro ter sido apagado ao reiniciar a demonstração.`}
+            acao={
+              <button type="button" className="btn btn--ghost" onClick={() => navegar('/app/linha')}>
+                Ver o registro mais recente
+              </button>
+            }
+          />
+        )}
         {atual && (
-          <div className="detalhe__caixa">
+          <div className="detalhe__caixa" data-testid={TID.eventoDetalhe}>
+            <button type="button" className="btn btn--quiet detalhe__voltar" onClick={voltarALista}>
+              <Icon nome="linha" tamanho={16} /> Voltar à lista
+            </button>
             <div className="detalhe__cabeca">
               <div className="detalhe__meta">
                 <ChipFonte fonte={atual.fonte} />
@@ -144,7 +243,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
               <time className="detalhe__data num" dateTime={atual.data}>{formatarData(atual.data)}</time>
             </div>
 
-            <h2 className="detalhe__titulo">{atual.titulo}</h2>
+            <h2 className="detalhe__titulo" ref={tituloDetalhe} tabIndex={-1}>{atual.titulo}</h2>
             <p className="detalhe__inst">
               <Icon nome="instituicao" tamanho={15} />
               {atual.instituicao}{atual.especialidade ? ` · ${atual.especialidade}` : ''}
@@ -155,7 +254,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
             {atual.medidas && (
               <div className="detalhe__medidas">
                 <p className="label">Resultados</p>
-                {atual.medidas.map((m) => <Regua key={m.nome} medida={m} />)}
+                {atual.medidas.map((m, i) => <Regua key={`${i}-${m.nome}`} medida={m} />)}
               </div>
             )}
 
@@ -189,7 +288,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
               <button
                 type="button" className="btn"
                 onClick={() => {
-                  perguntar(`Me explique o registro de ${formatarData(atual.data)}: ${atual.titulo}`, false)
+                  perguntar(`Me explique o registro de ${formatarData(atual.data)}: ${atual.titulo}`)
                   navegar('/app/copiloto')
                 }}
               >
@@ -199,9 +298,116 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
                 <Icon nome="escudo" tamanho={16} /> Quem acessou
               </button>
             </div>
+
+            <ExplicarEvento key={atual.id} evento={atual} eventos={eventos} />
+            <ExcluirEvento key={`excluir-${atual.id}`} evento={atual} aoExcluir={aposExcluir} />
           </div>
         )}
       </aside>
     </div>
+  )
+}
+
+/* Só existe no app do paciente: a visão do médico (acesso por código) não monta a linha do tempo. */
+function ExcluirEvento({ evento, aoExcluir }: { evento: Evento; aoExcluir: (titulo: string) => void }) {
+  const { excluirEvento } = useAcoes()
+  const [confirmando, setConfirmando] = useState(false)
+  const [excluindo, setExcluindo] = useState(false)
+
+  const excluir = async () => {
+    setExcluindo(true)
+    const ok = await excluirEvento(evento.id)
+    setExcluindo(false)
+    if (ok) aoExcluir(evento.titulo)
+  }
+
+  if (!confirmando) {
+    return (
+      <div className="excluir-registro">
+        <button
+          type="button" className="btn btn--quiet btn--perigo-leve" onClick={() => setConfirmando(true)}
+          data-testid={TID.eventoExcluir}
+        >
+          Excluir este registro
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="excluir-registro excluir-registro--confirmando" role="group" aria-labelledby="excluir-registro-pergunta">
+      <p id="excluir-registro-pergunta" className="excluir-registro__pergunta">
+        <strong>Excluir “{evento.titulo}” do seu histórico?</strong> A exclusão é definitiva: o registro some da linha
+        do tempo e não pode ser recuperado. Resumos e próximos passos gerados antes podem continuar citando este
+        registro até serem refeitos.
+      </p>
+      <div className="excluir-registro__acoes">
+        <button
+          type="button" className="btn btn--perigo" disabled={excluindo} onClick={() => { void excluir() }}
+          data-testid={TID.eventoExcluirConfirmar}
+        >
+          {excluindo ? 'Excluindo…' : 'Excluir definitivamente'}
+        </button>
+        <button type="button" className="btn btn--ghost" disabled={excluindo} onClick={() => setConfirmando(false)}>
+          Cancelar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ExplicarEvento({ evento, eventos }: { evento: Evento; eventos: Evento[] }) {
+  const { dados, erro, repetivel, carregando, executar } = useRequisicao<Explicacao>()
+  const explicar = () => { void executar(() => api.explicarExame(evento.id)) }
+  const outrasAncoras = dados?.ancoras.filter((id) => id !== evento.id) ?? []
+
+  return (
+    <section className="explicacao" aria-live="polite">
+      {!dados && (
+        <button type="button" className="btn btn--ghost" onClick={explicar} disabled={carregando} data-testid={TID.iaExplicar}>
+          <Icon nome="copiloto" tamanho={16} />
+          {carregando ? 'Preparando a explicação…' : 'Explicar em linguagem simples'}
+        </button>
+      )}
+
+      {carregando && (
+        <div className="explicacao__carregando">
+          <span className="esqueleto" style={{ width: '94%' }} />
+          <span className="esqueleto" style={{ width: '81%' }} />
+          <span className="esqueleto" style={{ width: '88%' }} />
+        </div>
+      )}
+
+      {erro && <Falha mensagem={erro} aoTentar={repetivel ? explicar : undefined} tentando={carregando} />}
+
+      {dados && (
+        <div className="explicacao__corpo" data-testid={TID.iaExplicacao}>
+          <p className="label">Em linguagem simples</p>
+          {dados.explicacao.map((p, i) => <p key={i} className="explicacao__texto">{p}</p>)}
+
+          {dados.pontosDeAtencao.length > 0 && (
+            <>
+              <p className="label">Pontos de atenção</p>
+              <ul className="explicacao__lista">
+                {dados.pontosDeAtencao.map((p, i) => <li key={i}>{p}</li>)}
+              </ul>
+            </>
+          )}
+
+          {dados.perguntasParaMedico.length > 0 && (
+            <>
+              <p className="label">Perguntas para levar ao médico</p>
+              <ul className="explicacao__lista explicacao__lista--perguntas">
+                {dados.perguntasParaMedico.map((p, i) => <li key={i}>{p}</li>)}
+              </ul>
+            </>
+          )}
+
+          {dados.aviso && <AvisoIa>{dados.aviso}</AvisoIa>}
+          <Ancoras ids={outrasAncoras} eventos={eventos} titulo="Outros registros citados" />
+          <SeloIa geradoPor={dados.geradoPor} />
+        </div>
+      )}
+    </section>
   )
 }

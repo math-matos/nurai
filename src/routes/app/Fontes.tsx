@@ -1,70 +1,101 @@
 import { useRef, useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { ChipFonte, Regua } from '../../components/ui'
+import { ChipFonte, Falha } from '../../components/ui'
 import { formatarDataCurta } from '../../lib/formato'
 import { FONTES } from '../../data/seed'
-import type { Evento, Medida } from '../../data/types'
+import { LAUDO_EXEMPLO } from '../../data/exemplos'
+import type { Consentimento, Evento } from '../../data/types'
+import { api, type Extracao, type FonteConectada } from '../../lib/api'
 import { navegar } from '../../lib/router'
 import { isoHoje, useAcoes, useEstado } from '../../lib/store'
+import { useRequisicao } from '../../lib/useRequisicao'
+import { TID } from '../../lib/testids'
+import { Conferencia } from './Conferencia'
 
-const PASSOS_LEITURA = [
-  'Lendo o documento e separando o que é cabeçalho, resultado e assinatura',
-  'Extraindo valores, unidades e faixas de referência',
-  'Ligando ao histórico: mesma paciente, mesma série de exames',
-]
+const LIMITE_PDF = 4 * 1024 * 1024
 
-const MEDIDAS_EXTRAIDAS: Medida[] = [
-  { nome: 'Colesterol LDL', valor: 118, unidade: 'mg/dL', refMin: 0, refMax: 100, sinal: 'alterado' },
-  { nome: 'Colesterol HDL', valor: 44, unidade: 'mg/dL', refMin: 45, refMax: 90, sinal: 'atencao' },
-  { nome: 'Triglicérides', valor: 165, unidade: 'mg/dL', refMin: 0, refMax: 150, sinal: 'alterado' },
-]
+function ehPdf(arquivo: File) {
+  return arquivo.type === 'application/pdf' || arquivo.name.toLowerCase().endsWith('.pdf')
+}
 
-type Fase = 'inicio' | 'lendo' | 'revisao'
+/* Fonte e consentimento não compartilham id no servidor: casam pelo nome da
+   instituição ("RNDS · Conecte SUS" ↔ "Rede Nacional de Dados em Saúde (RNDS)"). */
+function consentimentoDa(fonte: FonteConectada, consentimentos: Consentimento[]) {
+  const nome = fonte.nome.split(' · ')[0]
+  return consentimentos.find((c) => c.instituicao.includes(nome))
+}
 
 export function Fontes() {
-  const { fontes } = useEstado()
+  const { fontes, consentimentos, saude } = useEstado()
   const { conectarFonte, adicionarEvento } = useAcoes()
-  const [fase, setFase] = useState<Fase>('inicio')
-  const [passo, setPasso] = useState(0)
-  const [arquivo, setArquivo] = useState('perfil-lipidico-ago-2026.pdf')
-  const [titulo, setTitulo] = useState('Perfil lipídico completo')
-  const [instituicao, setInstituicao] = useState('Laboratório Vetor')
-  const [data, setData] = useState(isoHoje())
+  const leitura = useRequisicao<Extracao>()
+  const [texto, setTexto] = useState('')
+  const [arquivo, setArquivo] = useState('')
+  const [erroLocal, setErroLocal] = useState<string | null>(null)
+  const [salvando, setSalvando] = useState(false)
+  const [conectando, setConectando] = useState<string | null>(null)
+  const [repetir, setRepetir] = useState<(() => void) | null>(null)
   const entrada = useRef<HTMLInputElement>(null)
 
-  const processar = (nome?: string) => {
-    if (nome) setArquivo(nome)
-    setFase('lendo')
-    setPasso(0)
-    PASSOS_LEITURA.forEach((_, i) => {
-      window.setTimeout(() => setPasso(i + 1), 620 * (i + 1))
-    })
-    window.setTimeout(() => setFase('revisao'), 620 * PASSOS_LEITURA.length + 320)
+  const ocupado = leitura.carregando || salvando
+  const comOci = saude?.genai === 'oci'
+
+  const ler = (nome: string, acao: () => Promise<Extracao>) => {
+    const executar = () => { void leitura.executar(acao) }
+    setArquivo(nome)
+    setErroLocal(null)
+    setRepetir(() => executar)
+    executar()
   }
 
-  const confirmar = () => {
-    const evento: Evento = {
-      id: `u${Date.now()}`,
-      data,
-      tipo: 'exame',
-      titulo,
-      instituicao,
-      fonte: 'paciente',
-      resumo: 'Documento enviado por você e lido automaticamente. Os três valores abaixo foram extraídos do arquivo e conferidos por você antes de entrar no histórico.',
-      sinal: 'alterado',
-      medidas: MEDIDAS_EXTRAIDAS,
-      tags: ['colesterol', 'enviado'],
-      origem: 'OCR + IA',
-      confianca: 0.93,
-      documento: arquivo,
-      novo: true,
+  const lerTexto = () => {
+    const limpo = texto.trim()
+    if (!limpo || ocupado) return
+    const nome = arquivo || 'texto-colado.txt'
+    ler(nome, () => api.extrairTexto(limpo, nome))
+  }
+
+  const lerPdf = (f: File | undefined) => {
+    if (!f || ocupado) return
+    if (!ehPdf(f)) {
+      setErroLocal('Por enquanto a leitura aceita PDF com texto. Para foto, cole o texto do documento no campo abaixo.')
+      return
     }
-    adicionarEvento(evento)
-    navegar(`/app/linha/${evento.id}`)
+    if (f.size > LIMITE_PDF) {
+      setErroLocal('O PDF passa de 4 MB. Envie um arquivo menor ou cole o texto do documento.')
+      return
+    }
+    ler(f.name, () => api.extrairPdf(f))
+  }
+
+  const carregarExemplo = () => {
+    setTexto(LAUDO_EXEMPLO.texto)
+    setArquivo(LAUDO_EXEMPLO.nomeArquivo)
+    setErroLocal(null)
+  }
+
+  const descartar = () => {
+    leitura.limpar()
+    setArquivo('')
+  }
+
+  const salvar = async (evento: Evento) => {
+    if (salvando) return
+    setSalvando(true)
+    const salvo = await adicionarEvento(evento)
+    setSalvando(false)
+    if (salvo) navegar(`/app/linha/${salvo.id}`)
+  }
+
+  const conectar = async (id: string) => {
+    setConectando(id)
+    await conectarFonte(id)
+    setConectando(null)
   }
 
   const conectadas = fontes.filter((f) => f.estado === 'conectado')
   const disponiveis = fontes.filter((f) => f.estado !== 'conectado')
+  const erro = erroLocal ?? leitura.erro
 
   return (
     <div className="fontes">
@@ -72,89 +103,85 @@ export function Fontes() {
         <div className="painel__cabeca">
           <h2>Enviar um documento</h2>
           <p>
-            O que só existe em papel entra por foto ou PDF. A leitura extrai valores e
+            O que só existe em papel entra por PDF ou texto colado. A leitura extrai valores e
             faixas de referência, mostra o grau de confiança e espera a sua conferência
             antes de gravar qualquer coisa no histórico.
           </p>
         </div>
 
-        {fase === 'inicio' && (
-          <div className="soltar">
-            <Icon nome="anexar" tamanho={26} />
-            <p className="soltar__titulo">Arraste um laudo, receita ou resultado</p>
-            <p className="soltar__texto">PDF ou foto. Nesta demonstração nada é enviado a lugar nenhum — o arquivo nem sai do seu computador.</p>
-            <div className="soltar__acoes">
-              <button type="button" className="btn" onClick={() => entrada.current?.click()}>
-                Escolher arquivo
-              </button>
-              <button type="button" className="btn btn--ghost" onClick={() => processar()}>
-                Usar o laudo de exemplo
-              </button>
-            </div>
-            <input
-              ref={entrada} type="file" accept="image/*,application/pdf" className="sr-only"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                processar(f ? f.name : undefined)
-              }}
-            />
-          </div>
-        )}
-
-        {fase === 'lendo' && (
+        {leitura.dados && !leitura.carregando ? (
+          <Conferencia
+            key={arquivo}
+            extracao={leitura.dados}
+            arquivo={arquivo}
+            salvando={salvando}
+            aoSalvar={(evento) => { void salvar(evento) }}
+            aoDescartar={descartar}
+          />
+        ) : leitura.carregando ? (
           <div className="lendo" aria-live="polite">
             <p className="lendo__arquivo"><Icon nome="papel" tamanho={15} /> {arquivo}</p>
             <ol className="lendo__passos">
-              {PASSOS_LEITURA.map((p, i) => (
-                <li key={p} className={i < passo ? 'feito' : i === passo ? 'ativo' : ''}>
-                  <span className="lendo__marca">
-                    {i < passo ? <Icon nome="check" tamanho={13} /> : <span className="lendo__ponto" />}
-                  </span>
-                  {p}
-                </li>
-              ))}
+              <li className="ativo">
+                <span className="lendo__marca"><span className="lendo__ponto" /></span>
+                {comOci ? 'Lendo documento com OCI Generative AI…' : 'Lendo documento com a IA simulada…'}
+              </li>
             </ol>
-          </div>
-        )}
-
-        {fase === 'revisao' && (
-          <div className="revisao">
-            <div className="revisao__cabeca">
-              <p className="revisao__arquivo"><Icon nome="papel" tamanho={15} /> {arquivo}</p>
-              <span className="chip chip--confianca num">confiança 93%</span>
-            </div>
-
-            <div className="revisao__campos">
-              <label>
-                <span className="label">Título</span>
-                <input className="field" value={titulo} onChange={(e) => setTitulo(e.target.value)} />
-              </label>
-              <label>
-                <span className="label">Instituição</span>
-                <input className="field" value={instituicao} onChange={(e) => setInstituicao(e.target.value)} />
-              </label>
-              <label>
-                <span className="label">Data do exame</span>
-                <input className="field num" type="date" value={data} onChange={(e) => setData(e.target.value)} />
-              </label>
-            </div>
-
-            <p className="label revisao__rotulo">Valores extraídos do documento</p>
-            {MEDIDAS_EXTRAIDAS.map((m) => <Regua key={m.nome} medida={m} />)}
-
-            <p className="revisao__nota">
-              Confira antes de gravar. Nada entra no histórico sem a sua confirmação, e
-              qualquer campo pode ser corrigido agora ou depois.
+            <p className="lendo__nota">
+              Valores, unidades e faixas de referência são separados do resto do documento.
+              Costuma levar de 5 a 20 segundos.
             </p>
+          </div>
+        ) : (
+          <div className="enviar">
+            <div
+              className="soltar"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); lerPdf(e.dataTransfer.files[0]) }}
+            >
+              <Icon nome="anexar" tamanho={26} />
+              <p className="soltar__titulo">Arraste um laudo ou resultado em PDF</p>
+              <p className="soltar__texto">
+                PDF com texto selecionável, até 4 MB. O conteúdo é enviado ao servidor da
+                demonstração e lido pela IA; use apenas documentos fictícios.
+              </p>
+              <div className="soltar__acoes">
+                <button type="button" className="btn" onClick={() => entrada.current?.click()}>
+                  Escolher PDF
+                </button>
+              </div>
+              <input
+                ref={entrada} type="file" accept="application/pdf,.pdf" className="sr-only" data-testid={TID.fontesPdf}
+                onChange={(e) => {
+                  lerPdf(e.target.files?.[0])
+                  e.target.value = ''
+                }}
+              />
+            </div>
 
-            <div className="revisao__acoes">
-              <button type="button" className="btn" onClick={confirmar}>
-                <Icon nome="check" tamanho={16} /> Adicionar ao histórico
+            <label className="colar">
+              <span className="label">Ou cole o texto do documento</span>
+              <textarea
+                className="field colar__texto" rows={8} value={texto}
+                placeholder="Cole aqui o texto de um laudo, resultado de exame ou receita" data-testid={TID.fontesTexto}
+                onChange={(e) => setTexto(e.target.value)}
+              />
+            </label>
+            <div className="colar__acoes">
+              <button type="button" className="btn" onClick={lerTexto} disabled={!texto.trim()} data-testid={TID.fontesLerTexto}>
+                Ler texto com IA
               </button>
-              <button type="button" className="btn btn--ghost" onClick={() => setFase('inicio')}>
-                Descartar
+              <button type="button" className="btn btn--ghost" onClick={carregarExemplo}>
+                Carregar exemplo
               </button>
             </div>
+
+            {erro && (
+              <Falha
+                mensagem={erro}
+                aoTentar={leitura.erro && leitura.repetivel && !erroLocal && repetir ? repetir : undefined}
+              />
+            )}
           </div>
         )}
       </section>
@@ -168,21 +195,45 @@ export function Fontes() {
           </p>
         </div>
 
+        {fontes.length === 0 && (
+          <p className="painel__nada">
+            Nenhuma fonte conectada. Por enquanto, o seu histórico cresce com os documentos que você envia acima.
+          </p>
+        )}
         <ul className="fontes__lista">
-          {conectadas.map((f) => (
-            <li key={f.id} className="fonte" style={{ ['--c' as string]: FONTES[f.fonte].cor }}>
-              <span className="fonte__faixa" />
-              <div className="fonte__corpo">
-                <p className="fonte__nome">{f.nome}</p>
-                <p className="fonte__meta">
-                  <ChipFonte fonte={f.fonte} curto />
-                  <span className="num">{f.registros} registros</span>
-                  <span>última sincronia em {f.ultima}</span>
-                </p>
-              </div>
-              <span className="chip chip--ok"><Icon nome="check" tamanho={12} /> conectada</span>
-            </li>
-          ))}
+          {conectadas.map((f) => {
+            const revogada = consentimentoDa(f, consentimentos)?.ativo === false
+            return (
+              <li key={f.id} className={`fonte${revogada ? ' fonte--revogada' : ''}`}
+                style={{ ['--c' as string]: FONTES[f.fonte].cor }}>
+                <span className="fonte__faixa" />
+                <div className="fonte__corpo">
+                  <p className="fonte__nome">{f.nome}</p>
+                  <p className="fonte__meta">
+                    <ChipFonte fonte={f.fonte} curto />
+                    <span className="num">{f.registros} registros</span>
+                    <span>última sincronia em {f.ultima}</span>
+                  </p>
+                  {revogada && (
+                    <p className="fonte__aviso">
+                      A permissão desta fonte está desligada em Acessos e consentimento: ela não
+                      envia registros novos nem acessa o seu histórico até você reativar.
+                    </p>
+                  )}
+                </div>
+                {revogada ? (
+                  <div className="fonte__acoes">
+                    <span className="chip chip--revogado"><Icon nome="cadeado" tamanho={12} /> acesso revogado</span>
+                    <button type="button" className="btn btn--ghost" onClick={() => navegar('/app/privacidade')}>
+                      Reativar em Privacidade
+                    </button>
+                  </div>
+                ) : (
+                  <span className="chip chip--ok"><Icon nome="check" tamanho={12} /> conectada</span>
+                )}
+              </li>
+            )
+          })}
         </ul>
 
         {disponiveis.length > 0 && (
@@ -196,8 +247,11 @@ export function Fontes() {
                     <p className="fonte__nome">{f.nome}</p>
                     <p className="fonte__meta">{FONTES[f.fonte].nome}</p>
                   </div>
-                  <button type="button" className="btn btn--ghost" onClick={() => conectarFonte(f.id)}>
-                    Conectar
+                  <button
+                    type="button" className="btn btn--ghost" disabled={conectando !== null}
+                    onClick={() => { void conectar(f.id) }}
+                  >
+                    {conectando === f.id ? 'Conectando…' : 'Conectar'}
                   </button>
                 </li>
               ))}
