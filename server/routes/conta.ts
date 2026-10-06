@@ -9,8 +9,17 @@ import { lerCorpo } from '../http.js'
 export function rotasConta(repo: Repositorio): Hono<AmbienteApp> {
   const rotas = new Hono<AmbienteApp>()
 
+  /* Sem paciente o perfil fica como está: recomeçar do zero não desfaz o modo cuidador. */
   rotas.post('/onboarding', async (c) => {
-    const { modo } = await lerCorpo(c, esquemaOnboarding)
+    const { modo, paciente } = await lerCorpo(c, esquemaOnboarding)
+    if (paciente) {
+      const { nome, responsavel } = c.var.perfil
+      await repo.atualizarPerfil(c.var.pacienteId, {
+        nome: paciente.nome,
+        dataNascimento: paciente.dataNascimento ?? '',
+        responsavel: { nome: responsavel?.nome ?? nome, relacao: paciente.relacao },
+      })
+    }
     return c.json({ perfil: await repo.aplicarOnboarding(c.var.pacienteId, modo) })
   })
 

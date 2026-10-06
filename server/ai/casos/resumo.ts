@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Evento } from '../../../src/data/types.js'
 import { recomendaConduta } from '../guardrails.js'
 import { pedirJson } from '../json.js'
-import type { NovoAcesso } from '../../db/repo.js'
+import { autorDe, type NovoAcesso } from '../../db/repo.js'
 import { contextoHistorico, descreverPerfil, mensagens } from '../prompts.js'
 import { limparTexto, limparTextos } from '../texto.js'
 import { dataBR, filtrarAncoras, idsDe, mesAno, normalizar, porData, type ContextoIa } from './comum.js'
@@ -67,12 +67,13 @@ function resumirSemIa(eventos: Evento[], especialidade: string): Omit<RespostaRe
   }
 }
 
-/* Quem pede o resumo vai para o log de acessos: a titular, por padrão, ou o profissional que entrou pelo código. */
+/* Quem pede o resumo vai para o log de acessos: quem usa a conta (titular ou responsável), por padrão, ou o
+   profissional que entrou pelo código. */
 export type AutorResumo = Omit<NovoAcesso, 'itens'>
 
 export async function gerarResumo(
   { repo, llm, perfil }: ContextoIa, especialidade: string,
-  autor: AutorResumo = { quem: perfil.nome, papel: 'Titular', acao: 'Gerou resumo pré-consulta' },
+  autor: AutorResumo = { ...autorDe(perfil), acao: 'Gerou resumo pré-consulta' },
 ): Promise<RespostaResumo> {
   const { eventos } = await repo.estado()
   const semBase = (sintese: string): RespostaResumo =>
