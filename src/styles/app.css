@@ -700,6 +700,8 @@
   .detalhe { position: static; }
   .detalhe__caixa { max-height: none; }
   .detalhe__voltar { display: inline-flex; margin: -6px 0 var(--sp-3) -8px; }
+  /* Empilhado, o detalhe só aparece com um registro escolhido: "Voltar à lista" o fecha. */
+  .linha--sem-escolha .detalhe { display: none; }
   .centro, .ensaio__cabeca { grid-template-columns: minmax(0, 1fr); }
   .ensaio__match { justify-items: start; }
 }

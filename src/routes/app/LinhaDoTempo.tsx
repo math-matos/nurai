@@ -93,11 +93,13 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
     </div>
   )
 
+  /* Fecha o detalhe (no celular ele some sem registro escolhido) e devolve a pessoa ao item de onde veio. */
   const voltarALista = () => {
-    const item = atual && document.getElementById(idDoItem(atual.id))
-    if (!item) return
+    if (!atual) return
+    const item = document.getElementById(idDoItem(atual.id))
+    navegar('/app/linha')
     rolarAte(item)
-    item.focus({ preventScroll: true })
+    item?.focus({ preventScroll: true })
   }
 
   const alterna = <T,>(valor: T, atuais: T[], set: (v: T[]) => void) =>
@@ -119,7 +121,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
   }
 
   return (
-    <div className="linha">
+    <div className={`linha${selecionado === undefined ? ' linha--sem-escolha' : ''}`}>
       <div className="linha__coluna" ref={coluna}>
         {avisoExcluido}
         <div className="filtros">
