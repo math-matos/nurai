@@ -17,6 +17,8 @@ export interface Tendencia {
 
 export interface Repeticao {
   exame: string
+  /* como o pedido nomeia o exame ("perfil lipídico"), que pode diferir do título do feito */
+  pedidoExame: string
   feito: string
   feitoData: string
   feitoInstituicao: string
@@ -42,12 +44,42 @@ export interface Fatos {
 }
 
 const JANELA_REPETICAO_DIAS = 365
+/* Pedido avulso (guia, requisição) só aponta repetição de exame feito há pouco tempo. */
+const JANELA_PEDIDO_AVULSO_DIAS = 180
 const TOLERANCIA_ESTAVEL = 0.01
 const DIA_MS = 86_400_000
 const TIPOS_RESULTADO = ['exame', 'imagem', 'documento']
 /* Só consulta/internação pedem exames; em "Solicitado em consulta particular" o exame descreve a si mesmo. */
 const TIPOS_PEDIDO = ['consulta', 'internacao']
+/* A extração real classifica pedido médico e guia como "documento", com título genérico ("Pedido de exame"). */
+const TIPOS_PEDIDO_AVULSO = ['documento', ...TIPOS_PEDIDO]
+const PEDIDO_NO_TITULO = /\b(pedido|solicitac\w*|guia|requisic\w*)\b/
+const PEDIDO_NO_RESUMO = /^(pedido|solicitac\w*|guia|requisic\w*)\b/
 const PALAVRAS_VAZIAS = new Set(['novo', 'nova', 'novos', 'novas', 'exame', 'exames', 'para', 'com', 'sem'])
+
+/* Exames que um pedido costuma citar, com os nomes alternativos (texto já sem acento). */
+const EXAMES_CONHECIDOS: { nome: string; padrao: RegExp }[] = [
+  { nome: 'perfil lipídico', padrao: /perfil lipidico|lipidograma|colesterol total e fracoes/ },
+  { nome: 'hemograma', padrao: /hemograma/ },
+  { nome: 'hemoglobina glicada', padrao: /glicada|\bhba1c\b/ },
+  { nome: 'glicemia', padrao: /glicemia|glicose/ },
+  { nome: 'TSH', padrao: /\btsh\b|tireoestimulante/ },
+  { nome: 'creatinina', padrao: /creatinina/ },
+  { nome: 'potássio', padrao: /potassio/ },
+  { nome: 'urina tipo 1', padrao: /urina tipo|\beas\b|urinalise/ },
+  { nome: 'eletrocardiograma', padrao: /eletrocardiograma|\becg\b/ },
+  { nome: 'ecocardiograma', padrao: /ecocardiograma/ },
+  { nome: 'Holter', padrao: /holter/ },
+  { nome: 'radiografia de tórax', padrao: /(radiografia|raio[ -]?x)( d[eo])? torax/ },
+  { nome: 'mamografia', padrao: /mamografia/ },
+]
+const ULTRASSOM = /(?:ultrassom|ultrassonografia|ecografia)(?: doppler)?(?: d[aeo]s?)? ([a-z]{4,})/g
+
+interface ItemPedido {
+  nome: string
+  janela: number
+  casa: (feito: Evento) => boolean
+}
 
 export const dias = (de: string, ate: string) => Math.round((Date.parse(ate) - Date.parse(de)) / DIA_MS)
 
@@ -77,24 +109,49 @@ const palavrasDe = (texto: string) =>
 const tituloTem = (e: Evento, palavras: string[]) =>
   palavras.length > 0 && palavras.every((p) => normalizar(e.titulo).includes(p))
 
+const pedeExames = (e: Evento) => TIPOS_PEDIDO_AVULSO.includes(e.tipo)
+  && (PEDIDO_NO_TITULO.test(normalizar(e.titulo)) || PEDIDO_NO_RESUMO.test(normalizar(e.resumo)))
+
+/* Um pedido de exame não é o exame feito, mesmo sendo do tipo "documento". */
+const realizado = (e: Evento) => TIPOS_RESULTADO.includes(e.tipo) && !pedeExames(e)
+
 /* "Solicitados novo Holter e ultrassom de carótidas" → ["novo Holter", "ultrassom de carótidas"]. */
-function pedidosDe(e: Evento): string[] {
+function itensSolicitados(e: Evento): ItemPedido[] {
   if (!TIPOS_PEDIDO.includes(e.tipo)) return []
   const trecho = e.resumo.match(/solicitad[oa]s?\s+([^.;—–]+)/i)?.[1]
-  return trecho ? trecho.split(/,|\se\s/).map((i) => i.trim()).filter(Boolean) : []
+  if (!trecho) return []
+  return trecho.split(/,|\se\s/).map((i) => i.trim()).filter(Boolean)
+    .map((nome) => ({ nome, janela: JANELA_REPETICAO_DIAS, casa: (feito: Evento) => tituloTem(feito, palavrasDe(nome)) }))
 }
 
-function feitoAntes(eventos: Evento[], pedido: Evento, item: string): Evento | undefined {
-  const palavras = palavrasDe(item)
-  return eventos.findLast((e) => e.data < pedido.data && dias(e.data, pedido.data) <= JANELA_REPETICAO_DIAS
-    && TIPOS_RESULTADO.includes(e.tipo) && tituloTem(e, palavras))
+/* "Pedido de exame" com "perfil lipídico" no resumo: o exame vem do texto, por nome ou sinônimo. */
+function itensDoPedidoAvulso(e: Evento): ItemPedido[] {
+  if (!pedeExames(e)) return []
+  const texto = normalizar(`${e.titulo} ${e.resumo}`)
+  const conhecidos = EXAMES_CONHECIDOS.filter(({ padrao }) => padrao.test(texto))
+    .map(({ nome, padrao }) => ({ nome, casa: (feito: Evento) => padrao.test(normalizar(feito.titulo)) }))
+  const ultrassons = [...new Set([...texto.matchAll(ULTRASSOM)].map((m) => m[1]))].map((regiao) => ({
+    nome: `ultrassom de ${regiao}`,
+    casa: (feito: Evento) => /ultrass|ecografia/.test(normalizar(feito.titulo)) && normalizar(feito.titulo).includes(regiao),
+  }))
+  return [...conhecidos, ...ultrassons].map((i) => ({ ...i, janela: JANELA_PEDIDO_AVULSO_DIAS }))
+}
+
+function pedidosDe(e: Evento): ItemPedido[] {
+  const solicitados = itensSolicitados(e)
+  return solicitados.length ? solicitados : itensDoPedidoAvulso(e)
+}
+
+function feitoAntes(eventos: Evento[], pedido: Evento, item: ItemPedido): Evento | undefined {
+  return eventos.findLast((e) => e.data < pedido.data && dias(e.data, pedido.data) <= item.janela
+    && realizado(e) && item.casa(e))
 }
 
 function repeticoes(eventos: Evento[]): Repeticao[] {
   return eventos.flatMap((pedido) => pedidosDe(pedido).flatMap((item) => {
     const feito = feitoAntes(eventos, pedido, item)
     return feito ? [{
-      exame: feito.titulo, feito: feito.id, feitoData: feito.data, feitoInstituicao: feito.instituicao,
+      exame: feito.titulo, pedidoExame: item.nome, feito: feito.id, feitoData: feito.data, feitoInstituicao: feito.instituicao,
       pedido: pedido.id, pedidoData: pedido.data, pedidoInstituicao: pedido.instituicao, dias: dias(feito.data, pedido.data),
     }] : []
   }))
@@ -103,12 +160,12 @@ function repeticoes(eventos: Evento[]): Repeticao[] {
 function pedidosSemResultado(eventos: Evento[]): Pendencia[] {
   return eventos.flatMap((pedido) => pedidosDe(pedido)
     .filter((item) => !feitoAntes(eventos, pedido, item))
-    .filter((item) => !eventos.some((e) => e.data > pedido.data && TIPOS_RESULTADO.includes(e.tipo) && tituloTem(e, palavrasDe(item))))
-    .map((item) => ({
+    .filter((item) => !eventos.some((e) => e.data > pedido.data && realizado(e) && item.casa(e)))
+    .map(({ nome }) => ({
       tipo: 'pedido' as const,
-      alvo: item,
+      alvo: nome,
       data: pedido.data,
-      descricao: `Pedido de ${item} em ${dataBR(pedido.data)} ("${pedido.titulo}") sem resultado posterior no histórico.`,
+      descricao: `Pedido de ${nome} em ${dataBR(pedido.data)} ("${pedido.titulo}") sem resultado posterior no histórico.`,
       ancoras: [pedido.id],
     })))
 }
@@ -179,7 +236,7 @@ export function serializarFatos(f: Fatos): string {
     lista(f.tendencias.map(linhaTendencia)),
     'Exames possivelmente repetidos:',
     lista(f.repeticoes.map((r) =>
-      `"${r.exame}" feito em ${dataBR(r.feitoData)} em ${r.feitoInstituicao} (${r.feito}) e pedido de novo em ${dataBR(r.pedidoData)} em ${r.pedidoInstituicao} (${r.pedido}), ${r.dias} dias depois.`)),
+      `Possível exame repetido: pedido em ${dataBR(r.pedidoData)} de ${r.pedidoExame}, já realizado em ${dataBR(r.feitoData)} (${r.feitoInstituicao}) como "${r.exame}"; o pedido (${r.pedidoInstituicao}) veio ${r.dias} dias depois do exame feito (${r.feito}, ${r.pedido}).`)),
     'Pendências (recomendação ou pedido sem registro posterior correspondente):',
     lista(f.pendencias.map((p) => `${p.descricao} (${p.ancoras.join(', ')})`)),
   ].join('\n')

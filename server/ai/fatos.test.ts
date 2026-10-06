@@ -78,7 +78,7 @@ describe('serializarFatos', () => {
     expect(texto).toContain('FATOS DERIVADOS')
     expect(texto).toMatch(/Hemoglobina glicada \(HbA1c\).*7,8 em 02\/04\/2019 \(e02\)/)
     expect(texto).toMatch(/7,4 em 14\/09\/2025 \(e18\), subiu/)
-    expect(texto).toMatch(/27\/05\/2026.*\(e22\).*08\/07\/2026.*\(e24\)/)
+    expect(texto).toMatch(/pedido em 08\/07\/2026 de .*já realizado em 27\/05\/2026.*\(e22, e24\)/)
     expect(texto).toMatch(/Reavaliação de TSH.*\(e16, e15\)/)
     expect(texto).not.toMatch(/\d{4}-\d{2}-\d{2}/)
   })

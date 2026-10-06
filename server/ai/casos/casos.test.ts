@@ -45,7 +45,7 @@ describe('responderCopiloto', () => {
     const r = await responderCopiloto(d, { pergunta: 'Qual era minha glicada em 2019?' })
     expect(r.texto).toEqual(['Em 02/04/2019 a glicada era 7,8%.'])
     expect(prompt(chamadas)).toContain('FATOS DERIVADOS')
-    expect(prompt(chamadas)).toMatch(/\(e22\).*\(e24\)/)
+    expect(prompt(chamadas)).toMatch(/\(e22, e24\)/)
   })
 
   it('monta a série pela medida citada na pergunta mesmo se o modelo não pedir', async () => {
