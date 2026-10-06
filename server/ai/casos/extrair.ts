@@ -21,6 +21,10 @@ export interface ResultadoExtracao {
 
 const LIMITE_TEXTO = 20_000
 const CONFIANCA_MINIMA = 0.7
+/* A confiança do modelo mede legibilidade; medida perdida ou aviso também reduzem o quanto
+   o registro pode ser usado sem conferência. */
+const PENALIDADE_MEDIDA_OMITIDA = 0.15
+const PENALIDADE_AVISO = 0.05
 const TIPOS = ['exame', 'consulta', 'imagem', 'cirurgia', 'medicacao', 'internacao', 'vacina', 'documento'] as const
 
 export const esquemaExtracao = z.discriminatedUnion('clinico', [
@@ -54,27 +58,41 @@ Formato da resposta (JSON):
 {"clinico": true, "data": "AAAA-MM-DD" ou null, "tipo": "${TIPOS.join('" | "')}", "titulo": "título curto", "instituicao": "nome" ou null, "especialidade": "nome" ou null, "resumo": "1 a 2 frases fiéis ao documento", "medidas": [{"nome": "Colesterol LDL", "valor": 162, "unidade": "mg/dL", "refMin": 0, "refMax": 130}], "tags": ["colesterol"], "confianca": 0.9, "avisos": ["o que ficou ilegível ou ambíguo"]}
 - Se o texto não for um documento de saúde, responda apenas {"clinico": false}.
 - "data": a data do exame/atendimento (coleta, realização ou emissão), não a data de impressão.
-- "medidas": só valores numéricos presentes no texto, com ponto decimal; refMin/refMax da faixa de referência impressa, ou null se não houver. Não invente faixas.
+- "medidas": só valores numéricos presentes no texto, com ponto decimal; refMin/refMax da faixa de referência impressa. Não invente faixas.
+- Faixa "X a Y": refMin X e refMax Y. Faixa só com teto ("< X", "≤ X", "até X", "inferior a X"): refMin null e refMax X. Faixa só com piso ("> X", "≥ X", "acima de X", "superior a X"): refMin X e refMax null. Use null nos dois só quando o documento não trouxer referência para a medida.
 - "resumo": descreva o que o documento registra, sem interpretar nem diagnosticar.
 - "confianca": de 0 a 1, o quanto o texto estava legível e completo.`
+
+type MedidaBruta = ExtracaoClinica['medidas'][number]
+
+/* "< X" é faixa 0–X (o seed já usa refMin 0 para LDL). "> X" não tem como virar Medida sem
+   inventar um teto — o tipo exige os dois limites —, então a medida é omitida com aviso exato. */
+function lerMedida(m: MedidaBruta): Medida | string {
+  if (m.refMin == null && m.refMax == null) {
+    return `A medida "${m.nome}" foi omitida porque o documento não traz faixa de referência.`
+  }
+  if (m.refMax == null) {
+    return `A medida "${m.nome}" foi omitida porque a referência tem só o limite inferior (${m.refMin}). Inclua-a manualmente se quiser guardá-la.`
+  }
+  const refMin = m.refMin ?? 0
+  return {
+    nome: m.nome, valor: m.valor, unidade: m.unidade, refMin, refMax: m.refMax,
+    sinal: sinalDaMedida(m.valor, refMin, m.refMax),
+  }
+}
 
 /* Pós-processamento comum ao modelo e à heurística: sinal e validações ficam no servidor. */
 export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string): Omit<ResultadoExtracao, 'geradoPor'> {
   const avisos = bruto.avisos.map((a) => a.trim()).filter(Boolean)
-  const medidas: Medida[] = []
-  for (const m of bruto.medidas) {
-    if (m.refMin == null || m.refMax == null) {
-      avisos.push(`A medida "${m.nome}" foi omitida porque o documento não traz faixa de referência.`)
-      continue
-    }
-    medidas.push({
-      nome: m.nome, valor: m.valor, unidade: m.unidade, refMin: m.refMin, refMax: m.refMax,
-      sinal: sinalDaMedida(m.valor, m.refMin, m.refMax),
-    })
-  }
+  const lidas = bruto.medidas.map(lerMedida)
+  const medidas = lidas.filter((m): m is Medida => typeof m !== 'string')
+  const omitidas = lidas.filter((m): m is string => typeof m === 'string')
   const dataValida = bruto.data != null && dataIsoValida(bruto.data)
   if (!dataValida) avisos.push('Não encontrei a data no documento; usei a data de hoje. Confira antes de salvar.')
-  if (bruto.confianca < CONFIANCA_MINIMA) {
+  const penalidade = PENALIDADE_MEDIDA_OMITIDA * omitidas.length + PENALIDADE_AVISO * avisos.length
+  const confianca = Math.round(Math.max(0, bruto.confianca - penalidade) * 100) / 100
+  avisos.push(...omitidas)
+  if (confianca < CONFIANCA_MINIMA) {
     avisos.push('A leitura teve baixa confiança. Confira cada campo com o documento original.')
   }
   const especialidade = bruto.especialidade?.trim()
@@ -90,7 +108,7 @@ export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string): Omit
     ...(medidas.length && { medidas }),
     tags: bruto.tags.map((t) => t.trim()).filter(Boolean),
     origem: 'OCR + IA',
-    confianca: Math.round(bruto.confianca * 100) / 100,
+    confianca,
     ...(nomeArquivo && { documento: nomeArquivo }),
     novo: true,
   }
