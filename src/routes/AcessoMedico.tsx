@@ -67,7 +67,7 @@ function FormularioCodigo({ aoLiberar }: { aoLiberar: (l: Liberado) => void }) {
       <h1>Acesso do profissional de saúde</h1>
       <p className="porta__intro">
         O paciente gera um código temporário no resumo para consulta da Nurai. Com ele você vê,
-        só para leitura, o histórico reunido e as pendências — sem precisar de conta.
+        só para leitura, o histórico reunido e os pontos em aberto — sem precisar de conta.
       </p>
       <form className="formulario" noValidate onSubmit={(e) => { void enviar(e) }}
         aria-busy={enviando} data-testid={TID.medicoForm}>
@@ -187,14 +187,14 @@ function VisaoMedico({ dados, codigo, profissional, aoSair }: Liberado & { aoSai
             <div className="medico__lateral">
               <section className="painel" aria-labelledby="medico-pendencias" data-testid={TID.medicoPendencias}>
                 <div className="painel__cabeca">
-                  <h2 id="medico-pendencias">Pendências</h2>
-                  <p>Pontas soltas identificadas no cruzamento dos registros.</p>
+                  <h2 id="medico-pendencias">Pontos em aberto apontados ao paciente</h2>
+                  <p>Gerados por IA a partir do histórico; revise antes de considerar.</p>
                 </div>
                 <ul className="pendencias">
                   {pendentes.map((p) => (
                     <li key={p.id}><strong>{p.titulo}</strong><span>{p.prazo}</span></li>
                   ))}
-                  {pendentes.length === 0 && <li>Nenhuma pendência em aberto.</li>}
+                  {pendentes.length === 0 && <li>Nenhum ponto em aberto.</li>}
                 </ul>
               </section>
 
