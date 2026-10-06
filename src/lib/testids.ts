@@ -76,6 +76,8 @@ export const TID = {
   iaPassos: 'ia-passos',
   iaResumo: 'ia-resumo',
   resumoSintese: 'resumo-sintese',
+  resumoPontos: 'resumo-pontos',
+  resumoPonto: 'resumo-ponto',
 
   acessoGerar: 'acesso-gerar',
   acessoPainel: 'acesso-painel',
