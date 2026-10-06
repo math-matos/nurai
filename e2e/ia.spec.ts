@@ -113,6 +113,29 @@ test.describe('sobre o histórico do Marcos', () => {
     if (REAL) expect(json.ancoras).toContain(IDS.hemograma1)
   })
 
+  /* Pergunta digitada na busca da linha do tempo vira atalho para o Copiloto, já enviada. */
+  test('pergunta na busca da linha do tempo oferece o Copiloto', async ({ page }) => {
+    await page.goto('/#/app/linha')
+    await esperarApp(page)
+    const busca = page.getByRole('searchbox', { name: 'Buscar no histórico' })
+    await busca.fill('zzz inexistente')
+    await expect(page.getByText('Nenhum registro com esses filtros')).toBeVisible()
+    await expect(page.getByTestId('busca-pergunta')).toHaveCount(0)
+
+    const pergunta = 'Tem algum exame que eu não preciso repetir?'
+    await busca.fill(pergunta)
+    await expect(page.getByTestId('busca-pergunta')).toContainText('Quer perguntar isso ao Copiloto?')
+    const resposta = respostaDe(page, 'POST', '/api/copiloto')
+    await page.getByTestId('busca-perguntar-copiloto').click()
+    await expect(page).toHaveURL(/#\/app\/copiloto$/)
+    const res = await resposta
+    expect(res.status()).toBe(200)
+    expect(res.request().postDataJSON().pergunta).toBe(pergunta)
+    await expect(page.locator('.turno__pergunta').last()).toContainText(pergunta)
+    const json: RespostaCopiloto = await res.json()
+    await expect(page.getByTestId('copiloto-resposta').last()).toContainText(json.texto[0])
+  })
+
   test('resumo pré-consulta por especialidade', async ({ page }) => {
     await page.goto('/#/app/resumo')
     await esperarApp(page)

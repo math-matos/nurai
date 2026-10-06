@@ -35,7 +35,7 @@ export function Copiloto() {
             <p className="copiloto__regra">
               Toda resposta vem com os registros que a sustentam. Quando a informação não
               existe no histórico, a resposta é dizer que não existe. Nada aqui é conduta
-              médica: o copiloto organiza o contexto, quem decide é o profissional.
+              médica: o Copiloto organiza o contexto, quem decide é o profissional.
             </p>
           </div>
         </div>
@@ -44,7 +44,7 @@ export function Copiloto() {
           <VazioHistorico
             icone="copiloto"
             titulo="Anexe um documento para começar a conversa"
-            texto="O copiloto só responde com base no que está no seu histórico. Envie um laudo ou resultado de exame e volte para perguntar sobre ele."
+            texto="O Copiloto só responde com base no que está no seu histórico. Envie um laudo ou resultado de exame e volte para perguntar sobre ele."
           />
         )}
 
