@@ -2,9 +2,11 @@ import { z } from 'zod'
 import { responder } from '../../../src/data/copiloto.js'
 import type { Evento } from '../../../src/data/types.js'
 import type { Deps } from '../../app.js'
+import { avisoPara } from '../guardrails.js'
 import { pedirJson } from '../json.js'
-import { PERFIL, SISTEMA, serializarEventos } from '../prompts.js'
+import { PERFIL, SISTEMA, contextoHistorico } from '../prompts.js'
 import type { MensagemLlm } from '../provider.js'
+import { limparTexto, limparTextos } from '../texto.js'
 import { filtrarAncoras, idsDe, mesAno, normalizar, porData } from './comum.js'
 
 export interface EntradaCopiloto {
@@ -34,6 +36,8 @@ Formato da resposta (JSON):
 {"texto": ["parágrafo curto"], "ancoras": ["e01"], "serie": {"medida": "nome exato de uma medida"} ou null, "aviso": "lembrete curto" ou null}
 - "texto": 1 a 4 parágrafos curtos, citando datas e valores dos registros.
 - "ancoras": ids de todos os registros que sustentam a resposta. Se nada no histórico sustenta uma resposta, use [] e diga que não encontrou.
+- Perguntas sobre exames repetidos ou desnecessários, pendências ou evolução de uma medida: responda a partir dos FATOS DERIVADOS e inclua nas âncoras os ids que eles citam.
+- Perguntas sobre parar, trocar ou ajustar um remédio: não diga se pode ou não; conte o que os registros mostram sobre esse remédio (com âncoras) e preencha o "aviso".
 - "serie": só quando a pergunta for sobre a evolução de uma medida numérica; use o nome da medida exatamente como aparece em "Medidas". Caso contrário, null.
 - "aviso": quando a pergunta envolver uma decisão de saúde (parar, trocar, cancelar algo), um lembrete para confirmar com o médico; caso contrário, null.`
 
@@ -43,6 +47,28 @@ const esquema = z.object({
   serie: z.object({ medida: z.string() }).nullish(),
   aviso: z.string().nullish(),
 })
+
+/* Nome popular na pergunta → trecho do nome da medida nos registros. HDL antes de "colesterol". */
+const MEDIDAS_POPULARES: [RegExp, string][] = [
+  [/glicada|hba1c|\ba1c\b/, 'glicada'],
+  [/\bhdl\b/, 'colesterol hdl'],
+  [/\bldl\b|colesterol/, 'colesterol ldl'],
+  [/triglicer/, 'triglicerides'],
+  [/glicemia|glicose/, 'glicemia'],
+  [/creatinina/, 'creatinina'],
+  [/filtracao|\btfg\b|funcao renal/, 'filtracao glomerular'],
+  [/\btsh\b/, 'tsh'],
+  [/albumin/, 'albuminuria'],
+  [/fibrilacao|holter/, 'carga de fibrilacao'],
+  [/frequencia cardiaca|batimento/, 'frequencia cardiaca'],
+]
+
+/* O modelo só devolvia "serie" em 4 de 5 perguntas sobre a glicada; a pergunta já diz a medida. */
+export function serieDaPergunta(eventos: Evento[], pergunta: string): Serie | undefined {
+  const texto = normalizar(pergunta)
+  const alvo = MEDIDAS_POPULARES.find(([re]) => re.test(texto))?.[1]
+  return alvo ? montarSerie(eventos, alvo) : undefined
+}
 
 /* Os números da série vêm sempre dos registros, nunca do modelo. */
 export function montarSerie(eventos: Evento[], medida: string): Serie | undefined {
@@ -75,16 +101,16 @@ export async function responderCopiloto({ repo, llm }: Deps, entrada: EntradaCop
     ...turnos,
     {
       role: 'user',
-      content: [TAREFA, PERFIL, `Histórico (${eventos.length} registros):\n${serializarEventos(eventos)}`, `Pergunta: ${entrada.pergunta}`].join('\n\n'),
+      content: [TAREFA, PERFIL, contextoHistorico(eventos), `Pergunta: ${entrada.pergunta}`].join('\n\n'),
     },
   ]
   const r = await pedirJson(llm, pedido, esquema)
 
-  const texto = r.texto.map((t) => t.trim()).filter(Boolean)
+  const texto = limparTextos(r.texto)
   const ancoras = filtrarAncoras(r.ancoras, validos)
-  if (!texto.length || !ancoras.length) return { texto: [SEM_BASE], ancoras: [], geradoPor: llm.nome }
+  const aviso = avisoPara(entrada.pergunta, r.aviso && limparTexto(r.aviso))
+  if (!texto.length || !ancoras.length) return { texto: [SEM_BASE], ancoras: [], ...(aviso && { aviso }), geradoPor: llm.nome }
 
-  const serie = r.serie ? montarSerie(eventos, r.serie.medida) : undefined
-  const aviso = r.aviso?.trim()
+  const serie = serieDaPergunta(eventos, entrada.pergunta) ?? (r.serie ? montarSerie(eventos, r.serie.medida) : undefined)
   return { texto, ancoras, ...(serie && { serie }), ...(aviso && { aviso }), geradoPor: llm.nome }
 }

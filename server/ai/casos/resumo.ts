@@ -2,8 +2,10 @@ import { z } from 'zod'
 import { PACIENTE } from '../../../src/data/seed.js'
 import type { Evento } from '../../../src/data/types.js'
 import type { Deps } from '../../app.js'
+import { recomendaConduta } from '../guardrails.js'
 import { pedirJson } from '../json.js'
-import { PERFIL, mensagens, serializarEventos } from '../prompts.js'
+import { PERFIL, contextoHistorico, mensagens } from '../prompts.js'
+import { limparTexto, limparTextos } from '../texto.js'
 import { dataBR, filtrarAncoras, idsDe, mesAno, normalizar, porData } from './comum.js'
 
 export interface RespostaResumo {
@@ -31,6 +33,8 @@ Formato da resposta (JSON):
 {"sintese": ["frase"], "pontos": [{"texto": "fato objetivo e datado", "ancoras": ["e01"]}], "perguntasSugeridas": ["..."]}
 - "sintese": 1 a 3 frases sobre o quadro registrado relevante para a especialidade.
 - "pontos": até ${MAX_PONTOS} fatos objetivos e datados (mudanças recentes, exames alterados, medicamentos, pendências), cada um com os ids que o sustentam.
+- Para dizer se uma medida subiu ou caiu, use a variação indicada nos FATOS DERIVADOS para aquela data; não calcule tendência por conta própria.
+- Descreva o que foi registrado; não recomende manter, iniciar, suspender ou mudar remédios.
 - "perguntasSugeridas": 2 a 4 perguntas para a paciente levar à consulta.`
 
 function relevantes(eventos: Evento[], especialidade: string): Evento[] {
@@ -69,16 +73,16 @@ export async function gerarResumo({ repo, llm }: Deps, especialidade: string): P
   if (llm.nome === 'mock') {
     corpo = resumirSemIa(eventos, especialidade)
   } else {
-    const r = await pedirJson(llm, mensagens(
-      tarefa(especialidade), PERFIL, `Histórico (${eventos.length} registros):\n${serializarEventos(eventos)}`,
-    ), esquema, { maxTokens: 2000 })
+    const r = await pedirJson(llm, mensagens(tarefa(especialidade), PERFIL, contextoHistorico(eventos)), esquema, { maxTokens: 2000 })
     const validos = idsDe(eventos)
+    /* Perguntas à médica podem falar de remédio ("Devo manter...?"); síntese e pontos não recomendam conduta. */
+    const sintese = limparTextos(r.sintese).filter((t) => !recomendaConduta(t))
     corpo = {
-      sintese: r.sintese.map((t) => t.trim()).filter(Boolean),
+      sintese: sintese.length ? sintese : resumirSemIa(eventos, especialidade).sintese,
       pontos: r.pontos
-        .map((p) => ({ texto: p.texto.trim(), ancoras: filtrarAncoras(p.ancoras, validos) }))
-        .filter((p) => p.texto && p.ancoras.length),
-      perguntasSugeridas: r.perguntasSugeridas.map((t) => t.trim()).filter(Boolean),
+        .map((p) => ({ texto: limparTexto(p.texto), ancoras: filtrarAncoras(p.ancoras, validos) }))
+        .filter((p) => p.texto && p.ancoras.length && !recomendaConduta(p.texto)),
+      perguntasSugeridas: limparTextos(r.perguntasSugeridas),
     }
   }
   await repo.registrarAcesso({

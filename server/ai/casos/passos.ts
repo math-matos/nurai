@@ -2,8 +2,11 @@ import { z } from 'zod'
 import type { Evento, ProximoPasso } from '../../../src/data/types.js'
 import type { Deps } from '../../app.js'
 import { ErroIa } from '../erros.js'
+import { type Fatos, type Pendencia, derivarFatos, dias } from '../fatos.js'
+import { recomendaConduta } from '../guardrails.js'
 import { pedirJson } from '../json.js'
-import { PERFIL, mensagens, serializarEventos } from '../prompts.js'
+import { PERFIL, contextoHistorico, mensagens } from '../prompts.js'
+import { limparTexto } from '../texto.js'
 import { dataBR, filtrarAncoras, idsDe, normalizar, porData } from './comum.js'
 
 export interface RespostaPassos {
@@ -12,9 +15,7 @@ export interface RespostaPassos {
 }
 
 const MAX_PASSOS = 6
-const JANELA_REPETICAO_DIAS = 180
 const JANELA_RECENTE_DIAS = 180
-const DIA_MS = 86_400_000
 
 const esquemaPasso = z.object({
   titulo: z.string().trim().min(1),
@@ -30,53 +31,37 @@ const TAREFA = `Tarefa: listar os próximos passos práticos do acompanhamento d
 1. exames repetidos ou duplicados: o mesmo exame pedido ou feito de novo pouco tempo depois de um já realizado (cite os dois registros);
 2. pendências: retornos, reavaliações ou exames recomendados que não aparecem depois no histórico;
 3. resultados recentes alterados que ainda não aparecem avaliados em uma consulta posterior.
-Os passos são de organização (levar um laudo, agendar, perguntar, confirmar com quem pediu). Nunca sugira iniciar, suspender ou mudar tratamento.
+Use os FATOS DERIVADOS: cada exame possivelmente repetido e cada pendência listados ali deve virar um passo, com os ids que o fato cita. Não diga que um exame não foi feito se ele aparece no histórico.
+Os passos são de organização (levar um laudo, agendar, perguntar, confirmar com quem pediu). Nunca sugira iniciar, manter, suspender ou mudar remédio ou tratamento — nem como pergunta ao médico.
 Formato da resposta (JSON):
 {"passos": [{"titulo": "ação curta no imperativo", "porque": "fatos e datas dos registros", "ancoras": ["e01"], "prazo": "ex.: Próxima consulta", "prioridade": "alta" | "media" | "baixa"}]}
 - 1 a ${MAX_PASSOS} passos, os mais importantes primeiro, cada um com os ids que o sustentam.`
 
-const dias = (de: string, ate: string) => Math.round((Date.parse(ate) - Date.parse(de)) / DIA_MS)
-const PALAVRAS_VAZIAS = new Set(['novo', 'nova', 'exame', 'exames', 'para', 'com', 'sem'])
-
-function palavrasDe(texto: string): string[] {
-  return normalizar(texto).split(/[^a-z0-9]+/).filter((p) => p.length >= 4 && !PALAVRAS_VAZIAS.has(p))
+/* Exames repetidos e pendências vêm dos fatos derivados — a mesma regra que o modelo recebe. */
+function examesRepetidos({ repeticoes }: Fatos): PassoBruto[] {
+  return repeticoes.map((r) => ({
+    titulo: `Levar o laudo de "${r.exame}" a quem pediu o novo exame`,
+    porque: `O exame foi feito em ${dataBR(r.feitoData)} (${r.feitoInstituicao}) e um novo pedido apareceu em ${dataBR(r.pedidoData)} (${r.pedidoInstituicao}), ${r.dias} dias depois. Confirme com quem pediu se ele ainda é necessário.`,
+    ancoras: [r.feito, r.pedido],
+    prazo: 'Antes da data marcada',
+    prioridade: 'alta' as const,
+  }))
 }
 
-/* "Solicitado ultrassom de carótidas" num registro posterior a um "Ultrassom ... de carótidas" já feito. */
-function examesRepetidos(eventos: Evento[]): PassoBruto[] {
-  return eventos.flatMap((pedido) => {
-    const trecho = pedido.resumo.match(/solicitad[oa]s?\s+([^.;—–]+)/i)?.[1]
-    if (!trecho) return []
-    return trecho.split(/,|\se\s/).flatMap((item) => {
-      const palavras = palavrasDe(item)
-      const feito = palavras.length && eventos.findLast((e) =>
-        e.data < pedido.data && dias(e.data, pedido.data) <= JANELA_REPETICAO_DIAS
-        && ['exame', 'imagem', 'documento'].includes(e.tipo)
-        && palavras.every((p) => normalizar(e.titulo).includes(p)))
-      if (!feito) return []
-      return [{
-        titulo: `Levar o laudo de "${feito.titulo}" a quem pediu o novo exame`,
-        porque: `O exame foi feito em ${dataBR(feito.data)} (${feito.instituicao}) e um novo pedido apareceu em ${dataBR(pedido.data)} (${pedido.instituicao}), ${dias(feito.data, pedido.data)} dias depois. Confirme com quem pediu se ele ainda é necessário.`,
-        ancoras: [feito.id, pedido.id],
-        prazo: 'Antes da data marcada',
-        prioridade: 'alta' as const,
-      }]
-    })
-  })
+const TITULO_PENDENCIA: Record<Pendencia['tipo'], (alvo: string) => string> = {
+  reavaliacao: (alvo) => `Repetir o ${alvo} — a reavaliação pedida não aparece no histórico`,
+  retorno: (alvo) => `Retomar o acompanhamento de ${alvo.toLowerCase()}`,
+  pedido: (alvo) => `Confirmar se ${alvo} ainda precisa ser feito`,
 }
 
-/* Retorno ou reavaliação recomendados sem nenhum registro posterior da mesma especialidade. */
-function pendencias(eventos: Evento[]): PassoBruto[] {
-  return eventos
-    .filter((e) => e.especialidade && /retorno|reavalia/i.test(e.resumo))
-    .filter((e) => !eventos.some((d) => d.data > e.data && d.especialidade === e.especialidade))
-    .map((e) => ({
-      titulo: `Retomar o acompanhamento de ${e.especialidade!.toLowerCase()}`,
-      porque: `Em ${dataBR(e.data)}, "${e.titulo}" registrou: ${e.resumo} Não há registro posterior dessa especialidade no histórico.`,
-      ancoras: [e.id],
-      prazo: 'Em até 30 dias',
-      prioridade: 'alta' as const,
-    }))
+function pendencias({ pendencias }: Fatos): PassoBruto[] {
+  return pendencias.map((p) => ({
+    titulo: TITULO_PENDENCIA[p.tipo](p.alvo),
+    porque: p.descricao,
+    ancoras: p.ancoras,
+    prazo: 'Em até 30 dias',
+    prioridade: 'alta' as const,
+  }))
 }
 
 function resultadosRecentes(eventos: Evento[], jaCitados: Set<string>): PassoBruto[] {
@@ -95,7 +80,8 @@ function resultadosRecentes(eventos: Evento[], jaCitados: Set<string>): PassoBru
 
 function passosSemIa(eventos: Evento[]): PassoBruto[] {
   const ordenados = [...eventos].sort(porData)
-  const prioritarios = [...examesRepetidos(ordenados), ...pendencias(ordenados)]
+  const fatos = derivarFatos(ordenados)
+  const prioritarios = [...examesRepetidos(fatos), ...pendencias(fatos)]
   const citados = new Set(prioritarios.flatMap((p) => p.ancoras))
   return [...prioritarios, ...resultadosRecentes(ordenados, citados)]
 }
@@ -104,15 +90,16 @@ export async function gerarPassos({ repo, llm }: Deps): Promise<RespostaPassos> 
   const { eventos, passos: atuais } = await repo.estado()
   const brutos = llm.nome === 'mock'
     ? passosSemIa(eventos)
-    : (await pedirJson(llm, mensagens(
-        TAREFA, PERFIL, `Histórico (${eventos.length} registros):\n${serializarEventos(eventos)}`,
-      ), esquema, { maxTokens: 2000 })).passos
+    : (await pedirJson(llm, mensagens(TAREFA, PERFIL, contextoHistorico(eventos)), esquema, { maxTokens: 2000 })).passos
 
   const validos = idsDe(eventos)
   const feitos = new Set(atuais.filter((p) => p.feito).map((p) => normalizar(p.titulo)))
   const passos: ProximoPasso[] = brutos
-    .map((p) => ({ ...p, ancoras: filtrarAncoras(p.ancoras, validos) }))
-    .filter((p) => p.ancoras.length)
+    .map((p) => ({
+      ...p, titulo: limparTexto(p.titulo), porque: limparTexto(p.porque), prazo: limparTexto(p.prazo),
+      ancoras: filtrarAncoras(p.ancoras, validos),
+    }))
+    .filter((p) => p.titulo && p.ancoras.length && !recomendaConduta(`${p.titulo} ${p.porque}`))
     .slice(0, MAX_PASSOS)
     .map((p, i) => ({ id: `p-ia-${i + 1}`, ...p, feito: feitos.has(normalizar(p.titulo)) }))
   /* Não apagar a lista atual da paciente por uma resposta sem nenhum passo sustentado. */

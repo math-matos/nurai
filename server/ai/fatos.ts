@@ -27,6 +27,9 @@ export interface Repeticao {
 }
 
 export interface Pendencia {
+  tipo: 'pedido' | 'reavaliacao' | 'retorno'
+  /* exame pedido, medida a reavaliar ou especialidade do retorno */
+  alvo: string
   data: string
   descricao: string
   ancoras: string[]
@@ -102,8 +105,10 @@ function pedidosSemResultado(eventos: Evento[]): Pendencia[] {
     .filter((item) => !feitoAntes(eventos, pedido, item))
     .filter((item) => !eventos.some((e) => e.data > pedido.data && TIPOS_RESULTADO.includes(e.tipo) && tituloTem(e, palavrasDe(item))))
     .map((item) => ({
+      tipo: 'pedido' as const,
+      alvo: item,
       data: pedido.data,
-      descricao: `Pedido de ${item} em ${dataBR(pedido.data)} ("${pedido.titulo}", ${pedido.id}) sem resultado posterior no histórico.`,
+      descricao: `Pedido de ${item} em ${dataBR(pedido.data)} ("${pedido.titulo}") sem resultado posterior no histórico.`,
       ancoras: [pedido.id],
     })))
 }
@@ -120,11 +125,13 @@ function reavaliacoesSemMedicao(eventos: Evento[]): Pendencia[] {
     const ultima = medicoes.findLast((d) => d.data <= e.data)
     const valor = ultima?.medidas?.find((m) => m.nome === nome)
     const anterior = ultima && valor
-      ? ` A última medição é de ${dataBR(ultima.data)}: ${formatarNumero(valor.valor)} ${valor.unidade} (${ultima.id}).`
+      ? ` A última medição é de ${dataBR(ultima.data)}: ${formatarNumero(valor.valor)} ${valor.unidade}.`
       : ''
     return [{
+      tipo: 'reavaliacao' as const,
+      alvo: nome,
       data: e.data,
-      descricao: `Reavaliação de ${nome} pedida em ${dataBR(e.data)} ("${e.titulo}", ${e.id}), sem nenhuma medição de ${nome} depois dessa data.${anterior}`,
+      descricao: `Reavaliação de ${nome} pedida em ${dataBR(e.data)} ("${e.titulo}"), sem nenhuma medição de ${nome} depois dessa data.${anterior}`,
       ancoras: ultima ? [e.id, ultima.id] : [e.id],
     }]
   })
@@ -138,8 +145,10 @@ function retornosSemRegistro(eventos: Evento[]): Pendencia[] {
     .map((e) => {
       const frase = e.resumo.split(/(?<=\.)\s+/).find((f) => /retorno/i.test(f))?.trim().replace(/\.$/, '')
       return {
+        tipo: 'retorno' as const,
+        alvo: e.especialidade!,
         data: e.data,
-        descricao: `Em ${dataBR(e.data)}, "${e.titulo}" (${e.id}) registrou: "${frase}". Não há registro posterior de ${e.especialidade}.`,
+        descricao: `Em ${dataBR(e.data)}, "${e.titulo}" registrou: "${frase}". Não há registro posterior de ${e.especialidade}.`,
         ancoras: [e.id],
       }
     })
@@ -172,6 +181,6 @@ export function serializarFatos(f: Fatos): string {
     lista(f.repeticoes.map((r) =>
       `"${r.exame}" feito em ${dataBR(r.feitoData)} em ${r.feitoInstituicao} (${r.feito}) e pedido de novo em ${dataBR(r.pedidoData)} em ${r.pedidoInstituicao} (${r.pedido}), ${r.dias} dias depois.`)),
     'Pendências (recomendação ou pedido sem registro posterior correspondente):',
-    lista(f.pendencias.map((p) => p.descricao)),
+    lista(f.pendencias.map((p) => `${p.descricao} (${p.ancoras.join(', ')})`)),
   ].join('\n')
 }

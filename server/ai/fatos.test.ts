@@ -49,7 +49,9 @@ describe('derivarFatos — exames repetidos', () => {
 describe('derivarFatos — pendências', () => {
   it('no seed, aponta o TSH nunca reavaliado e o retorno anual da oftalmologia', () => {
     const { pendencias } = derivarFatos(EVENTOS)
-    expect(pendencias.map((p) => p.ancoras)).toEqual([['e14'], ['e16', 'e15']])
+    expect(pendencias.map((p) => [p.tipo, p.alvo, p.ancoras])).toEqual([
+      ['retorno', 'Oftalmologia', ['e14']], ['reavaliacao', 'TSH', ['e16', 'e15']],
+    ])
     expect(pendencias.find((p) => p.ancoras[0] === 'e16')?.descricao).toMatch(/TSH.*10\/02\/2025/)
   })
 
@@ -77,6 +79,7 @@ describe('serializarFatos', () => {
     expect(texto).toMatch(/Hemoglobina glicada \(HbA1c\).*7,8 em 02\/04\/2019 \(e02\)/)
     expect(texto).toMatch(/7,4 em 14\/09\/2025 \(e18\), subiu/)
     expect(texto).toMatch(/27\/05\/2026.*\(e22\).*08\/07\/2026.*\(e24\)/)
+    expect(texto).toMatch(/Reavaliação de TSH.*\(e16, e15\)/)
     expect(texto).not.toMatch(/\d{4}-\d{2}-\d{2}/)
   })
 

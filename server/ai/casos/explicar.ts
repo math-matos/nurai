@@ -3,6 +3,7 @@ import type { Evento, Medida } from '../../../src/data/types.js'
 import type { Deps } from '../../app.js'
 import { pedirJson } from '../json.js'
 import { mensagens, serializarEvento, serializarEventos } from '../prompts.js'
+import { limparTextos } from '../texto.js'
 import { dataBR, filtrarAncoras, formatarNumero, idsDe, mesAno, porData } from './comum.js'
 
 export interface RespostaExplicacao {
@@ -31,8 +32,6 @@ Formato da resposta (JSON):
 - "pontosDeAtencao": valores fora da faixa de referência e mudanças em relação aos registros anteriores, descritos sem interpretar como diagnóstico. Pode ser [].
 - "perguntasParaMedico": 2 a 4 perguntas que a paciente pode levar à consulta.
 - "ancoras": ids dos registros citados.`
-
-const limpar = (textos: string[]) => textos.map((t) => t.trim()).filter(Boolean)
 
 /* Registros anteriores com alguma medida em comum; sem medidas, mesmo tipo com tag em comum. */
 function anterioresRelacionados(evento: Evento, eventos: Evento[]): Evento[] {
@@ -91,9 +90,9 @@ export async function explicarExame({ repo, llm }: Deps, id: string): Promise<Re
     anteriores.length ? `Registros anteriores relacionados:\n${serializarEventos(anteriores)}` : 'Não há registros anteriores relacionados.',
   ), esquema)
   return {
-    explicacao: limpar(r.explicacao),
-    pontosDeAtencao: limpar(r.pontosDeAtencao),
-    perguntasParaMedico: limpar(r.perguntasParaMedico),
+    explicacao: limparTextos(r.explicacao),
+    pontosDeAtencao: limparTextos(r.pontosDeAtencao),
+    perguntasParaMedico: limparTextos(r.perguntasParaMedico),
     ancoras: filtrarAncoras([evento.id, ...r.ancoras], idsDe([evento, ...anteriores])),
     aviso: AVISO,
     geradoPor: llm.nome,
