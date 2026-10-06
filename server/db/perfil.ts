@@ -40,6 +40,7 @@ export function perfilNovo(pacienteId: string, dados: NovoPaciente, onboarding: 
     alergias: dados.alergias ?? [],
     cartaoSus: opcional(dados.cartaoSus),
     plano: opcional(dados.plano),
+    responsavel: dados.responsavel,
     onboarding,
     convidado: dados.convidado,
   })
@@ -55,5 +56,6 @@ export function perfilAtualizado(atual: PerfilGravado, m: AtualizacaoPerfil): Pe
     alergias: m.alergias ?? atual.alergias,
     cartaoSus: texto(m.cartaoSus, atual.cartaoSus),
     plano: texto(m.plano, atual.plano),
+    responsavel: m.responsavel === undefined ? atual.responsavel : (m.responsavel ?? undefined),
   })
 }

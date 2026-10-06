@@ -42,10 +42,23 @@ export interface EstadoRepositorio {
 
 export type NovoAcesso = Omit<AcessoLog, 'id' | 'quando'>
 
+export type SituacaoCompartilhamento = 'ativo' | 'revogado' | 'expirado'
+
+export interface CompartilhamentoEncontrado extends CompartilhamentoAtivo {
+  situacao: SituacaoCompartilhamento
+}
+
 export type Onboarding = 'pendente' | 'vazio' | 'exemplo'
 export type ModoOnboarding = Exclude<Onboarding, 'pendente'>
 
-/* iniciais e idade são derivadas de nome e dataNascimento na leitura; não são gravadas. */
+/* Quem usa a conta para cuidar do histórico de outra pessoa (relacao: o que ele é do paciente, ex.: "filho"). */
+export interface Responsavel {
+  nome: string
+  relacao: string
+}
+
+/* nome é o do paciente, dono do histórico; com responsavel, a conta é de quem cuida dele.
+   iniciais e idade são derivadas de nome e dataNascimento na leitura; não são gravadas. */
 export interface Perfil {
   pacienteId: string
   nome: string
@@ -56,6 +69,7 @@ export interface Perfil {
   alergias: string[]
   cartaoSus?: string
   plano?: string
+  responsavel?: Responsavel
   onboarding: Onboarding
   convidado: boolean
 }
@@ -67,12 +81,13 @@ export interface DadosPerfil {
   alergias?: string[]
   cartaoSus?: string
   plano?: string
+  responsavel?: Responsavel
 }
 
 export type NovoPaciente = DadosPerfil & { convidado: boolean }
 
-/* undefined mantém o campo; '' remove um opcional. */
-export type AtualizacaoPerfil = Partial<DadosPerfil>
+/* undefined mantém o campo; '' remove um opcional e responsavel: null volta a ser o histórico do próprio usuário. */
+export type AtualizacaoPerfil = Partial<Omit<DadosPerfil, 'responsavel'>> & { responsavel?: Responsavel | null }
 
 export interface Usuario {
   id: string
@@ -106,16 +121,17 @@ export interface SessaoAtiva {
 /* Dados de um paciente. Métodos que recebem id devolvem null quando o id não existe para esse paciente. */
 export interface RepositorioPaciente {
   estado(): Promise<EstadoRepositorio>
-  adicionarEvento(evento: Evento, autor: string): Promise<Evento>
+  /* autor e papel vão para o log de acessos (papel padrão: Titular). */
+  adicionarEvento(evento: Evento, autor: string, papel?: string): Promise<Evento>
   /* Apaga o evento, tira o id das âncoras dos passos (passo sem âncora sai junto) e registra no log.
      false: o evento não é deste paciente. */
-  excluirEvento(id: string, autor: string): Promise<boolean>
-  alternarConsentimento(id: string, autor: string): Promise<Consentimento | null>
+  excluirEvento(id: string, autor: string, papel?: string): Promise<boolean>
+  alternarConsentimento(id: string, autor: string, papel?: string): Promise<Consentimento | null>
   alternarPasso(id: string): Promise<ProximoPasso | null>
   substituirPassos(passos: ProximoPasso[]): Promise<ProximoPasso[]>
-  criarCompartilhamento(para: string, autor: string): Promise<Compartilhamento>
+  criarCompartilhamento(para: string, autor: string, papel?: string): Promise<Compartilhamento>
   /* false: o código não é deste paciente. Revogar de novo devolve true sem registrar outro acesso. */
-  revogarCompartilhamento(codigo: string, autor: string): Promise<boolean>
+  revogarCompartilhamento(codigo: string, autor: string, papel?: string): Promise<boolean>
   conectarFonte(id: string): Promise<FonteConectada | null>
   listarAcessos(): Promise<AcessoLog[]>
   registrarAcesso(log: NovoAcesso): Promise<AcessoLog>
@@ -149,6 +165,8 @@ export interface Repositorio {
 
   /* Código exato (já normalizado); null se não existe, foi revogado ou expirou. */
   buscarCompartilhamentoAtivo(codigo: string): Promise<CompartilhamentoAtivo | null>
+  /* Como o anterior, mas devolve também o revogado e o expirado (revogado prevalece); null só se não existe. */
+  buscarCompartilhamento(codigo: string): Promise<CompartilhamentoEncontrado | null>
 
   /* Convidados saem com todos os dados (como excluirPaciente). Devolve quantos de cada foram apagados. */
   limpar(limites: LimitesLimpeza): Promise<ResultadoLimpeza>
@@ -166,6 +184,15 @@ export class ErroConflito extends Error {
 export function semOpcionaisVazios(evento: Evento): Evento {
   const { especialidade, documento, ...resto } = evento
   return { ...resto, ...(especialidade && { especialidade }), ...(documento && { documento }) }
+}
+
+export const PAPEL_TITULAR = 'Titular'
+
+/* Quem age pela conta e vai para o log: o próprio paciente ou o responsável que cuida do histórico dele. */
+export function autorDe({ nome, responsavel }: Pick<Perfil, 'nome' | 'responsavel'>): Pick<AcessoLog, 'quem' | 'papel'> {
+  return responsavel
+    ? { quem: responsavel.nome, papel: `Responsável (${responsavel.relacao})` }
+    : { quem: nome, papel: PAPEL_TITULAR }
 }
 
 export const ACAO_EXCLUIR_EVENTO = 'Excluiu registro do histórico'
