@@ -1,0 +1,91 @@
+/* data-testid estáveis para os testes E2E. Renomear um valor quebra os specs de e2e/.
+   Auth: form-entrar, entrar-email, entrar-senha, entrar-enviar, link-cadastro,
+   form-cadastro, cadastro-nome, cadastro-email, cadastro-senha, cadastro-nascimento, cadastro-lgpd,
+   cadastro-enviar, botao-demo, erro-formulario, aviso-sessao.
+   Onboarding: onboarding-vazio, onboarding-exemplo.
+   Shell: shell-perfil, shell-perfil-nome, selo-convidado, botao-sair, botao-reiniciar, reinicio-confirmar,
+   reinicio-zerar, estado-vazio, cta-primeiro-documento.
+   Linha do tempo: evento-item, evento-detalhe, ia-explicar, ia-explicacao.
+   Fontes/conferência: fontes-texto, fontes-ler-texto, fontes-pdf, conferencia, conferencia-titulo,
+   conferencia-salvar, conferencia-descartar.
+   IA: copiloto-pergunta, copiloto-enviar, copiloto-resposta, ia-passos, ia-resumo, resumo-sintese.
+   Compartilhamento: acesso-gerar, acesso-painel, acesso-codigo, acesso-validade, acesso-copiar, acesso-revogar.
+   Médico: medico-form, medico-codigo, medico-profissional, medico-entrar, medico-erro, medico-paciente,
+   medico-aviso, medico-evento, medico-pendencias, medico-gerar-resumo, medico-resumo, medico-sair.
+   Conta: perfil-form, perfil-salvar, perfil-salvo, excluir-confirmacao, excluir-botao. */
+export const TID = {
+  formEntrar: 'form-entrar',
+  entrarEmail: 'entrar-email',
+  entrarSenha: 'entrar-senha',
+  entrarEnviar: 'entrar-enviar',
+  linkCadastro: 'link-cadastro',
+  formCadastro: 'form-cadastro',
+  cadastroNome: 'cadastro-nome',
+  cadastroEmail: 'cadastro-email',
+  cadastroSenha: 'cadastro-senha',
+  cadastroNascimento: 'cadastro-nascimento',
+  cadastroLgpd: 'cadastro-lgpd',
+  cadastroEnviar: 'cadastro-enviar',
+  botaoDemo: 'botao-demo',
+  erroFormulario: 'erro-formulario',
+  avisoSessao: 'aviso-sessao',
+
+  onboardingVazio: 'onboarding-vazio',
+  onboardingExemplo: 'onboarding-exemplo',
+
+  shellPerfil: 'shell-perfil',
+  shellPerfilNome: 'shell-perfil-nome',
+  seloConvidado: 'selo-convidado',
+  botaoSair: 'botao-sair',
+  botaoReiniciar: 'botao-reiniciar',
+  reinicioConfirmar: 'reinicio-confirmar',
+  reinicioZerar: 'reinicio-zerar',
+  estadoVazio: 'estado-vazio',
+  ctaPrimeiroDocumento: 'cta-primeiro-documento',
+
+  eventoItem: 'evento-item',
+  eventoDetalhe: 'evento-detalhe',
+  iaExplicar: 'ia-explicar',
+  iaExplicacao: 'ia-explicacao',
+
+  fontesTexto: 'fontes-texto',
+  fontesLerTexto: 'fontes-ler-texto',
+  fontesPdf: 'fontes-pdf',
+  conferencia: 'conferencia',
+  conferenciaTitulo: 'conferencia-titulo',
+  conferenciaSalvar: 'conferencia-salvar',
+  conferenciaDescartar: 'conferencia-descartar',
+
+  copilotoPergunta: 'copiloto-pergunta',
+  copilotoEnviar: 'copiloto-enviar',
+  copilotoResposta: 'copiloto-resposta',
+  iaPassos: 'ia-passos',
+  iaResumo: 'ia-resumo',
+  resumoSintese: 'resumo-sintese',
+
+  acessoGerar: 'acesso-gerar',
+  acessoPainel: 'acesso-painel',
+  acessoCodigo: 'acesso-codigo',
+  acessoValidade: 'acesso-validade',
+  acessoCopiar: 'acesso-copiar',
+  acessoRevogar: 'acesso-revogar',
+
+  medicoForm: 'medico-form',
+  medicoCodigo: 'medico-codigo',
+  medicoProfissional: 'medico-profissional',
+  medicoEntrar: 'medico-entrar',
+  medicoErro: 'medico-erro',
+  medicoPaciente: 'medico-paciente',
+  medicoAviso: 'medico-aviso',
+  medicoEvento: 'medico-evento',
+  medicoPendencias: 'medico-pendencias',
+  medicoGerarResumo: 'medico-gerar-resumo',
+  medicoResumo: 'medico-resumo',
+  medicoSair: 'medico-sair',
+
+  perfilForm: 'perfil-form',
+  perfilSalvar: 'perfil-salvar',
+  perfilSalvo: 'perfil-salvo',
+  excluirConfirmacao: 'excluir-confirmacao',
+  excluirBotao: 'excluir-botao',
+} as const
