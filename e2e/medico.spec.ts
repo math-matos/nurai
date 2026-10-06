@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { montarHistoricoMarcos } from './fixtures/historico-marcos.ts'
 import { respostaDe } from './helpers/ia.ts'
-import { CSRF, REAL, cabecalhosDeIp, esperarApp, ipAleatorio, lerEstado } from './helpers/sessao.ts'
+import { CSRF, REAL, esperarApp, lerEstado } from './helpers/sessao.ts'
 import { expect, test } from './helpers/test.ts'
 
 const PROFISSIONAL = 'Dra. Ana Lima — CRM-FIC 123456'
@@ -36,7 +36,7 @@ test('profissional abre o histórico pelo código, só lê, e perde o acesso qua
   expect(copiado).toContain('/#/acesso')
 
   /* Profissional sem conta, noutro navegador, digitando o código em minúsculas e com espaços. */
-  const { contexto, pagina } = await novoNavegador()
+  const { pagina, api } = await novoNavegador()
   await pagina.goto('/#/acesso')
   const abertura = await informarCodigo(pagina, ` ${codigo.slice(0, 3)} ${codigo.slice(3)} `.toLowerCase())
   expect(abertura.status()).toBe(200)
@@ -63,8 +63,8 @@ test('profissional abre o histórico pelo código, só lê, e perde o acesso qua
   const botoes = await pagina.getByRole('button').allTextContents()
   expect(botoes.filter((b) => ACOES_DE_ESCRITA.test(b))).toEqual([])
   await expect(pagina.getByTestId('evento-excluir')).toHaveCount(0)
-  expect((await contexto.request.get('/api/estado')).status()).toBe(401)
-  expect((await contexto.request.delete(`/api/eventos/${estado.eventos[0].id}`, { headers: CSRF })).status()).toBe(401)
+  expect((await api.get('/api/estado')).status()).toBe(401)
+  expect((await api.delete(`/api/eventos/${estado.eventos[0].id}`, { headers: CSRF })).status()).toBe(401)
 
   const gerado = respostaDe(pagina, 'POST', '/api/acesso-medico/resumo')
   await pagina.getByTestId('medico-gerar-resumo').click()
@@ -135,6 +135,55 @@ test('tela aberta do profissional se fecha quando ele volta à aba depois da rev
   await expect(aviso).toHaveCount(0)
 })
 
+test.describe('conferência da tela aberta', () => {
+  /* O Chromium loga a requisição abortada de propósito como erro de console. */
+  test.use({ ignorarErros: [/net::ERR_FAILED/] })
+
+  test('429 ou falha de rede na conferência não fecham a tela; a conferência do ciclo seguinte ainda encerra', async ({
+    page, contas, novoNavegador,
+  }) => {
+    const conta = await contas.criar({ request: page.request, nome: 'Helena Duarte Nogueira', modo: 'exemplo' })
+    const criado = await page.request.post('/api/compartilhamentos', { headers: CSRF, data: { para: 'Dra. Teste' } })
+    const { codigo } = await criado.json()
+
+    const { pagina } = await novoNavegador()
+    await pagina.clock.install()
+    await pagina.goto('/#/acesso')
+    expect((await informarCodigo(pagina, codigo)).status()).toBe(200)
+    const paciente = pagina.getByTestId('medico-paciente')
+    const aviso = pagina.getByTestId('medico-encerrado')
+    await expect(paciente).toContainText(conta.nome)
+
+    const VERIFICAR = '**/api/acesso-medico/verificar'
+    const proximoCiclo = () => pagina.clock.fastForward(60_000)
+
+    await pagina.route(VERIFICAR, (rota) => rota.fulfill({
+      status: 429, headers: { 'retry-after': '60' },
+      json: { erro: 'Muitas tentativas seguidas. Tente de novo em 1 min.', codigo: 'MUITAS_TENTATIVAS' },
+    }), { times: 1 })
+    const limitada = respostaDe(pagina, 'POST', '/api/acesso-medico/verificar')
+    await proximoCiclo()
+    expect((await limitada).status()).toBe(429)
+    await expect(paciente).toContainText(conta.nome)
+    await expect(aviso).toHaveCount(0)
+
+    await pagina.route(VERIFICAR, (rota) => rota.abort(), { times: 1 })
+    const semRede = pagina.waitForEvent('requestfailed', (r) => r.url().includes('/api/acesso-medico/verificar'))
+    await proximoCiclo()
+    await semRede
+    await expect(paciente).toContainText(conta.nome)
+    await expect(aviso).toHaveCount(0)
+
+    /* A tela continuou conferindo: revogado o código, o ciclo seguinte encerra o acesso. */
+    expect((await page.request.delete(`/api/compartilhamentos/${codigo}`, { headers: CSRF })).status()).toBeLessThan(300)
+    const recusada = respostaDe(pagina, 'POST', '/api/acesso-medico/verificar')
+    await proximoCiclo()
+    expect((await recusada).status()).toBe(404)
+    await expect(aviso).toContainText('Este acesso foi encerrado pelo paciente')
+    await expect(paciente).toHaveCount(0)
+  })
+})
+
 test('código inexistente e campos inválidos mostram erro no campo', async ({ novoNavegador }) => {
   const { pagina } = await novoNavegador()
   await pagina.goto('/#/acesso')
@@ -154,11 +203,10 @@ test('código inexistente e campos inválidos mostram erro no campo', async ({ n
 })
 
 test('a 11ª tentativa de código no mesmo minuto responde 429', async ({ novoNavegador }) => {
-  const ip = ipAleatorio()
-  const { contexto, pagina } = await novoNavegador({ ip })
+  const { pagina, api } = await novoNavegador()
   for (let i = 0; i < 10; i++) {
-    const res = await contexto.request.post('/api/acesso-medico', {
-      headers: { ...CSRF, ...cabecalhosDeIp(ip) },
+    const res = await api.post('/api/acesso-medico', {
+      headers: CSRF,
       data: { codigo: 'ZZZ999', profissional: PROFISSIONAL },
     })
     expect(res.status(), `tentativa ${i + 1}`).toBe(404)
@@ -182,7 +230,7 @@ test('pontos em aberto vêm do histórico mesmo sem "Reanalisar"; tentativa com 
   const comp = await page.request.post('/api/compartilhamentos', { headers: CSRF, data: { para: 'Dra. Ana Lima' } })
   const { codigo } = await comp.json() as { codigo: string }
 
-  const { contexto, pagina } = await novoNavegador()
+  const { pagina, api } = await novoNavegador()
   await pagina.goto('/#/acesso')
   const abertura = await informarCodigo(pagina, codigo)
   expect(abertura.status()).toBe(200)
@@ -205,7 +253,7 @@ test('pontos em aberto vêm do histórico mesmo sem "Reanalisar"; tentativa com 
   await expect(lipidico).toHaveAttribute('open', '')
   await expect(lipidico.locator('summary')).toBeFocused()
 
-  const verificar = () => contexto.request.post('/api/acesso-medico/verificar', { headers: CSRF, data: { codigo } })
+  const verificar = () => api.post('/api/acesso-medico/verificar', { headers: CSRF, data: { codigo } })
   expect((await verificar()).status()).toBe(204)
 
   await page.goto('/#/app/resumo')

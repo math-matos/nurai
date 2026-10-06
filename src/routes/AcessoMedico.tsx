@@ -20,8 +20,8 @@ const ORDEM = [{ campo: 'codigo', id: 'medico-codigo' }, { campo: 'profissional'
 
 interface Liberado { dados: Acesso; codigo: string; profissional: string }
 
-/* /verificar não registra acesso, mas divide com a abertura e o resumo o limite de 10 chamadas por minuto
-   por IP: trocar de aba várias vezes seguidas conta uma vez só. */
+/* /verificar não registra acesso e tem limite por IP próprio, que vários profissionais da mesma clínica
+   dividem: trocar de aba várias vezes seguidas conta uma vez só. */
 const PERIODO_REVALIDACAO_MS = 60_000
 const INTERVALO_MINIMO_MS = 10_000
 
@@ -308,7 +308,8 @@ function Ancoras({ ids, eventos, aoAncorar }: { ids: string[]; eventos: Evento[]
   )
 }
 
-/* Confere, ao voltar para a aba e a cada minuto, se o paciente não revogou o código com a tela aberta. */
+/* Confere, ao voltar para a aba e a cada minuto, se o paciente não revogou o código com a tela aberta.
+   Só a recusa do código fecha a tela: limite excedido (429) ou falha de rede ficam para a próxima conferência. */
 function useRevalidarCodigo(codigo: string, aoEncerrar: () => void) {
   useEffect(() => {
     let ativo = true
