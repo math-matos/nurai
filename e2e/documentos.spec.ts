@@ -149,6 +149,8 @@ test('o valor editado na conferência é o que fica salvo', async ({ page }) => 
   await linha.getByLabel('Valor').fill(String(editado).replace('.', ','))
   const titulo = `Perfil lipídico conferido ${Date.now()}`
   await page.getByTestId('conferencia-titulo').fill(titulo)
+  /* O laudo de exemplo é da Helena; a conta deste arquivo é do Marcos. */
+  await page.getByTestId('conferencia-confirmo-meu').check()
 
   const gravacao = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/eventos')
   await page.getByTestId('conferencia-salvar').click()
@@ -188,4 +190,75 @@ test('medidas com o mesmo nome aparecem todas, sem erro de chave repetida', asyn
   await expect(page.getByTestId('evento-detalhe').locator('.regua').filter({ hasText: 'SpO2' })).toHaveCount(2)
   await page.goto('/#/app/resumo')
   await expect(page.locator('.regua').filter({ hasText: 'SpO2' })).toHaveCount(2)
+})
+
+/* Exame de outra pessoa no histórico é erro grave: o nome impresso é comparado com o titular. */
+test('documento de outro paciente exige confirmação antes de salvar', async ({ page, contas }) => {
+  await contas.criar({ request: page.request, nome: 'Joana Prado Lima', modo: 'vazio' })
+  await page.goto('/#/app/fontes')
+  await page.reload()
+  await esperarApp(page)
+
+  const resposta = page.waitForResponse(ehExtrair)
+  await page.getByTestId('fontes-pdf').setInputFiles(caminho('03-glicemia-hba1c-2026-03-19.pdf'))
+  const extracao = await (await resposta).json()
+  expect(extracao.alertas).toEqual([expect.objectContaining({ codigo: 'PACIENTE_DIVERGENTE' })])
+
+  const alerta = page.getByTestId('conferencia-identidade')
+  await expect(alerta).toContainText('Este documento parece ser de Marcos')
+  await expect(alerta).toContainText('não de Joana Prado Lima')
+  const salvar = page.getByTestId('conferencia-salvar')
+  await expect(salvar).toBeDisabled()
+
+  await page.getByTestId('conferencia-confirmo-meu').check()
+  await expect(salvar).toBeEnabled()
+  await page.getByTestId('conferencia-confirmo-meu').uncheck()
+  await expect(salvar).toBeDisabled()
+  await page.getByTestId('conferencia-confirmo-meu').check()
+
+  const gravacao = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/eventos')
+  await salvar.click()
+  expect((await gravacao).status()).toBe(201)
+})
+
+test('documento do próprio titular não pede confirmação de identidade', async ({ page }) => {
+  const resposta = page.waitForResponse(ehExtrair)
+  await page.getByTestId('fontes-pdf').setInputFiles(caminho('03-glicemia-hba1c-2026-03-19.pdf'))
+  expect((await (await resposta).json()).alertas).toEqual([])
+  await expect(page.getByTestId('conferencia')).toBeVisible()
+  await expect(page.getByTestId('conferencia-identidade')).toHaveCount(0)
+  await expect(page.getByTestId('conferencia-salvar')).toBeEnabled()
+  await page.getByTestId('conferencia-descartar').click()
+})
+
+/* "> 40" guarda só o piso: a régua mostra "≥ 40" e a faixa aberta, e o campo de máximo fica em branco. */
+test('faixa só com piso ("> 40") vira medida com régua aberta e é salva', async ({ page }) => {
+  const texto = [
+    'Laboratório Quaresmeira — resultado de exame',
+    'Paciente: Marcos Vinícius Teixeira',
+    'Data da coleta: 12/03/2026',
+    'HDL-colesterol      38 mg/dL     Desejável: > 40',
+    'LDL-colesterol      138 mg/dL    Desejável: < 130',
+  ].join('\n')
+  await page.getByTestId('fontes-texto').fill(texto)
+  const resposta = page.waitForResponse(ehExtrair)
+  await page.getByTestId('fontes-ler-texto').click()
+  const { evento, avisos } = await (await resposta).json()
+  const hdl = evento.medidas.find((m: { nome: string }) => /hdl/i.test(m.nome))
+  expect(hdl).toMatchObject({ valor: 38, refMin: 40, sinal: 'alterado' })
+  expect(hdl).not.toHaveProperty('refMax')
+  expect(avisos.join(' ')).not.toMatch(/omitida/)
+
+  const linha = page.getByTestId('conferencia').locator('.medida-edicao').filter({ has: page.locator('input[value="HDL-colesterol"]') })
+  await expect(linha.getByLabel('Ref. mín.')).toHaveValue('40')
+  await expect(linha.getByLabel('Ref. máx.')).toHaveValue('')
+  await expect(linha.locator('.regua')).toContainText('≥ 40')
+  await expect(linha.locator('.regua__faixa--sem-teto')).toHaveCount(1)
+
+  const gravacao = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/eventos')
+  await page.getByTestId('conferencia-salvar').click()
+  const salvo: Evento = await (await gravacao).json()
+  expect(salvo.medidas!.find((m) => /hdl/i.test(m.nome))).toMatchObject({ refMin: 40 })
+  await expect(page.getByTestId('evento-detalhe').locator('.regua').filter({ hasText: 'HDL' })).toContainText('≥ 40')
+  await expect(page.getByTestId('evento-detalhe').locator('.regua').filter({ hasText: 'LDL' })).toContainText('≤ 130')
 })

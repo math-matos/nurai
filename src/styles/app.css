@@ -619,6 +619,13 @@
 .colar__acoes { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 .lendo__nota { margin-top: var(--sp-3); font-size: 13px; color: var(--ink-3); max-width: 62ch; }
 
+.revisao__identidade {
+  display: grid; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4);
+  border: 1.5px solid var(--sig-alterado); border-radius: var(--r-md); background: #fbefec; color: var(--ink);
+}
+.revisao__identidade p { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; line-height: 1.5; }
+.revisao__identidade p svg { color: var(--sig-alterado); flex: none; margin-top: 2px; }
+.revisao__identidade label { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 600; cursor: pointer; }
 .revisao__selos { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .chip--baixa { color: var(--sig-atencao); border-color: #e8d6ae; background: #fbf4e6; }
 .revisao__resumo { display: grid; gap: 5px; }

@@ -28,6 +28,8 @@ const CONTRATO = {
       .pipe(z.preprocess((e) => ({ ...e, id: 'sem-id' }), esquemaEvento))
       .refine((e) => e.origem === 'OCR + IA' && e.novo === true, 'origem OCR + IA e novo: true'),
     avisos: z.array(z.string()),
+    alertas: z.array(z.object({ codigo: z.literal('PACIENTE_DIVERGENTE'), texto: z.string().min(1) }).strict()),
+    pacienteNoDocumento: z.string().min(1).optional(),
     geradoPor,
   }).strict(),
   explicar: z.object({
@@ -280,6 +282,19 @@ describe('rotas de IA com provider real (fake)', () => {
   })
 
   describe('POST /api/extrair', () => {
+    it('compara o paciente do documento com o titular da sessão', async () => {
+      const outro = await app(llmFake({ ...EXTRACAO, pacienteNoDocumento: 'Marcos Vinícius Teixeira' }).llm)
+        .request('/api/extrair', json({ texto: LAUDO_TEXTO.join('\n') }))
+      const divergente = CONTRATO.extrair.parse(await outro.json())
+      expect(divergente.pacienteNoDocumento).toBe('Marcos Vinícius Teixeira')
+      expect(divergente.alertas).toEqual([{
+        codigo: 'PACIENTE_DIVERGENTE', texto: expect.stringContaining(`Marcos Vinícius Teixeira, não de ${NOME}`),
+      }])
+      const proprio = await app(llmFake({ ...EXTRACAO, pacienteNoDocumento: NOME }).llm)
+        .request('/api/extrair', json({ texto: LAUDO_TEXTO.join('\n') }))
+      expect(CONTRATO.extrair.parse(await proprio.json()).alertas).toEqual([])
+    })
+
     it('extrai evento de texto com sinal calculado no servidor e não salva', async () => {
       const { llm, chamadas } = llmFake(EXTRACAO)
       const antes = (await repo.estado()).eventos.length

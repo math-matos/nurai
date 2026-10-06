@@ -47,7 +47,7 @@ export function rotasIa(llm: LlmProvider): Hono<AmbienteApp> {
   rotas.post('/extrair', async (c) => {
     const multipart = c.req.header('content-type')?.startsWith('multipart/form-data')
     const entrada = multipart ? await lerPdf(c) : await lerCorpo(c, esquemaTexto)
-    return c.json(await extrairEvento({ llm }, entrada))
+    return c.json(await extrairEvento({ llm, perfil: c.var.perfil }, entrada))
   })
 
   rotas.post('/exames/:id/explicar', async (c) => {

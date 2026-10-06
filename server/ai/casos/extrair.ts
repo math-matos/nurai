@@ -7,6 +7,7 @@ import { pedirJson } from '../json.js'
 import { mensagens } from '../prompts.js'
 import { hojeISO, type ContextoIa } from './comum.js'
 import { extrairPorHeuristica, lerDataDoTexto } from './extrair-mock.js'
+import { alertaDeIdentidade, type AlertaExtracao } from './identidade.js'
 
 export interface EntradaExtracao {
   texto: string
@@ -16,6 +17,9 @@ export interface EntradaExtracao {
 export interface ResultadoExtracao {
   evento: Omit<Evento, 'id'>
   avisos: string[]
+  /* Alertas que exigem confirmação explícita na conferência (paciente de outro nome). */
+  alertas: AlertaExtracao[]
+  pacienteNoDocumento?: string
   geradoPor: 'oci' | 'mock'
 }
 
@@ -31,6 +35,7 @@ export const esquemaExtracao = z.discriminatedUnion('clinico', [
   z.object({ clinico: z.literal(false) }),
   z.object({
     clinico: z.literal(true),
+    pacienteNoDocumento: z.string().nullish(),
     data: z.string().nullish(),
     tipo: z.enum(TIPOS),
     titulo: z.string().trim().min(1),
@@ -55,8 +60,9 @@ type ExtracaoClinica = Extract<ExtracaoBruta, { clinico: true }>
 
 const TAREFA = `Tarefa: ler o texto de um documento de saúde enviado pela paciente (laudo, resultado de exame, receita, relatório) e estruturá-lo como um registro do histórico.
 Formato da resposta (JSON):
-{"clinico": true, "data": "AAAA-MM-DD" ou null, "tipo": "${TIPOS.join('" | "')}", "titulo": "título curto", "instituicao": "nome" ou null, "especialidade": "nome" ou null, "resumo": "1 a 2 frases fiéis ao documento", "medidas": [{"nome": "Colesterol LDL", "valor": 162, "unidade": "mg/dL", "refMin": 0, "refMax": 130}], "tags": ["colesterol"], "confianca": 0.9, "avisos": ["o que ficou ilegível ou ambíguo"]}
+{"clinico": true, "pacienteNoDocumento": "nome do paciente" ou null, "data": "AAAA-MM-DD" ou null, "tipo": "${TIPOS.join('" | "')}", "titulo": "título curto", "instituicao": "nome" ou null, "especialidade": "nome" ou null, "resumo": "1 a 2 frases fiéis ao documento", "medidas": [{"nome": "Colesterol LDL", "valor": 162, "unidade": "mg/dL", "refMin": 0, "refMax": 130}], "tags": ["colesterol"], "confianca": 0.9, "avisos": ["o que ficou ilegível ou ambíguo"]}
 - Se o texto não for um documento de saúde, responda apenas {"clinico": false}.
+- "pacienteNoDocumento": o nome do paciente como está impresso (campo "Paciente", "Nome", destinatário da receita), com a grafia original. Nunca o nome do médico, do solicitante ou do responsável técnico. null se o documento não identificar o paciente.
 - "data": a data do exame/atendimento: em exame, a da coleta ou realização, antes da data de emissão do laudo (use a emissão só se for a única); em receita, pedido ou guia, a data da emissão ou da solicitação. Nunca a de impressão nem a de nascimento. Use null só se o documento não trouxer nenhuma dessas datas.
 - "tipo": o que o documento é, não o que ele cita ou pede:
   - "exame": resultado de exame laboratorial ou funcional (sangue, urina, eletrocardiograma, espirometria, Holter).
@@ -75,6 +81,7 @@ Formato da resposta (JSON):
 - "confianca": de 0 a 1, o quanto o texto estava legível e completo.`
 
 type MedidaBruta = ExtracaoClinica['medidas'][number]
+type Montado = Omit<ResultadoExtracao, 'geradoPor' | 'alertas' | 'pacienteNoDocumento'>
 
 /* Faixa unilateral ("< X", "> X", LIN) guarda só o lado impresso: nada de teto ou piso inventado.
    Sem referência alguma não há com o que comparar, e a medida é omitida com aviso. */
@@ -87,7 +94,7 @@ function lerMedida(m: MedidaBruta): Medida | string {
 }
 
 /* Pós-processamento comum ao modelo e à heurística: sinal e validações ficam no servidor. */
-export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string): Omit<ResultadoExtracao, 'geradoPor'> {
+export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string): Montado {
   const avisos = bruto.avisos.map((a) => a.trim()).filter(Boolean)
   const lidas = bruto.medidas.map(lerMedida)
   const medidas = lidas.filter((m): m is Medida => typeof m !== 'string')
@@ -129,7 +136,11 @@ function completarData(bruto: ExtracaoClinica, texto: string): ExtracaoClinica {
   return { ...bruto, data: doTexto, avisos: [...bruto.avisos, 'Usei a data impressa no documento; confira antes de salvar.'] }
 }
 
-export async function extrairEvento({ llm }: Pick<ContextoIa, 'llm'>, entrada: EntradaExtracao): Promise<ResultadoExtracao> {
+/* A conferência compara o nome impresso com o titular da conta: exame de outra pessoa é erro grave. */
+export async function extrairEvento(
+  { llm, perfil }: Pick<ContextoIa, 'llm'> & { perfil: Pick<ContextoIa['perfil'], 'nome'> },
+  entrada: EntradaExtracao,
+): Promise<ResultadoExtracao> {
   const texto = entrada.texto.slice(0, LIMITE_TEXTO)
   const bruto = llm.nome === 'mock'
     ? extrairPorHeuristica(texto)
@@ -139,5 +150,11 @@ export async function extrairEvento({ llm }: Pick<ContextoIa, 'llm'>, entrada: E
   if (entrada.texto.length > LIMITE_TEXTO) {
     resultado.avisos.push('O documento é longo e só o início foi lido. Confira se faltou alguma informação.')
   }
-  return { ...resultado, geradoPor: llm.nome }
+  const pacienteNoDocumento = bruto.pacienteNoDocumento?.trim() || undefined
+  return {
+    ...resultado,
+    alertas: alertaDeIdentidade(pacienteNoDocumento, perfil.nome),
+    ...(pacienteNoDocumento && { pacienteNoDocumento }),
+    geradoPor: llm.nome,
+  }
 }

@@ -80,9 +80,14 @@ export interface RespostaCopiloto {
 
 export interface TurnoHistorico { pergunta: string; texto: string[] }
 
+export interface AlertaExtracao { codigo: 'PACIENTE_DIVERGENTE'; texto: string }
+
 export interface Extracao {
   evento: Omit<Evento, 'id'>
   avisos: string[]
+  /* Pedem confirmação explícita antes de salvar (documento de outro paciente). */
+  alertas: AlertaExtracao[]
+  pacienteNoDocumento?: string
   geradoPor: GeradoPor
 }
 

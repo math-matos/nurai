@@ -16,6 +16,9 @@ const DATA = /(\d{2})\/(\d{2})\/(\d{4})|(\d{4}-\d{2}-\d{2})/
 const DATA_ROTULADA = new RegExp(`(?:coleta|realizacao|realizado em|data do exame|data do atendimento|emissao|emitido em|solicitacao)[^\\d\\n]{0,20}(?:${DATA.source})`)
 const NASCIMENTO = new RegExp(`(?:nascimento|nasc\\.?|dn)[^\\d\\n]{0,10}(?:${DATA.source})`, 'g')
 
+/* "Paciente: Marcos Vinícius Teixeira   Registro: ..." — o nome termina em dois espaços, fim da linha ou no próximo rótulo. */
+const PACIENTE = /\bpaciente\s*:\s*([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ'. -]*?)(?=\s{2,}|\s+(?:registro|nascimento|idade|sexo|cpf|rg|dn|data)\b|\s*$)/im
+
 const numero = (s: string) => Number(s.replace(',', '.'))
 
 const isoDe = (m: RegExpMatchArray) => m[4] ?? `${m[3]}-${m[2]}-${m[1]}`
@@ -62,6 +65,7 @@ export function extrairPorHeuristica(texto: string): ExtracaoBruta {
 
   return {
     clinico: true,
+    pacienteNoDocumento: texto.match(PACIENTE)?.[1].trim() ?? null,
     data: lerData(normalizado),
     tipo: lerTipo(normalizado, medidas.length > 0),
     titulo,

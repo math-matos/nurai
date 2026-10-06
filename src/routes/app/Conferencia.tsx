@@ -75,6 +75,8 @@ export function Conferencia({ extracao, arquivo, salvando, aoSalvar, aoDescartar
   const [especialidade, setEspecialidade] = useState(original.especialidade ?? '')
   const [resumo, setResumo] = useState(original.resumo)
   const [linhas, setLinhas] = useState<Linha[]>(() => (original.medidas ?? []).map(linhaDe))
+  const divergencia = extracao.alertas?.find((a) => a.codigo === 'PACIENTE_DIVERGENTE')
+  const [confirmouIdentidade, setConfirmouIdentidade] = useState(false)
 
   const editarLinha = (indice: number, mudanca: Partial<Linha>, numerica = false) => {
     setLinhas((atuais) => atuais.map((l, i) =>
@@ -91,6 +93,7 @@ export function Conferencia({ extracao, arquivo, salvando, aoSalvar, aoDescartar
   const medidas = linhas.map(medidaDe)
   const valido = titulo.trim() !== '' && instituicao.trim() !== ''
     && /^\d{4}-\d{2}-\d{2}$/.test(data) && medidas.every((m) => m !== null)
+    && (!divergencia || confirmouIdentidade)
 
   const salvar = () => {
     if (!valido || salvando) return
@@ -130,6 +133,19 @@ export function Conferencia({ extracao, arquivo, salvando, aoSalvar, aoDescartar
           <SeloIa geradoPor={extracao.geradoPor} />
         </div>
       </div>
+
+      {divergencia && (
+        <div className="revisao__identidade" role="alert" data-testid={TID.conferenciaIdentidade}>
+          <p><Icon nome="alerta" tamanho={16} /> <strong>{divergencia.texto}</strong></p>
+          <label>
+            <input
+              type="checkbox" checked={confirmouIdentidade}
+              onChange={(e) => setConfirmouIdentidade(e.target.checked)} data-testid={TID.conferenciaConfirmoMeu}
+            />
+            Confirmo que este documento é meu
+          </label>
+        </div>
+      )}
 
       {extracao.avisos.map((a, i) => <AvisoIa key={i}>{a}</AvisoIa>)}
 

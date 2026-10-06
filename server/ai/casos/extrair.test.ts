@@ -86,6 +86,8 @@ function llmFixo(resposta: Clinica) {
   }
 }
 
+const MARCOS = { nome: 'Marcos Vinícius Teixeira' }
+
 const PEDIDO = `Clínica Ipê-Roxo
 Paciente: Marcos Vinícius Teixeira Registro: FIC-0044-1982
 Nascimento: 14/02/1982 (44 anos) Sexo: Masculino
@@ -96,7 +98,7 @@ PEDIDO MÉDICO DE EXAMES
 describe('extrairEvento — data', () => {
   it('modelo sem data: usa a data impressa no documento (não a de nascimento), com aviso para conferir', async () => {
     const { llm } = llmFixo(bruto([], { data: null, tipo: 'documento', titulo: 'Pedido de perfil lipídico' }))
-    const { evento, avisos } = await extrairEvento({ llm }, { texto: PEDIDO })
+    const { evento, avisos } = await extrairEvento({ llm, perfil: MARCOS }, { texto: PEDIDO })
     expect(evento.data).toBe('2026-04-02')
     expect(avisos.join(' ')).toMatch(/data .*documento.*confira/i)
     expect(avisos.join(' ')).not.toMatch(/data de hoje/)
@@ -104,19 +106,19 @@ describe('extrairEvento — data', () => {
 
   it('sem data alguma no texto, segue usando hoje com o aviso', async () => {
     const { llm } = llmFixo(bruto([], { data: null }))
-    const { avisos } = await extrairEvento({ llm }, { texto: 'Laudo sem data. Paciente: Fulano. Exame normal.' })
+    const { avisos } = await extrairEvento({ llm, perfil: MARCOS }, { texto: 'Laudo sem data. Paciente: Fulano. Exame normal.' })
     expect(avisos.join(' ')).toMatch(/data de hoje/)
   })
 
   it('o prompt pede a data da solicitação ou emissão para pedidos e receitas', async () => {
     const { llm, recebidas } = llmFixo(bruto([]))
-    await extrairEvento({ llm }, { texto: PEDIDO })
+    await extrairEvento({ llm, perfil: MARCOS }, { texto: PEDIDO })
     expect(instrucoes(recebidas)).toMatch(/"data":[^\n]*solicitação/)
   })
 
   it('o prompt prefere a data da coleta à da emissão do laudo', async () => {
     const { llm, recebidas } = llmFixo(bruto([]))
-    await extrairEvento({ llm }, { texto: PEDIDO })
+    await extrairEvento({ llm, perfil: MARCOS }, { texto: PEDIDO })
     expect(instrucoes(recebidas)).toMatch(/"data":[^\n]*coleta[^\n]*antes da[^\n]*emissão/)
   })
 })
@@ -124,7 +126,7 @@ describe('extrairEvento — data', () => {
 describe('extrairEvento — tipo', () => {
   it('o prompt define cada tipo, para radiografia não virar "exame" nem receita virar "consulta"', async () => {
     const { llm, recebidas } = llmFixo(bruto([]))
-    await extrairEvento({ llm }, { texto: PEDIDO })
+    await extrairEvento({ llm, perfil: MARCOS }, { texto: PEDIDO })
     const prompt = instrucoes(recebidas)
     for (const tipo of ['exame', 'consulta', 'imagem', 'cirurgia', 'medicacao', 'internacao', 'vacina', 'documento']) {
       expect(prompt, tipo).toMatch(new RegExp(`- "${tipo}": `))
@@ -137,7 +139,7 @@ describe('extrairEvento — tipo', () => {
 describe('extrairEvento — título de pedido', () => {
   it('o prompt manda nomear o exame pedido no título e no resumo de pedidos e guias', async () => {
     const { llm, recebidas } = llmFixo(bruto([]))
-    await extrairEvento({ llm }, { texto: PEDIDO })
+    await extrairEvento({ llm, perfil: MARCOS }, { texto: PEDIDO })
     const prompt = instrucoes(recebidas)
     expect(prompt).toMatch(/"titulo":[^\n]*pedido[^\n]*"Pedido de perfil lipídico"/i)
     expect(prompt).toMatch(/"titulo":[^\n]*nunca[^\n]*"Pedido de exame"/i)
@@ -148,9 +150,66 @@ describe('extrairEvento — título de pedido', () => {
 describe('extrairEvento — faixas unilaterais no prompt', () => {
   it('o prompt manda guardar só o piso em "> X", "≥ X" e LIN, e a espirometria em % do previsto', async () => {
     const { llm, recebidas } = llmFixo(bruto([]))
-    await extrairEvento({ llm }, { texto: PEDIDO })
+    await extrairEvento({ llm, perfil: MARCOS }, { texto: PEDIDO })
     const prompt = instrucoes(recebidas)
     expect(prompt).toMatch(/só com piso \("> X", "≥ X"[^\n]*LIN[^\n]*refMin X e refMax null/)
     expect(prompt).toMatch(/% do previsto/)
+  })
+})
+
+describe('extrairEvento — paciente do documento', () => {
+  it('o prompt pede o nome do paciente impresso, nunca o do médico', async () => {
+    const { llm, recebidas } = llmFixo(bruto([]))
+    await extrairEvento({ llm, perfil: MARCOS }, { texto: PEDIDO })
+    expect(instrucoes(recebidas)).toMatch(/"pacienteNoDocumento":[^\n]*Nunca o nome do médico/)
+  })
+
+  it('nome do documento diferente do titular gera alerta PACIENTE_DIVERGENTE com os dois nomes', async () => {
+    const { llm } = llmFixo(bruto([], { pacienteNoDocumento: 'Marcos Vinícius Teixeira' }))
+    const r = await extrairEvento({ llm, perfil: { nome: 'Thiago Matumoto' } }, { texto: PEDIDO })
+    expect(r.pacienteNoDocumento).toBe('Marcos Vinícius Teixeira')
+    expect(r.alertas).toEqual([{
+      codigo: 'PACIENTE_DIVERGENTE',
+      texto: expect.stringMatching(/^Este documento parece ser de Marcos Vinícius Teixeira, não de Thiago Matumoto/),
+    }])
+    expect(r.evento).not.toHaveProperty('pacienteNoDocumento')
+  })
+
+  it.each([
+    ['Marcos Vinícius Teixeira', 'Marcos Vinícius Teixeira'],
+    ['MARCOS VINICIUS TEIXEIRA', 'Marcos Vinícius Teixeira'],
+    ['Marcos Teixeira', 'Marcos Vinícius Teixeira'],
+    ['Marcos V. Teixeira', 'Marcos Vinícius Teixeira'],
+    ['Marcos Vinícius', 'Marcos Vinícius Teixeira'],
+    ['Marcos', 'Marcos Vinícius Teixeira'],
+    ['Maria da Silva', 'Maria Silva'],
+  ])('"%s" no documento é o titular "%s": sem alerta', async (impresso, titular) => {
+    const { llm } = llmFixo(bruto([], { pacienteNoDocumento: impresso }))
+    expect((await extrairEvento({ llm, perfil: { nome: titular } }, { texto: PEDIDO })).alertas).toEqual([])
+  })
+
+  it.each([
+    ['Marcos Silva', 'Marcos Vinícius Teixeira'],
+    ['Helena Duarte Nogueira', 'Paciente E2E'],
+    ['Ana Teixeira', 'Marcos Teixeira'],
+  ])('"%s" no documento não é "%s": alerta', async (impresso, titular) => {
+    const { llm } = llmFixo(bruto([], { pacienteNoDocumento: impresso }))
+    expect((await extrairEvento({ llm, perfil: { nome: titular } }, { texto: PEDIDO })).alertas).toHaveLength(1)
+  })
+
+  it('documento sem nome de paciente: sem alerta e sem pacienteNoDocumento', async () => {
+    const { llm } = llmFixo(bruto([], { pacienteNoDocumento: null }))
+    const r = await extrairEvento({ llm, perfil: { nome: 'Thiago Matumoto' } }, { texto: PEDIDO })
+    expect(r.alertas).toEqual([])
+    expect(r).not.toHaveProperty('pacienteNoDocumento')
+  })
+
+  it('modo demonstração lê "Paciente:" do texto e compara do mesmo jeito', async () => {
+    const mock = { nome: 'mock' as const, chat: async () => '' }
+    const texto = `${PEDIDO}\nGlicemia de jejum      96 mg/dL     70 a 99`
+    const outro = await extrairEvento({ llm: mock, perfil: { nome: 'Paciente E2E' } }, { texto })
+    expect(outro.pacienteNoDocumento).toBe('Marcos Vinícius Teixeira')
+    expect(outro.alertas.map((a) => a.codigo)).toEqual(['PACIENTE_DIVERGENTE'])
+    expect((await extrairEvento({ llm: mock, perfil: MARCOS }, { texto })).alertas).toEqual([])
   })
 })
