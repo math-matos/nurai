@@ -37,6 +37,16 @@ export async function rotearIp(contexto: BrowserContext, ip: string) {
   )
 }
 
+/* Localmente a suíte roda sem internet (namespace de rede próprio, ver e2e/rede-isolada.mjs): a folha
+   do Google Fonts volta vazia e o texto usa a fonte do sistema, em vez de um erro de rede no console. */
+export async function dispensarFontesExternas(contexto: BrowserContext) {
+  if (!LOCAL) return
+  await contexto.route(
+    (url) => url.hostname === 'fonts.googleapis.com',
+    (rota) => rota.fulfill({ status: 200, contentType: 'text/css', body: '' }),
+  )
+}
+
 export function opcoesDoProjeto(info: TestInfo): BrowserContextOptions {
   const { baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent, locale, timezoneId } = info.project.use
   return { baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent, locale, timezoneId }
