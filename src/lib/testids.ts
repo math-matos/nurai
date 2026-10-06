@@ -37,6 +37,7 @@ export const TID = {
 
   shellPerfil: 'shell-perfil',
   shellPerfilNome: 'shell-perfil-nome',
+  shellIniciais: 'shell-iniciais',
   shellResponsavel: 'shell-responsavel',
   seloConvidado: 'selo-convidado',
   botaoSair: 'botao-sair',
