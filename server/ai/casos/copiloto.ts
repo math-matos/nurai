@@ -8,6 +8,7 @@ import { pedirJson } from '../json.js'
 import { SISTEMA, contextoHistorico, descreverPerfil } from '../prompts.js'
 import type { MensagemLlm } from '../provider.js'
 import { limparTexto, limparTextos } from '../texto.js'
+import { naVozDoResponsavel, textosNaVoz } from '../voz.js'
 import { dataBR, filtrarAncoras, formatarNumero, idsDe, mesAno, normalizar, porData, type ContextoIa } from './comum.js'
 
 export interface EntradaCopiloto {
@@ -135,7 +136,16 @@ export function montarSerie(eventos: Evento[], medida: string): Serie | undefine
   }
 }
 
-export async function responderCopiloto({ repo, llm, perfil }: ContextoIa, entrada: EntradaCopiloto): Promise<RespostaCopiloto> {
+/* Modo cuidador: respostas, fallbacks e avisos falam do paciente na 3ª pessoa (voz.ts). */
+export async function responderCopiloto(contexto: ContextoIa, entrada: EntradaCopiloto): Promise<RespostaCopiloto> {
+  const r = await responderNoHistorico(contexto, entrada)
+  return {
+    ...r, texto: textosNaVoz(r.texto, contexto.perfil),
+    ...(r.aviso && { aviso: naVozDoResponsavel(r.aviso, contexto.perfil) }),
+  }
+}
+
+async function responderNoHistorico({ repo, llm, perfil }: ContextoIa, entrada: EntradaCopiloto): Promise<RespostaCopiloto> {
   const { eventos } = await repo.estado()
   /* Sem registros não há o que ancorar: nem o modelo nem o motor determinístico são chamados. */
   if (!eventos.length) return { texto: [HISTORICO_VAZIO], ancoras: [], geradoPor: llm.nome }
