@@ -185,6 +185,8 @@ function erroDaResposta(resposta: Response, corpo: unknown): ErroApi {
   const { status } = resposta
   const { erro, codigo, campos } = (corpo ?? {}) as { erro?: string; codigo?: string; campos?: Record<string, string> }
   if (codigo === 'MUITAS_TENTATIVAS' || status === 429) {
+    /* A API diz o motivo e o tempo ("Muitas contas foram criadas a partir desta rede..."). */
+    if (codigo === 'MUITAS_TENTATIVAS' && erro) return new ErroApi('MUITAS_TENTATIVAS', status, erro)
     const minutos = minutosDeEspera(resposta.headers.get('Retry-After'))
     const mensagem = minutos
       ? `Muitas tentativas seguidas. Tente de novo em ${minutos} min.`

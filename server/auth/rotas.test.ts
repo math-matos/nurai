@@ -85,14 +85,20 @@ describe('autenticação', () => {
       expect(res.headers.get('set-cookie')).toBeNull()
     })
 
-    it('429 após 5 cadastros por IP na hora, contando os inválidos', async () => {
+    /* Uma turma inteira atrás do mesmo NAT cria conta na mesma hora. */
+    it('20 cadastros do mesmo IP com e-mails distintos passam; o 51º na hora dá 429 com motivo e tempo', async () => {
       const cadastro = (ip: string, mudanca: Record<string, unknown> = {}) => app.request('/api/auth/cadastro',
         comSessao(null, comIp(ip, json({ nome: 'Ana', email: emailNovo(), senha: SENHA, aceiteLgpd: true, ...mudanca }))))
-      for (let i = 0; i < 4; i++) expect((await cadastro('10.2.2.2')).status).toBe(201)
+      const turma = await Promise.all(Array.from({ length: 20 }, () => cadastro('10.2.2.2')))
+      expect(turma.map((r) => r.status)).toEqual(Array(20).fill(201))
+      for (let i = 0; i < 29; i++) expect((await cadastro('10.2.2.2')).status).toBe(201)
       expect((await cadastro('10.2.2.2', { senha: 'curta' })).status).toBe(400)
       const bloqueado = await cadastro('10.2.2.2')
       expect(bloqueado.status).toBe(429)
-      expect((await ler(bloqueado)).codigo).toBe('MUITAS_TENTATIVAS')
+      expect(await ler(bloqueado)).toEqual({
+        codigo: 'MUITAS_TENTATIVAS',
+        erro: 'Muitas contas foram criadas a partir desta rede na última hora. Tente de novo em 1 h.',
+      })
       expect(bloqueado.headers.get('retry-after')).toBe('3600')
       expect((await cadastro('10.2.2.3')).status).toBe(201)
 
@@ -137,7 +143,9 @@ describe('autenticação', () => {
       for (let i = 0; i < 5; i++) expect((await login(conta.email, 'senha-errada')).status).toBe(401)
       const bloqueado = await login(conta.email, SENHA)
       expect(bloqueado.status).toBe(429)
-      expect((await ler(bloqueado)).codigo).toBe('MUITAS_TENTATIVAS')
+      expect(await ler(bloqueado)).toEqual({
+        codigo: 'MUITAS_TENTATIVAS', erro: 'Muitas tentativas seguidas. Tente de novo em 15 min.',
+      })
       expect(bloqueado.headers.get('retry-after')).toBe('900')
       expect((await login(conta.email, SENHA, '10.0.0.2')).status).toBe(200)
     })
@@ -219,9 +227,9 @@ describe('autenticação', () => {
       expect((await app.request('/api/estado', comSessao(cookie))).status).toBe(401)
     })
 
-    it('429 após 10 contas por IP na hora', async () => {
+    it('429 após 50 contas demo por IP na hora', async () => {
       const demo = (ip: string) => app.request('/api/auth/demo', comSessao(null, comIp(ip, { method: 'POST' })))
-      for (let i = 0; i < 10; i++) expect((await demo('10.1.1.1')).status).toBe(201)
+      for (let i = 0; i < 50; i++) expect((await demo('10.1.1.1')).status).toBe(201)
       const res = await demo('10.1.1.1')
       expect(res.status).toBe(429)
       expect((await ler(res)).codigo).toBe('MUITAS_TENTATIVAS')

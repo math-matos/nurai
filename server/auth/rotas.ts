@@ -12,9 +12,10 @@ import { abrirSessao, encerrarSessao, sessaoDaRequisicao } from './sessao.js'
 
 const MINUTO_MS = 60_000
 const LIMITE_LOGIN = { maximo: 5, janelaMs: 15 * MINUTO_MS }
-const LIMITE_DEMO = { maximo: 10, janelaMs: 60 * MINUTO_MS }
-/* Conta toda tentativa de cadastro, válida ou não. */
-const LIMITE_CADASTRO = { maximo: 5, janelaMs: 60 * MINUTO_MS }
+/* Por IP, e uma sala de aula ou um teste de usabilidade inteiro sai pelo mesmo IP (NAT da rede):
+   o teto barra robô sem barrar uma turma. Conta toda tentativa de cadastro, válida ou não. */
+const LIMITE_DEMO = { maximo: 50, janelaMs: 60 * MINUTO_MS }
+const LIMITE_CADASTRO = { maximo: 50, janelaMs: 60 * MINUTO_MS }
 
 const conta = (usuario: Usuario, perfil: Perfil) => ({ usuario: { id: usuario.id, email: usuario.email }, perfil })
 
@@ -22,7 +23,8 @@ export function rotasAuth(repo: Repositorio): Hono {
   const rotas = new Hono()
 
   rotas.post('/cadastro', async (c) => {
-    const bloqueio = await limitarPorIp(c, repo, 'cadastro', LIMITE_CADASTRO)
+    const bloqueio = await limitarPorIp(c, repo, 'cadastro', LIMITE_CADASTRO,
+      'Muitas contas foram criadas a partir desta rede na última hora.')
     if (bloqueio) return bloqueio
     await limpezaOportunista(repo)
     const { nome, dataNascimento, email, senha } = await lerCorpo(c, esquemaCadastro)
@@ -71,7 +73,8 @@ export function rotasAuth(repo: Repositorio): Hono {
   })
 
   rotas.post('/demo', async (c) => {
-    const bloqueio = await limitarPorIp(c, repo, 'demo', LIMITE_DEMO)
+    const bloqueio = await limitarPorIp(c, repo, 'demo', LIMITE_DEMO,
+      'Muitas demonstrações foram abertas a partir desta rede na última hora.')
     if (bloqueio) return bloqueio
     await limpezaOportunista(repo)
 

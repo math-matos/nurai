@@ -15,15 +15,22 @@ export async function excedeu(repo: Repositorio, chaveTentativa: string, limite:
   return await repo.contarTentativas(chaveTentativa, new Date(Date.now() - limite.janelaMs)) >= limite.maximo
 }
 
-export function muitasTentativas(c: Context, limite: Limite) {
+const HORA_MS = 3_600_000
+
+/* "15 min", "1 h", "2 h": a espera máxima é a janela inteira. */
+export function tempoDeEspera(janelaMs: number): string {
+  return janelaMs >= HORA_MS && janelaMs % HORA_MS === 0 ? `${janelaMs / HORA_MS} h` : `${Math.ceil(janelaMs / 60_000)} min`
+}
+
+export function muitasTentativas(c: Context, limite: Limite, motivo = 'Muitas tentativas seguidas.') {
   c.header('Retry-After', String(limite.janelaMs / 1000))
-  return c.json({ erro: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.', codigo: 'MUITAS_TENTATIVAS' }, 429)
+  return c.json({ erro: `${motivo} Tente de novo em ${tempoDeEspera(limite.janelaMs)}.`, codigo: 'MUITAS_TENTATIVAS' }, 429)
 }
 
 /* Conta toda requisição do IP (não só as que falham). Devolve a resposta 429 ou null para seguir. */
-export async function limitarPorIp(c: Context, repo: Repositorio, nome: string, limite: Limite) {
+export async function limitarPorIp(c: Context, repo: Repositorio, nome: string, limite: Limite, motivo?: string) {
   const chaveIp = chave(nome, ipDe(c))
-  if (await excedeu(repo, chaveIp, limite)) return muitasTentativas(c, limite)
+  if (await excedeu(repo, chaveIp, limite)) return muitasTentativas(c, limite, motivo)
   await repo.registrarTentativa(chaveIp)
   return null
 }

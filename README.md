@@ -127,11 +127,13 @@ Toda rota de `/api` exige sessão, exceto `/api/health`, `/api/auth/*` e
 | Limite por IP                   | Janela | Conta                       |
 | ------------------------------- | ------ | --------------------------- |
 | 5 logins errados (por e-mail)   | 15 min | só as falhas                |
-| 5 cadastros                     | 1 h    | todas as tentativas         |
-| 10 contas demo                  | 1 h    | todas                       |
+| 50 cadastros                    | 1 h    | todas as tentativas         |
+| 50 contas demo                  | 1 h    | todas                       |
 | 10 acessos pelo código / resumo | 1 min  | todas, válidas ou não       |
 
-Acima do limite, a API responde `429 MUITAS_TENTATIVAS` com `Retry-After`.
+Acima do limite, a API responde `429 MUITAS_TENTATIVAS` com `Retry-After` e uma mensagem com o
+motivo e o tempo de espera. Cadastro e demo aceitam 50 por hora porque uma sala de aula ou um teste
+de usabilidade inteiro sai pelo mesmo IP público (NAT da rede).
 
 **Limpeza.** Login, cadastro e demo disparam, no máximo a cada 10 minutos por instância,
 uma limpeza barata: sessões expiradas, tentativas com mais de um dia e contas convidadas
