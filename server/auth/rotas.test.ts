@@ -20,6 +20,9 @@ const comIp = (ip: string, init: RequestInit) => {
   return { ...init, headers }
 }
 
+/* ISO com o deslocamento de Brasília, sem milissegundos. */
+const INSTANTE_SP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}-03:00$/
+
 describe('autenticação', () => {
   let repo: Repositorio
   let app: App
@@ -350,15 +353,23 @@ describe('conta', () => {
     it('para alguém que eu cuido: o histórico vira do paciente e quem cadastrou, o responsável', async () => {
       const conta = await cadastrar(app, { nome: 'Rafael Lima', dataNascimento: '1990-01-01' })
       const api = logado(app, conta.cookie)
-      const paciente = { nome: 'Marcos Vinícius Teixeira', dataNascimento: '1958-03-02', relacao: 'filho' }
+      const paciente = { nome: 'Marcos Vinícius Teixeira', dataNascimento: '1958-03-02', relacao: 'filho', autorizacao: true }
       const res = await api.request('/api/onboarding', json({ modo: 'vazio', paciente }))
       expect(res.status).toBe(200)
       const { perfil } = await ler(res) as { perfil: Record<string, unknown> }
       expect(perfil).toMatchObject({
         nome: 'Marcos Vinícius Teixeira', iniciais: 'MT', dataNascimento: '1958-03-02', onboarding: 'vazio',
-        responsavel: { nome: 'Rafael Lima', relacao: 'filho' },
+        responsavel: { nome: 'Rafael Lima', relacao: 'filho', autorizadoEm: expect.stringMatching(INSTANTE_SP) },
       })
+      expect(perfil.responsavel).not.toHaveProperty('autorizacaoPendente')
       expect((await ler(await api.request('/api/auth/sessao'))).perfil).toEqual(perfil)
+
+      /* A declaração fica no log, em nome do responsável (o recomeço do onboarding vem antes dela). */
+      const [declarou] = await ler(await api.request('/api/acessos')) as unknown as Record<string, string>[]
+      expect(declarou).toMatchObject({
+        quem: 'Rafael Lima', papel: 'Responsável (filho)',
+        acao: 'Declarou autorização para gerir o histórico de Marcos Vinícius Teixeira',
+      })
 
       /* Quem age é o responsável: é o nome dele que vai para o log, com a relação. */
       expect((await api.request('/api/eventos', json({ ...EVENTOS[0], id: 'u-cuidador' }))).status).toBe(201)
@@ -368,18 +379,32 @@ describe('conta', () => {
       /* Recomeçar (só modo) mantém o cuidador; repetir com paciente não troca o responsável pelo paciente. */
       const recomecou = await ler(await api.request('/api/onboarding', json({ modo: 'exemplo' })))
       expect(recomecou.perfil).toEqual({ ...perfil, onboarding: 'exemplo' })
-      const repetido = await ler(await api.request('/api/onboarding', json({ modo: 'vazio', paciente: { nome: 'Marcos V. Teixeira', relacao: 'neto' } })))
+      const repetido = await ler(await api.request('/api/onboarding', json({ modo: 'vazio', paciente: { nome: 'Marcos V. Teixeira', relacao: 'neto', autorizacao: true } })))
       expect(repetido.perfil).toMatchObject({ nome: 'Marcos V. Teixeira', responsavel: { nome: 'Rafael Lima', relacao: 'neto' } })
       expect(repetido.perfil).not.toHaveProperty('dataNascimento')
     })
 
     it('400 VALIDACAO para paciente sem nome ou sem relação', async () => {
       const api = logado(app, (await cadastrar(app)).cookie)
-      for (const paciente of [{ nome: '', relacao: 'filho' }, { nome: 'Marcos' }, { nome: 'Marcos', relacao: ' ' }]) {
-        const res = await api.request('/api/onboarding', json({ modo: 'vazio', paciente }))
+      const pacientes = [{ nome: '', relacao: 'filho' }, { nome: 'Marcos' }, { nome: 'Marcos', relacao: ' ' }]
+      for (const paciente of pacientes) {
+        const res = await api.request('/api/onboarding', json({ modo: 'vazio', paciente: { ...paciente, autorizacao: true } }))
         expect(res.status).toBe(400)
         expect((await ler(res)).codigo).toBe('VALIDACAO')
       }
+    })
+
+    it('400 VALIDACAO sem a declaração de autorização do responsável (LGPD), e nada muda', async () => {
+      const conta = await cadastrar(app, { nome: 'Rafael Lima' })
+      const api = logado(app, conta.cookie)
+      for (const autorizacao of [undefined, false]) {
+        const res = await api.request('/api/onboarding', json({ modo: 'vazio', paciente: { nome: 'Marcos', relacao: 'filho', autorizacao } }))
+        expect(res.status).toBe(400)
+        const corpo = await ler(res)
+        expect(corpo.codigo).toBe('VALIDACAO')
+        expect(corpo.campos?.['paciente.autorizacao']).toMatch(/autorização/)
+      }
+      expect((await ler(await api.request('/api/auth/sessao'))).perfil).toEqual(conta.perfil)
     })
 
     it('400 VALIDACAO para modo inválido', async () => {
@@ -411,16 +436,52 @@ describe('conta', () => {
     it('troca o responsável ou converte o histórico para o próprio usuário (responsavel: null)', async () => {
       const conta = await cadastrar(app, { nome: 'Rafael Lima' })
       const api = logado(app, conta.cookie)
-      await api.request('/api/onboarding', json({ modo: 'vazio', paciente: { nome: 'Marcos Teixeira', relacao: 'filho' } }))
+      const inicio = await ler(await api.request('/api/onboarding', json({ modo: 'vazio', paciente: { nome: 'Marcos Teixeira', relacao: 'filho', autorizacao: true } })))
+      const { autorizadoEm } = (inicio.perfil as { responsavel: { autorizadoEm: string } }).responsavel
 
+      /* Já declarada: trocar nome ou relação não pede a declaração de novo nem muda o instante. */
       const trocado = await ler(await api.request('/api/perfil', json({ responsavel: { nome: 'Rafael L.', relacao: 'neto' } }, 'PATCH')))
-      expect(trocado.perfil).toMatchObject({ nome: 'Marcos Teixeira', responsavel: { nome: 'Rafael L.', relacao: 'neto' } })
+      expect(trocado.perfil).toMatchObject({ nome: 'Marcos Teixeira', responsavel: { nome: 'Rafael L.', relacao: 'neto', autorizadoEm } })
       const proprio = await ler(await api.request('/api/perfil', json({ nome: 'Rafael Lima', responsavel: null }, 'PATCH')))
       expect(proprio.perfil).toMatchObject({ nome: 'Rafael Lima' })
       expect(proprio.perfil).not.toHaveProperty('responsavel')
 
       const invalido = await api.request('/api/perfil', json({ responsavel: { nome: 'Rafael' } }, 'PATCH'))
       expect(invalido.status).toBe(400)
+    })
+
+    it('virar cuidador pelo perfil exige a declaração; com ela, grava o instante e registra no log', async () => {
+      const conta = await cadastrar(app, { nome: 'Rafael Lima' })
+      const api = logado(app, conta.cookie)
+      const sem = await api.request('/api/perfil', json({ nome: 'Marcos Teixeira', responsavel: { nome: 'Rafael Lima', relacao: 'filho' } }, 'PATCH'))
+      expect(sem.status).toBe(400)
+      const corpo = await ler(sem)
+      expect(corpo.codigo).toBe('VALIDACAO')
+      expect(corpo.campos?.['responsavel.autorizacao']).toMatch(/autorização/)
+      expect((await ler(await api.request('/api/auth/sessao'))).perfil).toEqual(conta.perfil)
+
+      const com = await ler(await api.request('/api/perfil', json({
+        nome: 'Marcos Teixeira', responsavel: { nome: 'Rafael Lima', relacao: 'filho', autorizacao: true },
+      }, 'PATCH')))
+      expect(com.perfil).toMatchObject({ nome: 'Marcos Teixeira', responsavel: { nome: 'Rafael Lima', relacao: 'filho', autorizadoEm: expect.stringMatching(INSTANTE_SP) } })
+      const [declarou] = await ler(await api.request('/api/acessos')) as unknown as Record<string, string>[]
+      expect(declarou).toMatchObject({ quem: 'Rafael Lima', papel: 'Responsável (filho)', acao: 'Declarou autorização para gerir o histórico de Marcos Teixeira' })
+    })
+
+    it('conta cuidador anterior à declaração: a sessão marca a pendência até o responsável declarar', async () => {
+      const conta = await cadastrar(app, { nome: 'Rafael Lima' })
+      const api = logado(app, conta.cookie)
+      /* Como ficaram as contas criadas antes da declaração: responsável gravado sem autorizadoEm. */
+      await repo.atualizarPerfil(conta.perfil.pacienteId, { nome: 'Marcos Teixeira', responsavel: { nome: 'Rafael Lima', relacao: 'filho' } })
+      const antiga = (await ler(await api.request('/api/auth/sessao'))).perfil as { responsavel: Record<string, unknown> }
+      expect(antiga.responsavel).toEqual({ nome: 'Rafael Lima', relacao: 'filho', autorizacaoPendente: true })
+
+      /* Sem a declaração, editar o responsável continua barrado. */
+      expect((await api.request('/api/perfil', json({ responsavel: { nome: 'Rafael', relacao: 'filho' } }, 'PATCH'))).status).toBe(400)
+      const ok = await api.request('/api/perfil', json({ responsavel: { nome: 'Rafael Lima', relacao: 'filho', autorizacao: true } }, 'PATCH'))
+      expect(ok.status).toBe(200)
+      const atual = (await ler(await api.request('/api/auth/sessao'))).perfil as { responsavel: Record<string, unknown> }
+      expect(atual.responsavel).toEqual({ nome: 'Rafael Lima', relacao: 'filho', autorizadoEm: expect.stringMatching(INSTANTE_SP) })
     })
 
     it('400 VALIDACAO para nome vazio ou data inválida', async () => {

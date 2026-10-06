@@ -602,13 +602,19 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
         const responsavel = { nome: 'Rafael Lima', relacao: 'filho' }
         const perfil = await raiz.criarPaciente({ nome: 'Marcos Vinícius Teixeira', responsavel, convidado: false })
         criados.push(perfil.pacienteId)
-        expect(perfil).toMatchObject({ nome: 'Marcos Vinícius Teixeira', iniciais: 'MT', responsavel })
+        /* Sem a declaração de autorização, a leitura marca a pendência. */
+        expect(perfil).toMatchObject({ nome: 'Marcos Vinícius Teixeira', iniciais: 'MT', responsavel: { ...responsavel, autorizacaoPendente: true } })
         expect(await raiz.obterPerfil(perfil.pacienteId)).toEqual(perfil)
 
         const mantido = await raiz.atualizarPerfil(perfil.pacienteId, { plano: 'Plano Y' })
-        expect(mantido?.responsavel).toEqual(responsavel)
+        expect(mantido?.responsavel).toEqual({ ...responsavel, autorizacaoPendente: true })
+        /* O instante volta com o fuso de Brasília, igual ao gravado, mesmo vindo de outro fuso. */
+        const autorizadoEm = '2026-10-06T14:32:05-03:00'
+        const declarado = await raiz.atualizarPerfil(perfil.pacienteId, { responsavel: { ...responsavel, autorizadoEm: '2026-10-06T17:32:05Z' } })
+        expect(declarado?.responsavel).toEqual({ ...responsavel, autorizadoEm })
+        expect((await raiz.obterPerfil(perfil.pacienteId))?.responsavel).toEqual({ ...responsavel, autorizadoEm })
         const trocado = await raiz.atualizarPerfil(perfil.pacienteId, { responsavel: { nome: 'Rafael', relacao: 'neto' } })
-        expect(trocado?.responsavel).toEqual({ nome: 'Rafael', relacao: 'neto' })
+        expect(trocado?.responsavel).toEqual({ nome: 'Rafael', relacao: 'neto', autorizadoEm })
         const proprio = await raiz.atualizarPerfil(perfil.pacienteId, { responsavel: null })
         expect(proprio).not.toHaveProperty('responsavel')
         expect(await raiz.obterPerfil(perfil.pacienteId)).toEqual(proprio)

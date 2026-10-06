@@ -22,8 +22,10 @@ const codigoInvalido = (c: Context) =>
 
 /* Só o que o médico precisa: nada de email, ids de usuário ou do paciente. O responsável aparece para o
    médico saber quem enviou as informações quando não foi o próprio paciente. */
-const pacienteVisivel = ({ nome, idade, condicoes, alergias, responsavel }: Perfil) =>
-  ({ nome, ...(idade !== undefined && { idade }), condicoes, alergias, ...(responsavel && { responsavel }) })
+const pacienteVisivel = ({ nome, idade, condicoes, alergias, responsavel }: Perfil) => ({
+  nome, ...(idade !== undefined && { idade }), condicoes, alergias,
+  ...(responsavel && { responsavel: { nome: responsavel.nome, relacao: responsavel.relacao } }),
+})
 
 /* No log do paciente, só o fim do código: identifica qual foi sem reexpor a credencial. */
 const codigoParcial = (codigo: string) => `••••${codigo.slice(-2)}`
