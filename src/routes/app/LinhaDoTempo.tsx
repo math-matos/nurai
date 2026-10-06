@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Icon } from '../../components/Icon'
 import { Ancoras, AvisoIa, ChipFonte, ChipSinal, Falha, Regua, SeloIa, Vazio, VazioHistorico } from '../../components/ui'
 import { ICONE_TIPO, ano, formatarData, ordenarRecentes } from '../../lib/formato'
 import { FONTES, TIPOS } from '../../data/seed'
 import type { Evento, FonteId, TipoId } from '../../data/types'
-import { api, type Explicacao } from '../../lib/api'
+import { api, mensagemDeErro, type Explicacao } from '../../lib/api'
 import { navegar } from '../../lib/router'
 import { perguntar, useAcoes, useEstado } from '../../lib/store'
 import { useRequisicao } from '../../lib/useRequisicao'
@@ -76,14 +77,12 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
   const coluna = useRef<HTMLDivElement>(null)
   const aviso = useRef<HTMLDivElement>(null)
 
-  /* Depois de excluir, volta ao topo da lista: no celular o detalhe ficava abaixo dela. */
+  /* Depois de excluir, volta à lista com o aviso no topo visível: no celular o detalhe ficava abaixo dela. */
   const aposExcluir = (titulo: string) => {
-    setExcluido(titulo)
+    flushSync(() => setExcluido(titulo))
     navegar('/app/linha')
-    requestAnimationFrame(() => {
-      if (empilhado()) rolarAte(coluna.current)
-      aviso.current?.focus({ preventScroll: true })
-    })
+    rolarAte(coluna.current)
+    aviso.current?.focus({ preventScroll: true })
   }
 
   const avisoExcluido = excluido && (
@@ -334,19 +333,45 @@ function ExcluirEvento({ evento, aoExcluir }: { evento: Evento; aoExcluir: (titu
   const { excluirEvento } = useAcoes()
   const [confirmando, setConfirmando] = useState(false)
   const [excluindo, setExcluindo] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+  /* Barra o 2º toque antes de o botão ter tempo de renderizar desabilitado. */
+  const emCurso = useRef(false)
+  const caixa = useRef<HTMLDivElement>(null)
+  const pergunta = useRef<HTMLParagraphElement>(null)
+
+  /* No celular a confirmação nasce no fim de um detalhe longo: leva a pessoa até ela. */
+  const mostrarCaixa = () => caixa.current?.scrollIntoView({ block: 'center' })
+
+  const abrir = () => {
+    flushSync(() => setConfirmando(true))
+    mostrarCaixa()
+    pergunta.current?.focus({ preventScroll: true })
+  }
 
   const excluir = async () => {
+    if (emCurso.current) return
+    emCurso.current = true
     setExcluindo(true)
-    const ok = await excluirEvento(evento.id)
-    setExcluindo(false)
-    if (ok) aoExcluir(evento.titulo)
+    setErro(null)
+    try {
+      await excluirEvento(evento.id)
+      aoExcluir(evento.titulo)
+    } catch (e) {
+      flushSync(() => {
+        setExcluindo(false)
+        setErro(mensagemDeErro(e))
+      })
+      mostrarCaixa()
+    } finally {
+      emCurso.current = false
+    }
   }
 
   if (!confirmando) {
     return (
       <div className="excluir-registro">
         <button
-          type="button" className="btn btn--quiet btn--perigo-leve" onClick={() => setConfirmando(true)}
+          type="button" className="btn btn--quiet btn--perigo-leve" onClick={abrir}
           data-testid={TID.eventoExcluir}
         >
           Excluir este registro
@@ -356,18 +381,22 @@ function ExcluirEvento({ evento, aoExcluir }: { evento: Evento; aoExcluir: (titu
   }
 
   return (
-    <div className="excluir-registro excluir-registro--confirmando" role="group" aria-labelledby="excluir-registro-pergunta">
-      <p id="excluir-registro-pergunta" className="excluir-registro__pergunta">
+    <div
+      className="excluir-registro excluir-registro--confirmando" role="group" aria-labelledby="excluir-registro-pergunta"
+      aria-busy={excluindo} ref={caixa}
+    >
+      <p id="excluir-registro-pergunta" className="excluir-registro__pergunta" tabIndex={-1} ref={pergunta}>
         <strong>Excluir “{evento.titulo}” do seu histórico?</strong> A exclusão é definitiva: o registro some da linha
         do tempo e não pode ser recuperado. Resumos e próximos passos gerados antes podem continuar citando este
         registro até serem refeitos.
       </p>
+      {erro && <Falha mensagem={erro} />}
       <div className="excluir-registro__acoes">
         <button
           type="button" className="btn btn--perigo" disabled={excluindo} onClick={() => { void excluir() }}
           data-testid={TID.eventoExcluirConfirmar}
         >
-          {excluindo ? 'Excluindo…' : 'Excluir definitivamente'}
+          {excluindo ? 'Excluindo…' : erro ? 'Tentar excluir de novo' : 'Excluir definitivamente'}
         </button>
         <button type="button" className="btn btn--ghost" disabled={excluindo} onClick={() => setConfirmando(false)}>
           Cancelar
