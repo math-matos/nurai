@@ -196,6 +196,11 @@ function FolhaResumo() {
             <p className="label">Resumo automático dos registros · {rotuloFoco}</p>
             <h2>{perfil.nome}</h2>
             {identificacao && <p className="folha-resumo__ident num">{identificacao}</p>}
+            {perfil.responsavel && (
+              <p className="folha-resumo__ident">
+                Informações enviadas por {perfil.responsavel.nome} ({perfil.responsavel.relacao})
+              </p>
+            )}
           </div>
           <p className="folha-resumo__origem">
             Gerado em {hoje()} a partir de <span className="num">{eventos.length}</span> registros

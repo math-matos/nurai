@@ -97,7 +97,7 @@ export function AppShell({ rota }: { rota: string }) {
           <div>
             <p className="paciente__nome" data-testid={TID.shellPerfilNome}>{perfil.nome}</p>
             {perfil.responsavel && (
-              <p className="paciente__meta" data-testid="shell-responsavel">
+              <p className="paciente__meta" data-testid={TID.shellResponsavel}>
                 Histórico de {perfil.nome.split(' ')[0]} · gerenciado por você ({perfil.responsavel.relacao})
               </p>
             )}
