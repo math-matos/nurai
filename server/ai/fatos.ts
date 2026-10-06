@@ -1,5 +1,6 @@
 import type { Evento } from '../../src/data/types.js'
 import { chaveDaMedida, nomeDaSerie } from './analitos.js'
+import { hojeIso } from '../db/datas.js'
 import { dataBR, formatarNumero, normalizar, porData } from './casos/comum.js'
 
 /* Fatos calculados de forma determinística a partir dos registros. O modelo erra tendência
@@ -73,6 +74,8 @@ const EXAMES_CONHECIDOS: { nome: string; padrao: RegExp }[] = [
   { nome: 'Holter', padrao: /holter/ },
   { nome: 'radiografia de tórax', padrao: /(radiografia|raio[ -]?x)( d[eo])? torax/ },
   { nome: 'mamografia', padrao: /mamografia/ },
+  { nome: 'espirometria', padrao: /espirometria|prova de funcao pulmonar/ },
+  { nome: 'MAPA', padrao: /\bmapa\b|monitorizacao ambulatorial/ },
 ]
 const ULTRASSOM = /(?:ultrassom|ultrassonografia|ecografia)(?: doppler)?(?: d[aeo]s?)? ([a-z]{4,})/g
 
@@ -118,13 +121,35 @@ const pedeExames = (e: Evento) => TIPOS_PEDIDO_AVULSO.includes(e.tipo)
 /* Um pedido de exame não é o exame feito, mesmo sendo do tipo "documento". */
 const realizado = (e: Evento) => TIPOS_RESULTADO.includes(e.tipo) && !pedeExames(e)
 
-/* "Solicitados novo Holter e ultrassom de carótidas" → ["novo Holter", "ultrassom de carótidas"]. */
+/* O exame feito pode citar o pedido no título ("Perfil lipídico") ou só nas medidas
+   ("Função renal" com "Creatinina"). */
+const registraExame = (feito: Evento, padrao: RegExp) =>
+  padrao.test(normalizar(feito.titulo)) || (feito.medidas ?? []).some((m) => padrao.test(normalizar(m.nome)))
+
+const SOLICITACAO = /\b(?:solicitad[oa]s?|solicita|solicitou|pedid[oa]s?|pede|pediu)\s*:?\s+([^.;—–]+)/gi
+/* "exames como MAPA de 24 horas" → "MAPA de 24 horas". */
+const REPETICAO_PEDIDA = /^(?:nov[oa]s?|repetir|repeticao|controle)\b/
+const ABERTURA = /^(?:(?:os|as|a|o)\s+)?(?:seguintes\s+)?(?:exames?\s*(?:como|de|:)\s*|exames?\s+)?(?:a realiza[çc][ãa]o de\s+)?/i
+const semAbertura = (item: string) => item.trim().replace(ABERTURA, '').trim()
+
+/* "Foram solicitados exames como MAPA de 24 horas, perfil lipídico e potássio, com retorno em 60 dias"
+   → ["MAPA de 24 horas", "perfil lipídico", "potássio"]; o retorno é tratado à parte. Exame conhecido
+   casa por sinônimo; os demais, por todas as palavras no título do feito. */
 function itensSolicitados(e: Evento): ItemPedido[] {
   if (!TIPOS_PEDIDO.includes(e.tipo)) return []
-  const trecho = e.resumo.match(/solicitad[oa]s?\s+([^.;—–]+)/i)?.[1]
-  if (!trecho) return []
-  return trecho.split(/,|\se\s/).map((i) => i.trim()).filter(Boolean)
-    .map((nome) => ({ nome, janela: JANELA_REPETICAO_DIAS, casa: (feito: Evento) => tituloTem(feito, palavrasDe(nome)) }))
+  return [...e.resumo.matchAll(SOLICITACAO)].flatMap(([, trecho]) => trecho.split(/,|\se\s/))
+    .map(semAbertura)
+    .filter((nome) => nome && !/\b(retorno|consulta|reavaliac|acompanhamento)\b/.test(normalizar(nome)))
+    .map((nome) => {
+      const conhecido = EXAMES_CONHECIDOS.find(({ padrao }) => padrao.test(normalizar(nome)))
+      return {
+        nome,
+        /* "Nova espirometria", "repetir o Holter": a repetição foi pedida de propósito no seguimento. Não é
+           exame duplicado; fica pendente até aparecer um resultado depois do pedido. */
+        janela: REPETICAO_PEDIDA.test(normalizar(nome)) ? 0 : JANELA_REPETICAO_DIAS,
+        casa: conhecido ? (feito: Evento) => registraExame(feito, conhecido.padrao) : (feito: Evento) => tituloTem(feito, palavrasDe(nome)),
+      }
+    })
 }
 
 /* "Pedido de exame" com "perfil lipídico" no resumo: o exame vem do texto, por nome ou sinônimo. */
@@ -132,7 +157,7 @@ function itensDoPedidoAvulso(e: Evento): ItemPedido[] {
   if (!pedeExames(e)) return []
   const texto = normalizar(`${e.titulo} ${e.resumo}`)
   const conhecidos = EXAMES_CONHECIDOS.filter(({ padrao }) => padrao.test(texto))
-    .map(({ nome, padrao }) => ({ nome, casa: (feito: Evento) => padrao.test(normalizar(feito.titulo)) }))
+    .map(({ nome, padrao }) => ({ nome, casa: (feito: Evento) => registraExame(feito, padrao) }))
   const ultrassons = [...new Set([...texto.matchAll(ULTRASSOM)].map((m) => m[1]))].map((regiao) => ({
     nome: `ultrassom de ${regiao}`,
     casa: (feito: Evento) => /ultrass|ecografia/.test(normalizar(feito.titulo)) && normalizar(feito.titulo).includes(regiao),
@@ -197,29 +222,50 @@ function reavaliacoesSemMedicao(eventos: Evento[]): Pendencia[] {
   })
 }
 
-/* Retorno recomendado sem nenhum registro posterior da mesma especialidade. */
-function retornosSemRegistro(eventos: Evento[]): Pendencia[] {
+const PRAZO = /retorno\s+(?:em|apos|dentro de)\s+(\d+)\s+(dia|semana|mes|ano)/
+const DIAS_DA_UNIDADE: Record<string, number> = { dia: 1, semana: 7, mes: 30, ano: 365 }
+/* Retorno feito com algum atraso ainda é o retorno: só vira pendência depois do prazo + esta folga. */
+const TOLERANCIA_RETORNO_DIAS = 30
+
+function prazoEmDias(resumo: string): number | undefined {
+  const m = normalizar(resumo).match(PRAZO)
+  if (!m) return undefined
+  return Number(m[1]) * DIAS_DA_UNIDADE[m[2]]
+}
+
+/* Retorno recomendado sem nenhum registro posterior da mesma especialidade (consulta, alta, receita,
+   exame do mesmo serviço). Com prazo ("retorno em 6 meses"), só depois do prazo + tolerância. */
+function retornosSemRegistro(eventos: Evento[], hoje: string): Pendencia[] {
+  const mesma = (a?: string, b?: string) => !!a && !!b && normalizar(a) === normalizar(b)
   return eventos
     .filter((e) => e.especialidade && /retorno/i.test(e.resumo))
-    .filter((e) => !eventos.some((d) => d.data > e.data && d.especialidade === e.especialidade))
+    .filter((e) => !eventos.some((d) => d.data > e.data && mesma(d.especialidade, e.especialidade)))
+    .filter((e) => {
+      const prazo = prazoEmDias(e.resumo)
+      return prazo === undefined || dias(e.data, hoje) > prazo + TOLERANCIA_RETORNO_DIAS
+    })
     .map((e) => {
       const frase = e.resumo.split(/(?<=\.)\s+/).find((f) => /retorno/i.test(f))?.trim().replace(/\.$/, '')
+      const prazo = prazoEmDias(e.resumo)
+      const vencido = prazo === undefined ? '' : ` O prazo venceu em ${dataBR(somarDias(e.data, prazo))}.`
       return {
         tipo: 'retorno' as const,
         alvo: e.especialidade!,
         data: e.data,
-        descricao: `Em ${dataBR(e.data)}, "${e.titulo}" registrou: "${frase}". Não há registro posterior de ${e.especialidade}.`,
+        descricao: `Em ${dataBR(e.data)}, "${e.titulo}" registrou: "${frase}". Não há registro posterior de ${e.especialidade}.${vencido}`,
         ancoras: [e.id],
       }
     })
 }
 
-export function derivarFatos(eventos: Evento[]): Fatos {
+const somarDias = (iso: string, n: number) => new Date(Date.parse(iso) + n * DIA_MS).toISOString().slice(0, 10)
+
+export function derivarFatos(eventos: Evento[], hoje = hojeIso()): Fatos {
   const ordenados = [...eventos].sort(porData)
   return {
     tendencias: tendencias(ordenados),
     repeticoes: repeticoes(ordenados),
-    pendencias: [...pedidosSemResultado(ordenados), ...reavaliacoesSemMedicao(ordenados), ...retornosSemRegistro(ordenados)]
+    pendencias: [...pedidosSemResultado(ordenados), ...reavaliacoesSemMedicao(ordenados), ...retornosSemRegistro(ordenados, hoje)]
       .sort((a, b) => a.data.localeCompare(b.data)),
   }
 }

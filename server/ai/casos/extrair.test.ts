@@ -154,6 +154,7 @@ describe('extrairEvento — faixas unilaterais no prompt', () => {
     const prompt = instrucoes(recebidas)
     expect(prompt).toMatch(/só com piso \("> X", "≥ X"[^\n]*LIN[^\n]*refMin X e refMax null/)
     expect(prompt).toMatch(/% do previsto/)
+    expect(prompt).toMatch(/"152\/96 mmHg"[^\n]*"Pressão arterial sistólica"[^\n]*"Pressão arterial diastólica"/)
   })
 })
 

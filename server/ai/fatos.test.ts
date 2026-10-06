@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EVENTOS } from '../../src/data/seed.js'
 import type { Evento } from '../../src/data/types.js'
+import { DEMO_MARCOS } from '../teste/demo-marcos.js'
 import { derivarFatos, serializarFatos } from './fatos.js'
 
 const base = { instituicao: 'Lab', fonte: 'laboratorio', sinal: 'info', tags: [], origem: 'RNDS' } as const
@@ -179,5 +180,54 @@ describe('derivarFatos — pedido de exame já realizado', () => {
   it('pedido sem resultado anterior nem posterior vira pendência com o nome do exame', () => {
     const { pendencias } = derivarFatos([PEDIDO_09])
     expect(pendencias).toEqual([expect.objectContaining({ tipo: 'pedido', alvo: 'perfil lipídico', ancoras: ['r09'] })])
+  })
+})
+
+/* Eventos no shape real da extração (server/teste/demo-marcos.ts). Hoje fixo: o prazo do retorno conta. */
+describe('derivarFatos — pedidos e retornos de consulta (shape real)', () => {
+  const HOJE = '2026-10-06'
+  const pendencias = (eventos: Evento[], hoje = HOJE) => derivarFatos(eventos, hoje).pendencias
+
+  it('consulta de pneumologia de 04/11/2025: nova espirometria e retorno em 6 meses ficam pendentes', () => {
+    const lista = pendencias(DEMO_MARCOS)
+    expect(lista.map((p) => [p.tipo, p.alvo, p.ancoras])).toEqual([
+      ['pedido', 'nova espirometria com prova broncodilatadora', ['d08']],
+      ['retorno', 'Pneumologia', ['d08']],
+    ])
+    expect(lista[1].descricao).toMatch(/retorno em 6 meses.*O prazo venceu em 03\/05\/2026/)
+  })
+
+  it('"nova espirometria" pedida no seguimento não é exame duplicado da espirometria anterior', () => {
+    const { repeticoes } = derivarFatos(DEMO_MARCOS, HOJE)
+    expect(repeticoes.map((r) => [r.feito, r.pedido])).toEqual([['f02', 'f09'], ['d09', 'd11']])
+  })
+
+  it('consulta de cardiologia de 14/08/2024: MAPA, perfil lipídico, glicemia, glicada, creatinina e potássio foram feitos depois', () => {
+    expect(pendencias(DEMO_MARCOS).filter((p) => p.ancoras.includes('d01'))).toEqual([])
+    const semExames = DEMO_MARCOS.filter((e) => ['d01'].includes(e.id))
+    expect(pendencias(semExames).filter((p) => p.tipo === 'pedido').map((p) => p.alvo)).toEqual([
+      'MAPA de 24 horas', 'perfil lipídico completo', 'glicemia de jejum', 'hemoglobina glicada', 'creatinina', 'potássio',
+    ])
+  })
+
+  it('creatinina e potássio contam como feitos pelas medidas do laudo de "função renal"', () => {
+    const d01 = DEMO_MARCOS.find((e) => e.id === 'd01')!
+    const d04 = DEMO_MARCOS.find((e) => e.id === 'd04')!
+    expect(pendencias([d01, d04]).filter((p) => p.tipo === 'pedido').map((p) => p.alvo))
+      .toEqual(['MAPA de 24 horas', 'perfil lipídico completo'])
+  })
+
+  it('retorno ainda dentro do prazo + tolerância não é pendência; vencido é', () => {
+    const d08 = DEMO_MARCOS.find((e) => e.id === 'd08')!
+    const retorno = (hoje: string) => pendencias([d08], hoje).filter((p) => p.tipo === 'retorno')
+    expect(retorno('2026-04-01')).toEqual([])
+    expect(retorno('2026-06-01')).toEqual([])
+    expect(retorno('2026-06-10')).toHaveLength(1)
+  })
+
+  it('consulta posterior da mesma especialidade resolve o retorno', () => {
+    const d08 = DEMO_MARCOS.find((e) => e.id === 'd08')!
+    const volta = { ...d08, id: 'x1', data: '2026-05-20', resumo: 'Consulta de retorno: asma controlada.' }
+    expect(pendencias([d08, volta]).filter((p) => p.tipo === 'retorno' && p.ancoras.includes('d08'))).toEqual([])
   })
 })
