@@ -89,8 +89,13 @@ export const esquemaLogin = z.object({
   senha: z.string({ error: 'Informe a senha' }).min(1, 'Informe a senha'),
 })
 
+const relacao = ate(z.string({ error: 'Informe a relação' }).trim().min(1, 'Informe a relação'), 40)
+
+/* Sem paciente: o histórico é de quem criou a conta. Com paciente ("para alguém que eu cuido"), o histórico
+   passa a ser dele e quem criou a conta vira o responsável, com a relação que tem com ele. */
 export const esquemaOnboarding = z.object({
   modo: z.enum(['vazio', 'exemplo'], { error: "Use 'vazio' ou 'exemplo'" }),
+  paciente: z.object({ nome, dataNascimento: dataNascimento.optional(), relacao }).optional(),
 })
 
 /* '' remove um opcional. Campos fora da lista (convidado, onboarding...) são descartados. */
@@ -101,6 +106,8 @@ export const esquemaPerfil = z.object({
   alergias: lista.optional(),
   cartaoSus: ate(z.string().trim(), 40).optional(),
   plano: ate(z.string().trim(), 200).optional(),
+  /* null: o histórico volta a ser do próprio usuário. */
+  responsavel: z.union([z.null(), z.object({ nome, relacao })]).optional(),
 })
 
 export const esquemaExclusao = z.object({

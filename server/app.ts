@@ -7,7 +7,7 @@ import type { LlmProvider } from './ai/provider.js'
 import { exigirCsrf, exigirSessao, type AmbienteApp } from './auth/middleware.js'
 import { rotasAuth } from './auth/rotas.js'
 import { normalizarCodigo } from './db/codigo.js'
-import { ErroConflito, type Repositorio } from './db/repo.js'
+import { autorDe, ErroConflito, type Repositorio } from './db/repo.js'
 import { esquemaCompartilhamento, esquemaEvento } from './esquemas.js'
 import { ErroValidacao, lerCorpo } from './http.js'
 import { rotasAcessoMedico } from './routes/acesso-medico.js'
@@ -61,18 +61,21 @@ export function criarApp(deps: Deps): Hono<AmbienteApp> {
 
   app.post('/eventos', async (c) => {
     const evento = await lerCorpo(c, esquemaEvento)
-    return c.json(await c.var.repoPaciente.adicionarEvento(evento, c.var.perfil.nome), 201)
+    const { quem, papel } = autorDe(c.var.perfil)
+    return c.json(await c.var.repoPaciente.adicionarEvento(evento, quem, papel), 201)
   })
 
   app.delete('/eventos/:id', async (c) => {
     const id = c.req.param('id')
-    const excluido = await c.var.repoPaciente.excluirEvento(id, c.var.perfil.nome)
+    const { quem, papel } = autorDe(c.var.perfil)
+    const excluido = await c.var.repoPaciente.excluirEvento(id, quem, papel)
     return excluido ? c.body(null, 204) : naoEncontrado('Evento', id)
   })
 
   app.patch('/consentimentos/:id', async (c) => {
     const id = c.req.param('id')
-    return c.json(await c.var.repoPaciente.alternarConsentimento(id, c.var.perfil.nome) ?? naoEncontrado('Consentimento', id))
+    const { quem, papel } = autorDe(c.var.perfil)
+    return c.json(await c.var.repoPaciente.alternarConsentimento(id, quem, papel) ?? naoEncontrado('Consentimento', id))
   })
 
   app.patch('/passos/:id', async (c) => {
@@ -87,12 +90,14 @@ export function criarApp(deps: Deps): Hono<AmbienteApp> {
 
   app.post('/compartilhamentos', async (c) => {
     const { para } = await lerCorpo(c, esquemaCompartilhamento)
-    return c.json(await c.var.repoPaciente.criarCompartilhamento(para, c.var.perfil.nome), 201)
+    const { quem, papel } = autorDe(c.var.perfil)
+    return c.json(await c.var.repoPaciente.criarCompartilhamento(para, quem, papel), 201)
   })
 
   app.delete('/compartilhamentos/:codigo', async (c) => {
     const codigo = normalizarCodigo(c.req.param('codigo'))
-    const revogado = await c.var.repoPaciente.revogarCompartilhamento(codigo, c.var.perfil.nome)
+    const { quem, papel } = autorDe(c.var.perfil)
+    const revogado = await c.var.repoPaciente.revogarCompartilhamento(codigo, quem, papel)
     return revogado ? c.body(null, 204) : naoEncontrado('Compartilhamento', codigo)
   })
 
