@@ -29,11 +29,12 @@ describe('API', () => {
   let app: App
   let api: ReturnType<typeof logado>
   let repo: RepositorioPaciente
+  let conta: Awaited<ReturnType<typeof pacienteExemplo>>
 
   beforeEach(async () => {
     raiz = criarRepoMemoria()
     app = criarApp({ repo: raiz, llm: criarLlmMock() })
-    const conta = await pacienteExemplo(raiz, { nome: NOME })
+    conta = await pacienteExemplo(raiz, { nome: NOME })
     repo = conta.repo
     api = logado(app, conta.cookie)
   })
@@ -142,6 +143,38 @@ describe('API', () => {
     })
   })
 
+  describe('DELETE /api/eventos/:id', () => {
+    it('exclui o evento, limpa os passos e registra o acesso com o nome do perfil', async () => {
+      await api.request('/api/eventos', json(EVENTO))
+      const res = await api.request('/api/eventos/u1', { method: 'DELETE' })
+      expect(res.status).toBe(204)
+      expect(await res.text()).toBe('')
+      expect((await api.request('/api/eventos/e14', { method: 'DELETE' })).status).toBe(204)
+
+      const estado = await corpo(await api.request('/api/estado'))
+      expect(estado.eventos?.map((e) => e.id)).not.toContain('u1')
+      expect(estado.eventos?.map((e) => e.id)).not.toContain('e14')
+      expect(estado.passos?.map((p) => p.id)).not.toContain('p5')
+      expect(estado.acessos?.[1]).toMatchObject({
+        quem: NOME, papel: 'Titular', acao: 'Excluiu registro do histórico', itens: 'Perfil lipídico, 01/09/2026',
+      })
+    })
+
+    it('404 para id inexistente', async () => {
+      const res = await api.request('/api/eventos/zz', { method: 'DELETE' })
+      expect(res.status).toBe(404)
+      expect((await corpo(res)).erro).toBeTypeOf('string')
+    })
+
+    it('exige o cabeçalho anti-CSRF e a sessão', async () => {
+      const semCsrf = await app.request('/api/eventos/e14', { method: 'DELETE', headers: { cookie: conta.cookie } })
+      expect(semCsrf.status).toBe(403)
+      const semSessao = await app.request('/api/eventos/e14', comSessao(null, { method: 'DELETE' }))
+      expect(semSessao.status).toBe(401)
+      expect((await repo.estado()).eventos).toEqual(EXEMPLO.eventos)
+    })
+  })
+
   describe('PATCH /api/consentimentos/:id', () => {
     it('alterna o consentimento', async () => {
       const res = await api.request('/api/consentimentos/c1', { method: 'PATCH' })
@@ -228,9 +261,9 @@ describe('API', () => {
       ...raiz,
       paraPaciente: (id) => ({ ...raiz.paraPaciente(id), estado: () => Promise.reject(new Error('ORA-00000 detalhe interno')) }),
     }
-    const conta = await pacienteExemplo(raiz)
+    const outra = await pacienteExemplo(raiz)
     const erroConsole = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const res = await criarApp({ repo: falho, llm: criarLlmMock() }).request('/api/estado', comSessao(conta.cookie))
+    const res = await criarApp({ repo: falho, llm: criarLlmMock() }).request('/api/estado', comSessao(outra.cookie))
     erroConsole.mockRestore()
     expect(res.status).toBe(500)
     expect(await corpo(res)).toEqual({ erro: 'Erro interno' })
@@ -264,6 +297,14 @@ describe('isolamento entre pacientes via HTTP', () => {
     const estadoA = await corpo(await a.request('/api/estado'))
     expect(estadoA.passos?.find((p) => p.id === 'p1')?.feito).toBe(false)
     expect(estadoA.consentimentos?.find((c) => c.id === 'c1')?.ativo).toBe(true)
+  })
+
+  it('B não exclui evento de A (404) e o evento continua com A', async () => {
+    const res = await b.request('/api/eventos/e14', { method: 'DELETE' })
+    expect(res.status).toBe(404)
+    const estadoA = await corpo(await a.request('/api/estado'))
+    expect(estadoA.eventos?.map((e) => e.id)).toContain('e14')
+    expect(estadoA.acessos?.[0].acao).not.toBe('Excluiu registro do histórico')
   })
 
   it('reiniciar de B não mexe em A', async () => {

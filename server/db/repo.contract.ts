@@ -131,6 +131,54 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
         })
       })
 
+      describe('excluirEvento', () => {
+        it('apaga o evento e registra título e data no log', async () => {
+          await repo.adicionarEvento(EVENTO_NOVO, AUTOR)
+          expect(await repo.excluirEvento('u1', AUTOR)).toBe(true)
+
+          const { eventos, acessos } = await repo.estado()
+          expect(eventos).toEqual(EXEMPLO.eventos)
+          expect(acessos[0]).toMatchObject({
+            quem: AUTOR, papel: 'Titular', acao: 'Excluiu registro do histórico', itens: 'Perfil lipídico, 01/09/2026',
+          })
+          expect(acessos[0].quando).toMatch(FORMATO_QUANDO)
+          expect(await repo.listarAcessos()).toEqual(acessos)
+        })
+
+        it('tira o id das âncoras e apaga o passo que fica sem nenhuma', async () => {
+          await repo.alternarPasso('p1')
+          expect(await repo.excluirEvento('e22', AUTOR)).toBe(true)
+          expect(await repo.excluirEvento('e14', AUTOR)).toBe(true)
+
+          const { passos } = await repo.estado()
+          expect(passos.map((p) => p.id)).toEqual(['p1', 'p2', 'p3', 'p4'])
+          expect(passos[0]).toMatchObject({ ancoras: ['e24'], feito: true })
+          expect(passos.slice(1)).toEqual(EXEMPLO.passos.slice(1, 4))
+        })
+
+        it('mantém passo que já não tinha âncora', async () => {
+          const semAncora: ProximoPasso = {
+            id: 'p9', titulo: 'Passo livre', porque: '', ancoras: [], prazo: '', prioridade: 'baixa', feito: false,
+          }
+          await repo.substituirPassos([...EXEMPLO.passos, semAncora])
+          await repo.excluirEvento('e14', AUTOR)
+          expect((await repo.estado()).passos.map((p) => p.id)).toEqual(['p1', 'p2', 'p3', 'p4', 'p9'])
+        })
+
+        it('devolve false e não muda nada para id inexistente', async () => {
+          const antes = await repo.estado()
+          expect(await repo.excluirEvento('nao-existe', AUTOR)).toBe(false)
+          expect(await repo.estado()).toEqual(antes)
+        })
+
+        it('excluir de novo devolve false sem duplicar o log', async () => {
+          await repo.excluirEvento('e14', AUTOR)
+          const antes = await repo.listarAcessos()
+          expect(await repo.excluirEvento('e14', AUTOR)).toBe(false)
+          expect(await repo.listarAcessos()).toEqual(antes)
+        })
+      })
+
       describe('alternarConsentimento', () => {
         it('revoga um consentimento ativo e registra "Revogou acesso"', async () => {
           const c = await repo.alternarConsentimento('c1', AUTOR)
@@ -433,6 +481,15 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
         expect(await a.repo.alternarPasso('p1')).toBeNull()
         expect(await a.repo.conectarFonte('f5')).toBeNull()
         expect(await b.repo.estado()).toEqual(antes)
+      })
+
+      it('A não exclui evento de B, nem com o mesmo id', async () => {
+        await a.repo.adicionarEvento({ ...EVENTO_NOVO, id: 'e14' }, 'Ana Alves')
+        const antesB = await b.repo.estado()
+        expect(await a.repo.excluirEvento('e22', 'Ana Alves')).toBe(false)
+        expect(await a.repo.excluirEvento('e14', 'Ana Alves')).toBe(true)
+        expect(await b.repo.estado()).toEqual(antesB)
+        expect((await a.repo.estado()).eventos).toEqual([])
       })
 
       it('substituirPassos e compartilhamento de A não tocam B', async () => {

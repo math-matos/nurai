@@ -64,6 +64,12 @@ export function criarApp(deps: Deps): Hono<AmbienteApp> {
     return c.json(await c.var.repoPaciente.adicionarEvento(evento, c.var.perfil.nome), 201)
   })
 
+  app.delete('/eventos/:id', async (c) => {
+    const id = c.req.param('id')
+    const excluido = await c.var.repoPaciente.excluirEvento(id, c.var.perfil.nome)
+    return excluido ? c.body(null, 204) : naoEncontrado('Evento', id)
+  })
+
   app.patch('/consentimentos/:id', async (c) => {
     const id = c.req.param('id')
     return c.json(await c.var.repoPaciente.alternarConsentimento(id, c.var.perfil.nome) ?? naoEncontrado('Consentimento', id))

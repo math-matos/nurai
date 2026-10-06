@@ -5,7 +5,7 @@ import { agora, hoje } from './datas.js'
 import { dadosIniciais, dadosVazios, type DadosIniciais } from './exemplo.js'
 import { montarPerfil, perfilAtualizado, perfilNovo, type PerfilGravado } from './perfil.js'
 import {
-  ErroConflito, normalizarEmail, semOpcionaisVazios, VALIDADE_COMPARTILHAMENTO_DIAS, type Compartilhamento,
+  ACAO_EXCLUIR_EVENTO, ErroConflito, itensExclusao, normalizarEmail, passosSemEvento, semOpcionaisVazios, VALIDADE_COMPARTILHAMENTO_DIAS, type Compartilhamento,
   type NovoAcesso, type Repositorio, type RepositorioPaciente, type UsuarioComSenha,
 } from './repo.js'
 
@@ -69,6 +69,17 @@ export function criarRepoMemoria(): Repositorio {
         gravar({ ...ler(), eventos: [...ler().eventos, copia] })
         registrar({ quem: autor, papel: 'Titular', acao: 'Anexou documento ao histórico', itens: evento.titulo })
         return structuredClone(copia)
+      },
+
+      async excluirEvento(eid, autor) {
+        const alvo = ler().eventos.find((e) => e.id === eid)
+        if (!alvo) return false
+        const { atualizados, removidos } = passosSemEvento(ler().passos, eid)
+        const novos = new Map(atualizados.map((p) => [p.id, p]))
+        const passos = ler().passos.filter((p) => !removidos.includes(p.id)).map((p) => novos.get(p.id) ?? p)
+        gravar({ ...ler(), eventos: ler().eventos.filter((e) => e.id !== eid), passos })
+        registrar({ quem: autor, papel: 'Titular', acao: ACAO_EXCLUIR_EVENTO, itens: itensExclusao(alvo) })
+        return true
       },
 
       async alternarConsentimento(cid, autor) {

@@ -10,7 +10,7 @@ import {
 } from './oracle-contas.js'
 import { montarPerfil } from './perfil.js'
 import {
-  ErroConflito, semOpcionaisVazios, VALIDADE_COMPARTILHAMENTO_DIAS, type Compartilhamento, type CompartilhamentoAtivo,
+  ACAO_EXCLUIR_EVENTO, ErroConflito, itensExclusao, passosSemEvento, semOpcionaisVazios, VALIDADE_COMPARTILHAMENTO_DIAS, type Compartilhamento, type CompartilhamentoAtivo,
   type FonteConectada, type ModoOnboarding, type NovoAcesso, type Onboarding, type Repositorio, type RepositorioPaciente,
 } from './repo.js'
 
@@ -49,6 +49,8 @@ const SQL = {
   passo: `SELECT ${COLUNAS.passo} FROM passos WHERE paciente_id = :paciente AND id = :id`,
   fontes: `SELECT ${COLUNAS.fonte} FROM fontes WHERE paciente_id = :paciente ORDER BY ordem`,
   fonte: `SELECT ${COLUNAS.fonte} FROM fontes WHERE paciente_id = :paciente AND id = :id`,
+  tituloEvento: `SELECT titulo "titulo", TO_CHAR(data, 'YYYY-MM-DD') "data" FROM eventos
+    WHERE paciente_id = :paciente AND id = :id FOR UPDATE`,
   compartilhamento: `SELECT codigo "codigo", ${texto('criado_em')} "criadoEm", para "para", ${texto('expira_em')} "expiraEm"
     FROM compartilhamentos WHERE paciente_id = :paciente AND revogado = 0 AND expira_em > ${instanteUtc('agora')}
     ORDER BY ordem DESC FETCH FIRST 1 ROWS ONLY`,
@@ -170,6 +172,25 @@ function repoPaciente(paciente: string): RepositorioPaciente {
       }
       await registrar(conn, { quem: autor, papel: 'Titular', acao: 'Anexou documento ao histórico', itens: evento.titulo })
       return structuredClone(semOpcionaisVazios(evento))
+    }),
+
+    excluirEvento: (id, autor) => transacao(async (conn) => {
+      const [alvo] = await selecionar(conn, SQL.tituloEvento, { id })
+      if (!alvo) return false
+      await conn.execute('DELETE FROM eventos WHERE paciente_id = :paciente AND id = :id', { paciente, id })
+      const { atualizados, removidos } = passosSemEvento((await selecionar(conn, SQL.passos)).map(paraPasso), id)
+      for (const p of atualizados) {
+        await conn.execute('UPDATE passos SET ancoras = :ancoras WHERE paciente_id = :paciente AND id = :id',
+          { paciente, id: p.id, ancoras: JSON.stringify(p.ancoras) })
+      }
+      for (const pid of removidos) {
+        await conn.execute('DELETE FROM passos WHERE paciente_id = :paciente AND id = :id', { paciente, id: pid })
+      }
+      await registrar(conn, {
+        quem: autor, papel: 'Titular', acao: ACAO_EXCLUIR_EVENTO,
+        itens: itensExclusao({ titulo: alvo.titulo as string, data: alvo.data as string }),
+      })
+      return true
     }),
 
     alternarConsentimento: (id, autor) => transacao(async (conn) => {

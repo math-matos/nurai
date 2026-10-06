@@ -107,6 +107,9 @@ export interface SessaoAtiva {
 export interface RepositorioPaciente {
   estado(): Promise<EstadoRepositorio>
   adicionarEvento(evento: Evento, autor: string): Promise<Evento>
+  /* Apaga o evento, tira o id das âncoras dos passos (passo sem âncora sai junto) e registra no log.
+     false: o evento não é deste paciente. */
+  excluirEvento(id: string, autor: string): Promise<boolean>
   alternarConsentimento(id: string, autor: string): Promise<Consentimento | null>
   alternarPasso(id: string): Promise<ProximoPasso | null>
   substituirPassos(passos: ProximoPasso[]): Promise<ProximoPasso[]>
@@ -163,6 +166,24 @@ export class ErroConflito extends Error {
 export function semOpcionaisVazios(evento: Evento): Evento {
   const { especialidade, documento, ...resto } = evento
   return { ...resto, ...(especialidade && { especialidade }), ...(documento && { documento }) }
+}
+
+export const ACAO_EXCLUIR_EVENTO = 'Excluiu registro do histórico'
+
+/* O log guarda título e data do registro apagado: depois da exclusão, é a única pista do que existiu. */
+export function itensExclusao({ titulo, data }: Pick<Evento, 'titulo' | 'data'>) {
+  const [a, m, d] = data.split('-')
+  return `${titulo}, ${d}/${m}/${a}`
+}
+
+/* Passos tocados ao apagar um evento: o id sai das âncoras; o passo que fica sem nenhuma perdeu a sustentação e sai. */
+export function passosSemEvento(passos: ProximoPasso[], eventoId: string) {
+  const tocados = passos.filter((p) => p.ancoras.includes(eventoId))
+    .map((p) => ({ ...p, ancoras: p.ancoras.filter((a) => a !== eventoId) }))
+  return {
+    atualizados: tocados.filter((p) => p.ancoras.length > 0),
+    removidos: tocados.filter((p) => p.ancoras.length === 0).map((p) => p.id),
+  }
 }
 
 export const normalizarEmail = (email: string) => email.trim().toLowerCase()
