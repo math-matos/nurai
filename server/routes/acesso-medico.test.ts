@@ -124,7 +124,7 @@ function suiteAcessoMedico(nome: string, fabrica: () => Repositorio) {
         const rafael = await cadastrar(app, { nome: 'Rafael Lima' })
         const api = logado(app, rafael.cookie)
         await api.request('/api/onboarding', json({
-          modo: 'vazio', paciente: { nome: 'Marcos Vinícius Teixeira', dataNascimento: '1958-03-02', relacao: 'filho' },
+          modo: 'vazio', paciente: { nome: 'Marcos Vinícius Teixeira', dataNascimento: '1958-03-02', relacao: 'filho', autorizacao: true },
         }))
         try {
           const comp = await gerar(rafael, 'Dr. Paulo')

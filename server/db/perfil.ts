@@ -1,5 +1,5 @@
-import { hojeIso } from './datas.js'
-import type { AtualizacaoPerfil, NovoPaciente, Onboarding, Perfil } from './repo.js'
+import { hojeIso, instanteIso } from './datas.js'
+import type { AtualizacaoPerfil, NovoPaciente, Onboarding, Perfil, Responsavel } from './repo.js'
 
 export type PerfilGravado = Omit<Perfil, 'iniciais' | 'idade'>
 
@@ -16,11 +16,21 @@ export function idadeEm(dataNascimento: string, hoje = hojeIso()): number {
   return anoHoje - ano - (fezAniversario ? 0 : 1)
 }
 
+/* Só nome, relação e o instante da declaração são gravados (no fuso de Brasília, como o Oracle devolve);
+   a pendência é derivada na leitura. */
+const responsavelGravado = ({ nome, relacao, autorizadoEm }: Responsavel): Responsavel =>
+  ({ nome, relacao, ...(autorizadoEm && { autorizadoEm: instanteIso(new Date(autorizadoEm)) }) })
+
 export function montarPerfil(g: PerfilGravado): Perfil {
+  const { responsavel, ...resto } = g
   return {
-    ...g,
+    ...resto,
     iniciais: iniciaisDe(g.nome),
     ...(g.dataNascimento && { idade: idadeEm(g.dataNascimento) }),
+    /* Conta cuidador criada antes da declaração de autorização: o front pede a declaração. */
+    ...(responsavel && {
+      responsavel: { ...responsavelGravado(responsavel), ...(!responsavel.autorizadoEm && { autorizacaoPendente: true as const }) },
+    }),
   }
 }
 
@@ -40,7 +50,7 @@ export function perfilNovo(pacienteId: string, dados: NovoPaciente, onboarding: 
     alergias: dados.alergias ?? [],
     cartaoSus: opcional(dados.cartaoSus),
     plano: opcional(dados.plano),
-    responsavel: dados.responsavel,
+    responsavel: dados.responsavel && responsavelGravado(dados.responsavel),
     onboarding,
     convidado: dados.convidado,
   })
@@ -56,6 +66,9 @@ export function perfilAtualizado(atual: PerfilGravado, m: AtualizacaoPerfil): Pe
     alergias: m.alergias ?? atual.alergias,
     cartaoSus: texto(m.cartaoSus, atual.cartaoSus),
     plano: texto(m.plano, atual.plano),
-    responsavel: m.responsavel === undefined ? atual.responsavel : (m.responsavel ?? undefined),
+    responsavel: m.responsavel === undefined ? atual.responsavel : m.responsavel ? responsavelGravado({
+      /* Trocar nome ou relação não desfaz a declaração já feita; só uma nova declaração muda o instante. */
+      ...m.responsavel, autorizadoEm: m.responsavel.autorizadoEm ?? atual.responsavel?.autorizadoEm,
+    }) : undefined,
   })
 }

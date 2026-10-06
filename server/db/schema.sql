@@ -39,6 +39,14 @@ EXCEPTION WHEN OTHERS THEN IF SQLCODE != -1430 THEN RAISE; END IF;
 END;
 /
 
+-- Quando o responsável declarou ter autorização para tratar os dados do paciente (LGPD). NULL numa conta
+-- cuidador anterior à declaração: o app pede a declaração no próximo acesso.
+BEGIN
+  EXECUTE IMMEDIATE 'ALTER TABLE pacientes ADD (responsavel_autorizado_em TIMESTAMP WITH TIME ZONE)';
+EXCEPTION WHEN OTHERS THEN IF SQLCODE != -1430 THEN RAISE; END IF;
+END;
+/
+
 -- Um usuário por paciente; email guardado em minúsculas.
 BEGIN
   EXECUTE IMMEDIATE q'[

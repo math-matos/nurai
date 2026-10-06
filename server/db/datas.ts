@@ -25,3 +25,16 @@ export function agora(d = new Date()) {
   const p = partes(d)
   return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`
 }
+
+const FORMATO_ISO = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZoneName: 'longOffset',
+})
+
+/* Instante em ISO 8601 com o deslocamento de Brasília ("2026-10-06T14:32:05-03:00"), sem milissegundos. */
+export function instanteIso(d = new Date()) {
+  const p = Object.fromEntries(FORMATO_ISO.formatToParts(d).map((x) => [x.type, x.value]))
+  const deslocamento = p.timeZoneName.replace('GMT', '') || '+00:00'
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}${deslocamento}`
+}

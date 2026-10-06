@@ -51,10 +51,14 @@ export interface CompartilhamentoEncontrado extends CompartilhamentoAtivo {
 export type Onboarding = 'pendente' | 'vazio' | 'exemplo'
 export type ModoOnboarding = Exclude<Onboarding, 'pendente'>
 
-/* Quem usa a conta para cuidar do histórico de outra pessoa (relacao: o que ele é do paciente, ex.: "filho"). */
+/* Quem usa a conta para cuidar do histórico de outra pessoa (relacao: o que ele é do paciente, ex.: "filho").
+   autorizadoEm: quando declarou ter autorização para tratar os dados de saúde do paciente (LGPD: dado de terceiro),
+   ISO com o fuso de Brasília. autorizacaoPendente é derivado na leitura: conta cuidador anterior à declaração. */
 export interface Responsavel {
   nome: string
   relacao: string
+  autorizadoEm?: string
+  autorizacaoPendente?: true
 }
 
 /* nome é o do paciente, dono do histórico; com responsavel, a conta é de quem cuida dele.
