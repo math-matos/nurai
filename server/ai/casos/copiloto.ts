@@ -1,12 +1,13 @@
 import { z } from 'zod'
 import { responder } from '../../../src/data/copiloto.js'
 import type { Evento } from '../../../src/data/types.js'
+import { derivarFatos } from '../fatos.js'
 import { avisoPara } from '../guardrails.js'
 import { pedirJson } from '../json.js'
 import { SISTEMA, contextoHistorico, descreverPerfil } from '../prompts.js'
 import type { MensagemLlm } from '../provider.js'
 import { limparTexto, limparTextos } from '../texto.js'
-import { filtrarAncoras, idsDe, mesAno, normalizar, porData, type ContextoIa } from './comum.js'
+import { dataBR, filtrarAncoras, idsDe, mesAno, normalizar, porData, type ContextoIa } from './comum.js'
 
 export interface EntradaCopiloto {
   pergunta: string
@@ -47,6 +48,22 @@ const esquema = z.object({
   serie: z.object({ medida: z.string() }).nullish(),
   aviso: z.string().nullish(),
 })
+
+const PERGUNTA_REPETICAO = /repet|duplic|de novo|refazer|ja fiz|nao preciso/
+const AVISO_REPETICAO = 'Não deixe de fazer um exame pedido sem antes confirmar com quem o pediu.'
+
+/* Exame repetido é fato calculado. Se a pergunta é sobre isso e a resposta não cita nenhum par
+   feito × pedido dos fatos (o modelo disse "não encontrei"), a resposta vem dos próprios fatos. */
+function respostaDeRepeticao(eventos: Evento[], pergunta: string, ancoras: string[]): Omit<RespostaCopiloto, 'geradoPor'> | undefined {
+  if (!PERGUNTA_REPETICAO.test(normalizar(pergunta))) return undefined
+  const { repeticoes } = derivarFatos(eventos)
+  if (!repeticoes.length || repeticoes.some((r) => ancoras.includes(r.feito) && ancoras.includes(r.pedido))) return undefined
+  return {
+    texto: repeticoes.map((r) => `O exame "${r.exame}" foi feito em ${dataBR(r.feitoData)} (${r.feitoInstituicao}) e um novo pedido de ${r.pedidoExame} apareceu em ${dataBR(r.pedidoData)} (${r.pedidoInstituicao}), ${r.dias} dias depois. Leve o resultado de ${dataBR(r.feitoData)} a quem fez o pedido e pergunte se ainda é preciso repetir.`),
+    ancoras: [...new Set(repeticoes.flatMap((r) => [r.feito, r.pedido]))],
+    aviso: AVISO_REPETICAO,
+  }
+}
 
 /* Nome popular na pergunta → trecho do nome da medida nos registros. HDL antes de "colesterol". */
 const MEDIDAS_POPULARES: [RegExp, string][] = [
@@ -95,6 +112,8 @@ export async function responderCopiloto({ repo, llm, perfil }: ContextoIa, entra
     /* O motor determinístico só conhece o histórico de exemplo: se nenhuma das âncoras dele existe
        aqui, a resposta falaria de registros que a paciente não tem. */
     if (resposta.ancoras.length && !ancoras.length) {
+      const repeticao = respostaDeRepeticao(eventos, entrada.pergunta, [])
+      if (repeticao) return { ...repeticao, geradoPor: llm.nome }
       const aviso = avisoPara(entrada.pergunta, null)
       return { texto: [SEM_BASE], ancoras: [], ...(aviso && { aviso }), geradoPor: llm.nome }
     }
@@ -118,6 +137,8 @@ export async function responderCopiloto({ repo, llm, perfil }: ContextoIa, entra
 
   const texto = limparTextos(r.texto, eventos)
   const ancoras = filtrarAncoras(r.ancoras, validos)
+  const repeticao = respostaDeRepeticao(eventos, entrada.pergunta, ancoras)
+  if (repeticao) return { ...repeticao, geradoPor: llm.nome }
   const aviso = avisoPara(entrada.pergunta, r.aviso && limparTexto(r.aviso, eventos))
   if (!texto.length || !ancoras.length) return { texto: [SEM_BASE], ancoras: [], ...(aviso && { aviso }), geradoPor: llm.nome }
 

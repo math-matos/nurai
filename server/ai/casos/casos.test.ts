@@ -119,7 +119,7 @@ describe('responderCopiloto — exame repetido por pedido avulso', () => {
     const { pacienteId } = await raiz.criarPaciente({ nome: 'Marcos', convidado: false })
     const perfil = (await raiz.aplicarOnboarding(pacienteId, 'vazio'))!
     const repo = raiz.paraPaciente(pacienteId)
-    const comum = { fonte: 'paciente', sinal: 'info', tags: [], origem: 'OCR + IA' } as const
+    const comum = { fonte: 'paciente' as const, sinal: 'info' as const, tags: [], origem: 'OCR + IA' as const }
     await repo.adicionarEvento({
       ...comum, id: 'r02', data: '2026-03-12', tipo: 'exame', titulo: 'Perfil lipídico', instituicao: 'Laboratório Quaresmeira',
       resumo: 'Colesterol total, LDL e triglicerídeos acima do desejável.',
