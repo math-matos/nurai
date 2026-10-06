@@ -26,7 +26,7 @@ passo de cuidado.
 - **Front** (`src/`): React 19 + TypeScript sobre Vite. Toda leitura e escrita do histórico
   passa por `/api` (`src/lib/api.ts`); só a conversa com o copiloto fica no `localStorage`.
 - **API** (`server/`): app Hono montado em `server/app.ts`. Em produção roda como Vercel
-  Function (`api/[[...route]].ts`); em dev, como servidor Node na porta 3001
+  Function (`api/index.ts`); em dev, como servidor Node na porta 3001
   (`server/dev.ts`), com o Vite fazendo proxy de `/api`.
 - **IA** (`server/ai/`): extração de documento, explicação de exame, copiloto ancorado,
   resumo pré-consulta e análise de pendências via OCI Generative AI. Sem as variáveis
@@ -122,7 +122,7 @@ ORACLE_DB_TEST=1 ORACLE_DB_USER=nurai ORACLE_DB_PASSWORD=NuraiApp123 \
 
 ## Deploy na Vercel
 
-O projeto usa o preset Vite para o front e publica `api/[[...route]].ts` como Function
+O projeto usa o preset Vite para o front e publica `api/index.ts` como Function
 (`maxDuration` de 60 s em `vercel.json`). Em **Settings → Environment Variables**,
 cadastre as mesmas variáveis de `.env.example`:
 
