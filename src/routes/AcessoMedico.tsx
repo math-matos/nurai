@@ -222,7 +222,7 @@ function ItemCompacto({ evento: e, aberto, aoAlternar }: { evento: Evento; abert
       </summary>
       <div className="compacta__corpo">
         <p className="compacta__texto">{e.resumo}</p>
-        {e.medidas?.map((m) => <Regua key={m.nome} medida={m} />)}
+        {e.medidas?.map((m, i) => <Regua key={`${i}-${m.nome}`} medida={m} />)}
         <p className="compacta__prov">
           {TIPOS[e.tipo]} · {FONTES[e.fonte].nome} · origem: {e.origem}
           {e.documento ? ` · arquivo ${e.documento}` : ''}

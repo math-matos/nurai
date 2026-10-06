@@ -163,3 +163,29 @@ test('o valor editado na conferência é o que fica salvo', async ({ page }) => 
     editado.toLocaleString('pt-BR'),
   )
 })
+
+/* Resumo de alta traz a mesma medida na entrada e na alta (SpO2 92% → 97%): as duas aparecem
+   no detalhe, no resumo e na visão do médico, sem chave repetida no React (o vigia pega o console). */
+test('medidas com o mesmo nome aparecem todas, sem erro de chave repetida', async ({ page, contas }) => {
+  /* Conta própria: o resumo mostra só os 3 registros mais recentes. */
+  await contas.criar({ request: page.request, modo: 'vazio' })
+  const spo2 = (valor: number) => ({ nome: 'SpO2', valor, unidade: '%', refMin: 95, refMax: 100, sinal: valor < 95 ? 'alterado' : 'normal' })
+  const res = await page.request.post('/api/eventos', {
+    headers: CSRF,
+    data: {
+      id: `u${Date.now()}`, data: '2026-05-06', tipo: 'internacao', titulo: `Alta com SpO2 repetida ${Date.now()}`,
+      instituicao: 'Hospital Teste', fonte: 'paciente', resumo: 'Entrada e alta.', sinal: 'alterado', tags: [],
+      origem: 'OCR + IA', medidas: [spo2(92), spo2(97)],
+    },
+  })
+  expect(res.status(), await res.text()).toBe(201)
+  const salvo: Evento = await res.json()
+
+  /* O beforeEach abriu o app com a conta do arquivo: só a troca de hash não recarrega o histórico. */
+  await page.goto(`/#/app/linha/${salvo.id}`)
+  await page.reload()
+  await esperarApp(page)
+  await expect(page.getByTestId('evento-detalhe').locator('.regua').filter({ hasText: 'SpO2' })).toHaveCount(2)
+  await page.goto('/#/app/resumo')
+  await expect(page.locator('.regua').filter({ hasText: 'SpO2' })).toHaveCount(2)
+})

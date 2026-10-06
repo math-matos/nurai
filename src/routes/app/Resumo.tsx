@@ -227,7 +227,7 @@ function FolhaResumo() {
                   <span>{e.instituicao}</span>
                 </p>
                 <p className="mudancas__texto">{e.resumo}</p>
-                {e.medidas?.map((m) => <Regua key={m.nome} medida={m} />)}
+                {e.medidas?.map((m, i) => <Regua key={`${i}-${m.nome}`} medida={m} />)}
               </li>
             ))}
           </ul>

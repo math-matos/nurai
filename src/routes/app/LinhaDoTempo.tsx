@@ -224,7 +224,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
             {atual.medidas && (
               <div className="detalhe__medidas">
                 <p className="label">Resultados</p>
-                {atual.medidas.map((m) => <Regua key={m.nome} medida={m} />)}
+                {atual.medidas.map((m, i) => <Regua key={`${i}-${m.nome}`} medida={m} />)}
               </div>
             )}
 
