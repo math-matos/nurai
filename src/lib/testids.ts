@@ -11,9 +11,9 @@
    conferencia-salvar, conferencia-descartar, conferencia-identidade, conferencia-confirmo-meu,
    conferencia-confirmo-meu-rodape, conferencia-motivo, conferencia-ir-confirmacao.
    IA: copiloto-pergunta, copiloto-enviar, copiloto-resposta, ia-passos, ia-resumo, resumo-sintese.
-   Compartilhamento: acesso-gerar, acesso-painel, acesso-codigo, acesso-validade, acesso-copiar, acesso-revogar.
+   Compartilhamento: acesso-gerar, acesso-painel, acesso-codigo, acesso-validade, acesso-copiar, acesso-revogar, acesso-revogado.
    Médico: medico-form, medico-codigo, medico-profissional, medico-entrar, medico-erro, medico-paciente,
-   medico-aviso, medico-evento, medico-pendencias, medico-gerar-resumo, medico-resumo, medico-sair.
+   medico-aviso, medico-evento, medico-pendencias, medico-gerar-resumo, medico-resumo, medico-sair, medico-encerrado.
    Conta: perfil-form, perfil-salvar, perfil-salvo, excluir-confirmacao, excluir-botao, atalho-conta. */
 export const TID = {
   formEntrar: 'form-entrar',
@@ -79,6 +79,7 @@ export const TID = {
   acessoValidade: 'acesso-validade',
   acessoCopiar: 'acesso-copiar',
   acessoRevogar: 'acesso-revogar',
+  acessoRevogado: 'acesso-revogado',
 
   medicoForm: 'medico-form',
   medicoCodigo: 'medico-codigo',
@@ -92,6 +93,7 @@ export const TID = {
   medicoGerarResumo: 'medico-gerar-resumo',
   medicoResumo: 'medico-resumo',
   medicoSair: 'medico-sair',
+  medicoEncerrado: 'medico-encerrado',
 
   perfilForm: 'perfil-form',
   perfilSalvar: 'perfil-salvar',

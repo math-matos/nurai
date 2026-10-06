@@ -473,6 +473,9 @@
 .seletor__opcao:hover { color: var(--ink); }
 .seletor__opcao--ativa { background: var(--card); color: var(--ink); box-shadow: var(--shadow-1); }
 .resumo__acoes { display: flex; gap: var(--sp-2); }
+.resumo__explica { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; max-width: 72ch; margin-bottom: var(--sp-4); }
+.sintese-ia:focus { outline: none; }
+.sintese-ia:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .resumo__foco { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; min-width: 0; }
 .resumo__foco .seletor { flex-wrap: wrap; max-width: 100%; }
 .resumo__outra { width: 220px; max-width: 100%; }
@@ -727,7 +730,7 @@
 
 /* ---------------- impressão ---------------- */
 @media print {
-  .lateral, .barra, .resumo__controles, .acesso, .lateral__veu, .palco__falha { display: none !important; }
+  .lateral, .barra, .resumo__controles, .resumo__explica, .acesso, .lateral__veu, .palco__falha { display: none !important; }
   .app { display: block; }
   .palco__corpo { padding: 0; }
   .folha-resumo { border: 0; padding: 0; }
