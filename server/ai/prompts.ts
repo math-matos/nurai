@@ -1,5 +1,5 @@
-import { PACIENTE } from '../../src/data/seed.js'
 import type { Evento, Medida } from '../../src/data/types.js'
+import type { Perfil } from '../db/repo.js'
 import { dataBR, formatarNumero } from './casos/comum.js'
 import { derivarFatos, serializarFatos } from './fatos.js'
 import type { MensagemLlm } from './provider.js'
@@ -41,7 +41,12 @@ export function contextoHistorico(eventos: Evento[]): string {
   ].join('\n\n')
 }
 
-export const PERFIL = `Perfil: ${PACIENTE.idade} anos. Condições registradas: ${PACIENTE.condicoes.join(', ')}. Alergias: ${PACIENTE.alergias.join(', ')}.`
+/* Perfil preenchido pelo próprio paciente: idade, condições e alergias podem faltar. */
+export function descreverPerfil({ idade, condicoes, alergias }: Pick<Perfil, 'idade' | 'condicoes' | 'alergias'>): string {
+  const lista = (itens: string[]) => (itens.length ? itens.join(', ') : 'nenhuma informada')
+  const anos = idade === undefined ? 'idade não informada' : `${idade} anos`
+  return `Perfil: ${anos}. Condições registradas: ${lista(condicoes)}. Alergias: ${lista(alergias)}.`
+}
 
 export function mensagens(...partes: string[]): MensagemLlm[] {
   return [

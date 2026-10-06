@@ -1,13 +1,12 @@
 import { z } from 'zod'
 import { responder } from '../../../src/data/copiloto.js'
 import type { Evento } from '../../../src/data/types.js'
-import type { Deps } from '../../app.js'
 import { avisoPara } from '../guardrails.js'
 import { pedirJson } from '../json.js'
-import { PERFIL, SISTEMA, contextoHistorico } from '../prompts.js'
+import { SISTEMA, contextoHistorico, descreverPerfil } from '../prompts.js'
 import type { MensagemLlm } from '../provider.js'
 import { limparTexto, limparTextos } from '../texto.js'
-import { filtrarAncoras, idsDe, mesAno, normalizar, porData } from './comum.js'
+import { filtrarAncoras, idsDe, mesAno, normalizar, porData, type ContextoIa } from './comum.js'
 
 export interface EntradaCopiloto {
   pergunta: string
@@ -29,6 +28,7 @@ export interface RespostaCopiloto {
 }
 
 const SEM_BASE = 'Não encontrei no seu histórico registros que sustentem uma resposta para isso.'
+export const HISTORICO_VAZIO = 'Seu histórico ainda está vazio. Anexe um exame ou laudo em Fontes para eu poder responder com base nele.'
 const TURNOS_ANTERIORES = 6
 
 const TAREFA = `Tarefa: responder à pergunta da paciente usando apenas os registros do histórico abaixo.
@@ -83,8 +83,10 @@ export function montarSerie(eventos: Evento[], medida: string): Serie | undefine
   return { nome, unidade: pontos[0].unidade, pontos: pontos.map(({ data, valor }) => ({ data, valor })) }
 }
 
-export async function responderCopiloto({ repo, llm }: Deps, entrada: EntradaCopiloto): Promise<RespostaCopiloto> {
+export async function responderCopiloto({ repo, llm, perfil }: ContextoIa, entrada: EntradaCopiloto): Promise<RespostaCopiloto> {
   const { eventos } = await repo.estado()
+  /* Sem registros não há o que ancorar: nem o modelo nem o motor determinístico são chamados. */
+  if (!eventos.length) return { texto: [HISTORICO_VAZIO], ancoras: [], geradoPor: llm.nome }
   const validos = idsDe(eventos)
 
   if (llm.nome === 'mock') {
@@ -101,7 +103,7 @@ export async function responderCopiloto({ repo, llm }: Deps, entrada: EntradaCop
     ...turnos,
     {
       role: 'user',
-      content: [TAREFA, PERFIL, contextoHistorico(eventos), `Pergunta: ${entrada.pergunta}`].join('\n\n'),
+      content: [TAREFA, descreverPerfil(perfil), contextoHistorico(eventos), `Pergunta: ${entrada.pergunta}`].join('\n\n'),
     },
   ]
   const r = await pedirJson(llm, pedido, esquema)

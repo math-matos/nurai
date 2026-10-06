@@ -1,10 +1,9 @@
 import { z } from 'zod'
 import type { Evento, Medida } from '../../../src/data/types.js'
-import type { Deps } from '../../app.js'
 import { pedirJson } from '../json.js'
 import { mensagens, serializarEvento, serializarEventos } from '../prompts.js'
 import { limparTextos } from '../texto.js'
-import { dataBR, filtrarAncoras, formatarNumero, idsDe, mesAno, porData } from './comum.js'
+import { dataBR, filtrarAncoras, formatarNumero, idsDe, mesAno, porData, type ContextoIa } from './comum.js'
 
 export interface RespostaExplicacao {
   explicacao: string[]
@@ -77,7 +76,7 @@ function explicarSemIa(evento: Evento, anteriores: Evento[]): Omit<RespostaExpli
   }
 }
 
-export async function explicarExame({ repo, llm }: Deps, id: string): Promise<RespostaExplicacao | null> {
+export async function explicarExame({ repo, llm }: Pick<ContextoIa, 'repo' | 'llm'>, id: string): Promise<RespostaExplicacao | null> {
   const { eventos } = await repo.estado()
   const evento = eventos.find((e) => e.id === id)
   if (!evento) return null

@@ -1,13 +1,12 @@
 import { z } from 'zod'
 import type { Evento, ProximoPasso } from '../../../src/data/types.js'
-import type { Deps } from '../../app.js'
 import { ErroIa } from '../erros.js'
 import { type Fatos, type Pendencia, derivarFatos, dias } from '../fatos.js'
 import { recomendaConduta } from '../guardrails.js'
 import { pedirJson } from '../json.js'
-import { PERFIL, contextoHistorico, mensagens } from '../prompts.js'
+import { contextoHistorico, descreverPerfil, mensagens } from '../prompts.js'
 import { limparTexto } from '../texto.js'
-import { dataBR, filtrarAncoras, idsDe, normalizar, porData } from './comum.js'
+import { dataBR, filtrarAncoras, idsDe, normalizar, porData, type ContextoIa } from './comum.js'
 
 export interface RespostaPassos {
   passos: ProximoPasso[]
@@ -87,11 +86,12 @@ function passosSemIa(eventos: Evento[]): PassoBruto[] {
   return [...prioritarios, ...resultadosRecentes(ordenados, citados)]
 }
 
-export async function gerarPassos({ repo, llm }: Deps): Promise<RespostaPassos> {
+export async function gerarPassos({ repo, llm, perfil }: ContextoIa): Promise<RespostaPassos> {
   const { eventos, passos: atuais } = await repo.estado()
+  if (!eventos.length) return { passos: [], geradoPor: llm.nome }
   const brutos = llm.nome === 'mock'
     ? passosSemIa(eventos)
-    : (await pedirJson(llm, mensagens(TAREFA, PERFIL, contextoHistorico(eventos)), esquema, { maxTokens: 2000 })).passos
+    : (await pedirJson(llm, mensagens(TAREFA, descreverPerfil(perfil), contextoHistorico(eventos)), esquema, { maxTokens: 2000 })).passos
 
   const validos = idsDe(eventos)
   const feitos = new Set(atuais.filter((p) => p.feito).map((p) => normalizar(p.titulo)))

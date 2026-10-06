@@ -1,11 +1,10 @@
 import { z } from 'zod'
 import type { Evento, Medida } from '../../../src/data/types.js'
-import type { Deps } from '../../app.js'
 import { dataIsoValida } from '../../esquemas.js'
 import { ErroIa } from '../erros.js'
 import { pedirJson } from '../json.js'
 import { mensagens } from '../prompts.js'
-import { hojeISO, sinalDaMedida } from './comum.js'
+import { hojeISO, sinalDaMedida, type ContextoIa } from './comum.js'
 import { extrairPorHeuristica } from './extrair-mock.js'
 
 export interface EntradaExtracao {
@@ -115,7 +114,7 @@ export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string): Omit
   return { evento, avisos }
 }
 
-export async function extrairEvento({ llm }: Deps, entrada: EntradaExtracao): Promise<ResultadoExtracao> {
+export async function extrairEvento({ llm }: Pick<ContextoIa, 'llm'>, entrada: EntradaExtracao): Promise<ResultadoExtracao> {
   const texto = entrada.texto.slice(0, LIMITE_TEXTO)
   const bruto = llm.nome === 'mock'
     ? extrairPorHeuristica(texto)

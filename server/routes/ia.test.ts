@@ -1,12 +1,13 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { criarLlmMock } from '../ai/mock.js'
 import type { LlmProvider, MensagemLlm } from '../ai/provider.js'
 import { criarApp } from '../app.js'
 import { hojeIso } from '../db/datas.js'
 import { criarRepoMemoria } from '../db/memoria.js'
-import type { Repositorio } from '../db/repo.js'
+import type { Repositorio, RepositorioPaciente } from '../db/repo.js'
 import { esquemaEvento } from '../esquemas.js'
+import { cadastrarComOnboarding, logado, pacienteExemplo } from '../teste/apoio.js'
 
 /* Contratos que o front consome — fixos. */
 const geradoPor = z.enum(['oci', 'mock'])
@@ -159,14 +160,19 @@ const LAUDO_TEXTO = [
   'Colesterol HDL: 52 mg/dL (referencia: 40 a 200)',
 ]
 
-describe('rotas de IA com provider real (fake)', () => {
-  let repo: Repositorio
+const NOME = 'Ana Teste'
 
-  beforeEach(() => {
-    repo = criarRepoMemoria()
+describe('rotas de IA com provider real (fake)', () => {
+  let raiz: Repositorio
+  let repo: RepositorioPaciente
+  let cookie: string
+
+  beforeEach(async () => {
+    raiz = criarRepoMemoria()
+    ;({ repo, cookie } = await pacienteExemplo(raiz, { nome: NOME }))
   })
 
-  const app = (llm: LlmProvider) => criarApp({ repo, llm })
+  const app = (llm: LlmProvider) => logado(criarApp({ repo: raiz, llm }), cookie)
 
   describe('POST /api/copiloto', () => {
     it('filtra âncoras inexistentes e monta a série a partir das medidas reais', async () => {
@@ -420,7 +426,7 @@ describe('rotas de IA com provider real (fake)', () => {
       expect(body.pontos).toEqual([{ texto: 'Carga de fibrilação subiu para 6,3%.', ancoras: ['e09', 'e23'] }])
       const [acesso] = await repo.listarAcessos()
       expect(acesso).toMatchObject({
-        quem: 'Helena Duarte Nogueira', papel: 'Titular', acao: 'Gerou resumo pré-consulta', itens: 'Cardiologia',
+        quem: NOME, papel: 'Titular', acao: 'Gerou resumo pré-consulta', itens: 'Cardiologia',
       })
     })
 
@@ -455,8 +461,15 @@ describe('rotas de IA com provider real (fake)', () => {
 })
 
 describe('rotas de IA em modo mock', () => {
-  const repo = criarRepoMemoria()
-  const app = criarApp({ repo, llm: criarLlmMock() })
+  let repo: RepositorioPaciente
+  let app: ReturnType<typeof logado>
+
+  beforeAll(async () => {
+    const raiz = criarRepoMemoria()
+    const conta = await pacienteExemplo(raiz)
+    repo = conta.repo
+    app = logado(criarApp({ repo: raiz, llm: criarLlmMock() }), conta.cookie)
+  })
 
   it('copiloto reaproveita o motor determinístico com série', async () => {
     const res = await app.request('/api/copiloto', json({ pergunta: 'Como minha glicada evoluiu?' }))
@@ -513,5 +526,44 @@ describe('rotas de IA em modo mock', () => {
     expect(ancoras).toContainEqual(['e22', 'e24'])
     expect(ancoras.flat()).toEqual(expect.arrayContaining(['e14', 'e16']))
     expect(passos[0].prioridade).toBe('alta')
+  })
+})
+
+describe('rotas de IA por paciente', () => {
+  it('o prompt leva o perfil da sessão e só o histórico desse paciente', async () => {
+    const raiz = criarRepoMemoria()
+    const { llm, chamadas } = llmFake(COPILOTO)
+    const appReal = criarApp({ repo: raiz, llm })
+    await pacienteExemplo(raiz, { nome: 'Outra Pessoa' })
+    const conta = await cadastrarComOnboarding(appReal, 'vazio', { nome: 'Bia', dataNascimento: '1990-01-15' })
+    const api = logado(appReal, conta.cookie)
+    const perfil = await api.request('/api/perfil', { ...json({ condicoes: ['Asma'], alergias: [] }), method: 'PATCH' })
+    expect(perfil.status).toBe(200)
+    await api.request('/api/eventos', json({
+      id: 'b1', data: '2026-09-01', tipo: 'exame', titulo: 'Espirometria', instituicao: 'Clínica B',
+      fonte: 'paciente', resumo: 'Função pulmonar normal.', sinal: 'normal', tags: ['asma'], origem: 'Registro manual',
+    }))
+
+    expect((await api.request('/api/copiloto', json({ pergunta: 'Como está minha asma?' }))).status).toBe(200)
+    const conteudo = chamadas[0].at(-1)?.content ?? ''
+    expect(conteudo).toMatch(/Perfil: \d+ anos\. Condições registradas: Asma\. Alergias: nenhuma informada\./)
+    expect(conteudo).toContain('[b1]')
+    expect(conteudo).not.toContain('[e21]')
+  })
+
+  it('histórico vazio: copiloto, resumo e passos respondem sem chamar o LLM', async () => {
+    const raiz = criarRepoMemoria()
+    const { llm, chamadas } = llmFake()
+    const appReal = criarApp({ repo: raiz, llm })
+    const api = logado(appReal, (await cadastrarComOnboarding(appReal, 'vazio')).cookie)
+
+    const copiloto = await api.request('/api/copiloto', json({ pergunta: 'Como está a glicada?' }))
+    expect(CONTRATO.copiloto.parse(await copiloto.json()).texto[0]).toMatch(/histórico ainda está vazio/)
+    const resumo = await api.request('/api/resumo', json({ especialidade: 'Cardiologia' }))
+    expect(CONTRATO.resumo.parse(await resumo.json()).pontos).toEqual([])
+    const passos = await api.request('/api/passos/gerar', { method: 'POST' })
+    expect(await passos.json()).toEqual({ passos: [], geradoPor: 'oci' })
+    expect((await api.request('/api/exames/e21/explicar', { method: 'POST' })).status).toBe(404)
+    expect(chamadas).toHaveLength(0)
   })
 })

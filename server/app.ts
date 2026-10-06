@@ -1,12 +1,14 @@
-import { Hono, type Context } from 'hono'
+import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
-import type { z } from 'zod'
-import { PACIENTE } from '../src/data/seed.js'
 import { LIMITE_PDF } from './ai/pdf.js'
 import type { LlmProvider } from './ai/provider.js'
+import { exigirCsrf, exigirSessao, type AmbienteApp } from './auth/middleware.js'
+import { rotasAuth } from './auth/rotas.js'
 import { ErroConflito, type Repositorio } from './db/repo.js'
 import { esquemaCompartilhamento, esquemaEvento } from './esquemas.js'
+import { ErroValidacao, lerCorpo } from './http.js'
+import { rotasConta } from './routes/conta.js'
 import { rotasIa } from './routes/ia.js'
 
 export interface Deps {
@@ -15,26 +17,6 @@ export interface Deps {
 }
 
 const VERSAO = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'local'
-
-/* Sem autenticação no MVP: toda ação é atribuída à titular do histórico. */
-const AUTOR = PACIENTE.nome
-
-async function lerCorpo<T>(c: Context, esquema: z.ZodType<T>): Promise<T> {
-  let bruto: unknown
-  try {
-    bruto = await c.req.json()
-  } catch {
-    throw new HTTPException(400, { message: 'Corpo da requisição não é um JSON válido' })
-  }
-  const resultado = esquema.safeParse(bruto)
-  if (!resultado.success) {
-    const detalhes = resultado.error.issues
-      .map((i) => `${i.path.join('.') || 'corpo'}: ${i.message}`)
-      .join('; ')
-    throw new HTTPException(400, { message: `Dados inválidos — ${detalhes}` })
-  }
-  return resultado.data
-}
 
 /* Barra o corpo antes de lê-lo: sem isso, um upload gigante seria lido inteiro em memória
    (multipart) antes da checagem de tamanho. O PDF ganha folga para o envelope multipart. */
@@ -57,53 +39,62 @@ function naoEncontrado(oQue: string, id: string): never {
   throw new HTTPException(404, { message: `${oQue} "${id}" não encontrado` })
 }
 
-export function criarApp(deps: Deps): Hono {
+export function criarApp(deps: Deps): Hono<AmbienteApp> {
   const { repo, llm } = deps
-  const app = new Hono().basePath('/api')
+  const app = new Hono<AmbienteApp>().basePath('/api')
 
   app.use('*', (c, next) => (c.req.path === '/api/extrair' ? limiteExtrair : limiteJson)(c, next))
+  app.use('*', exigirCsrf)
+  /* Tudo exige sessão, menos /health, /auth/* e /acesso-medico/*. */
+  app.use('*', exigirSessao(repo))
 
   app.get('/health', (c) => c.json({ ok: true, genai: llm.nome, db: repo.nome, versao: VERSAO }))
 
-  app.get('/estado', async (c) => c.json(await repo.estado()))
+  app.route('/auth', rotasAuth(repo))
+  app.route('/', rotasConta(repo))
+
+  app.get('/estado', async (c) => c.json(await c.var.repoPaciente.estado()))
 
   app.post('/eventos', async (c) => {
     const evento = await lerCorpo(c, esquemaEvento)
-    return c.json(await repo.adicionarEvento(evento, AUTOR), 201)
+    return c.json(await c.var.repoPaciente.adicionarEvento(evento, c.var.perfil.nome), 201)
   })
 
   app.patch('/consentimentos/:id', async (c) => {
     const id = c.req.param('id')
-    return c.json(await repo.alternarConsentimento(id, AUTOR) ?? naoEncontrado('Consentimento', id))
+    return c.json(await c.var.repoPaciente.alternarConsentimento(id, c.var.perfil.nome) ?? naoEncontrado('Consentimento', id))
   })
 
   app.patch('/passos/:id', async (c) => {
     const id = c.req.param('id')
-    return c.json(await repo.alternarPasso(id) ?? naoEncontrado('Passo', id))
+    return c.json(await c.var.repoPaciente.alternarPasso(id) ?? naoEncontrado('Passo', id))
   })
 
   app.post('/fontes/:id/conectar', async (c) => {
     const id = c.req.param('id')
-    return c.json(await repo.conectarFonte(id) ?? naoEncontrado('Fonte', id))
+    return c.json(await c.var.repoPaciente.conectarFonte(id) ?? naoEncontrado('Fonte', id))
   })
 
   app.post('/compartilhamentos', async (c) => {
     const { para } = await lerCorpo(c, esquemaCompartilhamento)
-    return c.json(await repo.criarCompartilhamento(para, AUTOR), 201)
+    return c.json(await c.var.repoPaciente.criarCompartilhamento(para, c.var.perfil.nome), 201)
   })
 
-  app.get('/acessos', async (c) => c.json(await repo.listarAcessos()))
+  app.get('/acessos', async (c) => c.json(await c.var.repoPaciente.listarAcessos()))
 
   app.post('/reiniciar', async (c) => {
-    await repo.reiniciar()
-    return c.json(await repo.estado())
+    await c.var.repoPaciente.reiniciar()
+    return c.json(await c.var.repoPaciente.estado())
   })
 
-  app.route('/', rotasIa(deps))
+  app.route('/', rotasIa(llm))
 
   app.notFound((c) => c.json({ erro: 'Rota não encontrada' }, 404))
 
   app.onError((err, c) => {
+    if (err instanceof ErroValidacao) {
+      return c.json({ erro: err.message, codigo: 'VALIDACAO', ...(err.campos && { campos: err.campos }) }, 400)
+    }
     if (err instanceof HTTPException) return c.json({ erro: err.message }, err.status)
     if (err instanceof ErroConflito) return c.json({ erro: err.message, codigo: 'CONFLITO' }, 409)
     console.error(`[api] ${c.req.method} ${c.req.path} falhou: ${err.name}: ${err.message}`)

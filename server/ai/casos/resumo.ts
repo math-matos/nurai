@@ -1,12 +1,10 @@
 import { z } from 'zod'
-import { PACIENTE } from '../../../src/data/seed.js'
 import type { Evento } from '../../../src/data/types.js'
-import type { Deps } from '../../app.js'
 import { recomendaConduta } from '../guardrails.js'
 import { pedirJson } from '../json.js'
-import { PERFIL, contextoHistorico, mensagens } from '../prompts.js'
+import { contextoHistorico, descreverPerfil, mensagens } from '../prompts.js'
 import { limparTexto, limparTextos } from '../texto.js'
-import { dataBR, filtrarAncoras, idsDe, mesAno, normalizar, porData } from './comum.js'
+import { dataBR, filtrarAncoras, idsDe, mesAno, normalizar, porData, type ContextoIa } from './comum.js'
 
 export interface RespostaResumo {
   especialidade: string
@@ -68,13 +66,23 @@ function resumirSemIa(eventos: Evento[], especialidade: string): Omit<RespostaRe
   }
 }
 
-export async function gerarResumo({ repo, llm }: Deps, especialidade: string): Promise<RespostaResumo> {
+export async function gerarResumo({ repo, llm, perfil }: ContextoIa, especialidade: string): Promise<RespostaResumo> {
   const { eventos } = await repo.estado()
+  if (!eventos.length) {
+    return {
+      especialidade,
+      sintese: [`Seu histórico ainda está vazio, então não há registros para montar um resumo de ${especialidade}. Anexe exames ou laudos em Fontes e gere o resumo de novo.`],
+      pontos: [],
+      perguntasSugeridas: [],
+      aviso: AVISO,
+      geradoPor: llm.nome,
+    }
+  }
   let corpo: Omit<RespostaResumo, 'especialidade' | 'aviso' | 'geradoPor'>
   if (llm.nome === 'mock') {
     corpo = resumirSemIa(eventos, especialidade)
   } else {
-    const r = await pedirJson(llm, mensagens(tarefa(especialidade), PERFIL, contextoHistorico(eventos)), esquema, { maxTokens: 2000 })
+    const r = await pedirJson(llm, mensagens(tarefa(especialidade), descreverPerfil(perfil), contextoHistorico(eventos)), esquema, { maxTokens: 2000 })
     const validos = idsDe(eventos)
     /* Perguntas à médica podem falar de remédio ("Devo manter...?"); síntese e pontos não recomendam conduta. */
     const sintese = limparTextos(r.sintese, eventos).filter((t) => !recomendaConduta(t))
@@ -87,7 +95,7 @@ export async function gerarResumo({ repo, llm }: Deps, especialidade: string): P
     }
   }
   await repo.registrarAcesso({
-    quem: PACIENTE.nome, papel: 'Titular', acao: 'Gerou resumo pré-consulta', itens: especialidade,
+    quem: perfil.nome, papel: 'Titular', acao: 'Gerou resumo pré-consulta', itens: especialidade,
   })
   return { especialidade, ...corpo, aviso: AVISO, geradoPor: llm.nome }
 }

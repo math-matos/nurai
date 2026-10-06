@@ -20,6 +20,15 @@ if (!config) {
 
 const app = criarApp({ repo: criarRepoMemoria(), llm: criarLlmOci(config) })
 
+/* A conta de demonstração já vem com o histórico e o perfil de exemplo. */
+const demo = await app.request('/api/auth/demo', { method: 'POST', headers: { 'x-nurai': '1' } })
+const cookie = demo.headers.get('set-cookie')?.split(';')[0] ?? ''
+if (demo.status !== 201 || !cookie) {
+  console.error(`[eval:ia] não consegui abrir a sessão de demonstração (HTTP ${demo.status})`)
+  process.exit(1)
+}
+const SESSAO = { cookie, 'x-nurai': '1' }
+
 type Corpo = Record<string, unknown>
 interface Resultado { caso: string; ok: boolean; ms: number; detalhe: string }
 
@@ -31,8 +40,8 @@ async function chamar(caminho: string, corpo?: unknown): Promise<{ status: numbe
   chamadas++
   const inicio = performance.now()
   const res = await app.request(caminho, corpo === undefined
-    ? { method: 'POST' }
-    : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo) })
+    ? { method: 'POST', headers: SESSAO }
+    : { method: 'POST', headers: { ...SESSAO, 'content-type': 'application/json' }, body: JSON.stringify(corpo) })
   const body = await res.json() as Corpo
   return { status: res.status, body, ms: Math.round(performance.now() - inicio) }
 }

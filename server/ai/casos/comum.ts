@@ -1,5 +1,14 @@
 import type { Evento, Sinal } from '../../../src/data/types.js'
 import { hojeIso } from '../../db/datas.js'
+import type { Perfil, RepositorioPaciente } from '../../db/repo.js'
+import type { LlmProvider } from '../provider.js'
+
+/* Cada caso enxerga só o histórico e o perfil do paciente da sessão. */
+export interface ContextoIa {
+  repo: RepositorioPaciente
+  llm: LlmProvider
+  perfil: Perfil
+}
 
 export const normalizar = (s: string) =>
   s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
