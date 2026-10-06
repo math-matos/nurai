@@ -56,7 +56,7 @@ const TAREFA = `Tarefa: ler o texto de um documento de saúde enviado pela pacie
 Formato da resposta (JSON):
 {"clinico": true, "data": "AAAA-MM-DD" ou null, "tipo": "${TIPOS.join('" | "')}", "titulo": "título curto", "instituicao": "nome" ou null, "especialidade": "nome" ou null, "resumo": "1 a 2 frases fiéis ao documento", "medidas": [{"nome": "Colesterol LDL", "valor": 162, "unidade": "mg/dL", "refMin": 0, "refMax": 130}], "tags": ["colesterol"], "confianca": 0.9, "avisos": ["o que ficou ilegível ou ambíguo"]}
 - Se o texto não for um documento de saúde, responda apenas {"clinico": false}.
-- "data": a data do exame/atendimento (coleta, realização ou emissão; em receita, pedido ou guia, a data da emissão ou da solicitação), nunca a de impressão nem a de nascimento. Use null só se o documento não trouxer nenhuma dessas datas.
+- "data": a data do exame/atendimento: em exame, a da coleta ou realização, antes da data de emissão do laudo (use a emissão só se for a única); em receita, pedido ou guia, a data da emissão ou da solicitação. Nunca a de impressão nem a de nascimento. Use null só se o documento não trouxer nenhuma dessas datas.
 - "tipo": o que o documento é, não o que ele cita ou pede:
   - "exame": resultado de exame laboratorial ou funcional (sangue, urina, eletrocardiograma, espirometria, Holter).
   - "imagem": laudo de exame de imagem (radiografia/raio-X, ultrassom, tomografia, ressonância, mamografia, ecocardiograma).
