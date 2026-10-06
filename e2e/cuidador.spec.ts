@@ -63,6 +63,15 @@ test('cuidador organiza o histórico do pai e o médico vê o paciente e quem en
   await expect(page.getByLabel('Seu nome (responsável)')).toHaveValue(RAFAEL)
   await expect(page.getByLabel('O que você é do paciente?')).toHaveValue('filho')
 
+  /* O resumo para a consulta (tela e impressão) também diz quem enviou. */
+  await page.goto('/#/app/resumo')
+  const folha = page.locator('.folha-resumo__cabeca')
+  await expect(folha.getByRole('heading', { level: 2 })).toHaveText(MARCOS)
+  await expect(folha).toContainText(`Informações enviadas por ${RAFAEL} (filho)`)
+  await page.emulateMedia({ media: 'print' })
+  await expect(folha.getByText(`Informações enviadas por ${RAFAEL} (filho)`)).toBeVisible()
+  await page.emulateMedia({ media: 'screen' })
+
   const comp = await page.request.post('/api/compartilhamentos', { headers: CSRF, data: { para: 'Dra. Ana Lima' } })
   expect(comp.status()).toBe(201)
   const { codigo } = await comp.json() as { codigo: string }
@@ -75,7 +84,9 @@ test('cuidador organiza o histórico do pai e o médico vê o paciente e quem en
   await pagina.getByTestId('medico-entrar').click()
   const res = await abertura
   expect(res.status()).toBe(200)
-  /* O texto "Informações enviadas por..." é da tela do médico (outra frente); aqui, o contrato que ela usa. */
   expect((await res.json()).paciente).toMatchObject({ nome: MARCOS, responsavel: { nome: RAFAEL, relacao: 'filho' } })
-  await expect(pagina.getByTestId('medico-paciente').getByRole('heading', { level: 1 })).toHaveText(MARCOS)
+  /* O médico vê o paciente como dono do histórico e quem enviou as informações. */
+  const cabeca = pagina.getByTestId('medico-paciente')
+  await expect(cabeca.getByRole('heading', { level: 1 })).toHaveText(MARCOS)
+  await expect(cabeca).toContainText(`Informações enviadas por ${RAFAEL} (filho)`)
 })

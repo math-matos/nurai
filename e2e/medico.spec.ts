@@ -21,7 +21,6 @@ test('profissional abre o histórico pelo código, só lê, e perde o acesso qua
 }) => {
   const conta = await contas.criar({ request: page.request, nome: 'Helena Duarte Nogueira', modo: 'exemplo' })
   const estado = await lerEstado(page.request)
-  const pendentes = estado.passos.filter((p) => !p.feito)
 
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
   await page.goto('/#/app/resumo')
@@ -44,12 +43,16 @@ test('profissional abre o histórico pelo código, só lê, e perde o acesso qua
   const corpo = await abertura.text()
   expect(corpo).not.toContain(conta.email)
   expect(corpo).not.toMatch(/pacienteId|"email"/)
+  const { pontosEmAberto } = JSON.parse(corpo) as { pontosEmAberto: { texto: string }[] }
 
   await expect(pagina.getByTestId('medico-paciente')).toContainText(conta.nome)
   await expect(pagina.getByTestId('medico-evento')).toHaveCount(estado.eventos.length)
-  const pendencias = pagina.getByTestId('medico-pendencias').locator('li')
-  await expect(pendencias).toHaveCount(pendentes.length)
-  for (const p of pendentes) await expect(pagina.getByTestId('medico-pendencias')).toContainText(p.titulo)
+  /* A seção mostra o que o servidor calculou no acesso, não os passos gravados pela paciente. */
+  await expect(pagina.getByTestId('medico-ponto')).toHaveCount(pontosEmAberto.length)
+  for (const p of pontosEmAberto) await expect(pagina.getByTestId('medico-pendencias')).toContainText(p.texto)
+  if (pontosEmAberto.length === 0) {
+    await expect(pagina.getByTestId('medico-pendencias')).toContainText('Nenhum ponto em aberto identificado nos registros')
+  }
   await expect(pagina.getByTestId('medico-aviso')).toContainText(PROFISSIONAL)
   await expect(pagina.locator('body')).not.toContainText(conta.email)
 
@@ -189,6 +192,18 @@ test('pontos em aberto vêm do histórico mesmo sem "Reanalisar"; tentativa com 
   expect(corpo.pontosEmAberto).toContainEqual({
     tipo: 'repeticao', ancoras: [ids.lipidico, ids.pedidoLipidico], texto: expect.stringMatching(/^Possível exame repetido: pedido de perfil lipídico/),
   })
+
+  /* Na tela, não só na API: o ponto aparece no grupo de repetições e o chip leva ao registro na linha do tempo. */
+  const pontos = pagina.getByTestId('medico-pendencias')
+  await expect(pontos.getByRole('heading', { name: 'Possíveis exames repetidos' })).toBeVisible()
+  const repetido = pagina.getByTestId('medico-ponto').filter({ hasText: /^Possível exame repetido: pedido de perfil lipídico/ })
+  await expect(repetido).toHaveCount(1)
+  await expect(pontos).not.toContainText('Nenhum ponto em aberto')
+  const lipidico = pagina.locator(`#medico-evento-${ids.lipidico}`)
+  await expect(lipidico).not.toHaveAttribute('open', '')
+  await repetido.getByRole('button').first().click()
+  await expect(lipidico).toHaveAttribute('open', '')
+  await expect(lipidico.locator('summary')).toBeFocused()
 
   const verificar = () => contexto.request.post('/api/acesso-medico/verificar', { headers: CSRF, data: { codigo } })
   expect((await verificar()).status()).toBe(204)
