@@ -5,7 +5,8 @@
    Onboarding: onboarding-vazio, onboarding-exemplo.
    Shell: shell-perfil, shell-perfil-nome, selo-convidado, botao-sair, botao-reiniciar, reinicio-confirmar,
    reinicio-zerar, estado-vazio, cta-primeiro-documento.
-   Linha do tempo: evento-item, evento-detalhe, ia-explicar, ia-explicacao.
+   Linha do tempo: evento-item, evento-detalhe, ia-explicar, ia-explicacao, evento-excluir,
+   evento-excluir-confirmar, evento-excluido.
    Fontes/conferência: fontes-texto, fontes-ler-texto, fontes-pdf, conferencia, conferencia-titulo,
    conferencia-salvar, conferencia-descartar, conferencia-identidade, conferencia-confirmo-meu.
    IA: copiloto-pergunta, copiloto-enviar, copiloto-resposta, ia-passos, ia-resumo, resumo-sintese.
@@ -45,6 +46,9 @@ export const TID = {
 
   eventoItem: 'evento-item',
   eventoDetalhe: 'evento-detalhe',
+  eventoExcluir: 'evento-excluir',
+  eventoExcluirConfirmar: 'evento-excluir-confirmar',
+  eventoExcluido: 'evento-excluido',
   iaExplicar: 'ia-explicar',
   iaExplicacao: 'ia-explicacao',
 

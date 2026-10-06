@@ -271,6 +271,7 @@ export const api = {
   reiniciar: () => requisitar<EstadoServidor>('/reiniciar', json('POST')),
 
   adicionarEvento: (evento: Evento) => requisitar<Evento>('/eventos', json('POST', evento)),
+  excluirEvento: (id: string) => requisitar<void>(`/eventos/${enc(id)}`, json('DELETE')),
   alternarConsentimento: (id: string) => requisitar<Consentimento>(`/consentimentos/${enc(id)}`, json('PATCH')),
   alternarPasso: (id: string) => requisitar<ProximoPasso>(`/passos/${enc(id)}`, json('PATCH')),
   conectarFonte: (id: string) => requisitar<FonteConectada>(`/fontes/${enc(id)}/conectar`, json('POST')),

@@ -333,6 +333,23 @@ export function useAcoes() {
       return salvo
     }), []),
 
+    /* Espelha o servidor: o id sai das âncoras e o passo que fica sem nenhuma sai junto. */
+    excluirEvento: useCallback((id: string) => executar(async () => {
+      const g = geracao
+      await api.excluirEvento(id)
+      definirNa(g, (e) => ({
+        eventos: e.eventos.filter((x) => x.id !== id),
+        novos: e.novos.filter((x) => x !== id),
+        passos: e.passos.flatMap((p) => {
+          if (!p.ancoras.includes(id)) return [p]
+          const ancoras = p.ancoras.filter((a) => a !== id)
+          return ancoras.length ? [{ ...p, ancoras }] : []
+        }),
+      }))
+      void atualizarAcessos(true)
+      return true
+    }), []),
+
     alternarConsentimento: useCallback((id: string) => executar(async () => {
       const g = geracao
       const atualizado = await api.alternarConsentimento(id)

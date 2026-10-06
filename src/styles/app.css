@@ -193,6 +193,23 @@
 .proveniencia__arquivo { display: flex; align-items: center; gap: 6px; }
 .proveniencia__nota { color: var(--ink-3); font-weight: 400; margin-left: 8px; font-size: 12.5px; }
 .detalhe__acoes { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-5); }
+.excluir-registro { margin-top: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--line-2); }
+.excluir-registro--confirmando {
+  display: grid; gap: var(--sp-3); padding: var(--sp-4);
+  background: var(--card); border: 1px solid #e0bdb4; border-radius: var(--r-md);
+}
+.excluir-registro__pergunta { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+.excluir-registro__pergunta strong { display: block; color: var(--ink); margin-bottom: 4px; }
+.excluir-registro__acoes { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.recado-app {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; margin-bottom: var(--sp-4);
+  background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--r-md);
+  color: var(--accent-deep); font-size: 13.5px; line-height: 1.5;
+}
+.recado-app > svg { flex: none; margin-top: 3px; }
+.recado-app p { flex: 1; }
+.recado-app .btn { padding: 2px 8px; font-size: 13px; }
 
 /* ---------------- régua ---------------- */
 .regua { display: grid; gap: 7px; }
