@@ -7,14 +7,23 @@ import { normalizar } from './casos/comum.js'
 export const AVISO_MEDICO = 'Qualquer decisão sobre remédios ou tratamento deve ser confirmada com o seu médico ou com a equipe que acompanha você.'
 
 const REMEDIOS = MEDICACOES.map((m) => normalizar(m.nome))
-const ALVO = `(?:${[...REMEDIOS, 'dose', 'medicament\\w*', 'medicac\\w*', 'remedio\\w*', 'tratamento\\w*', 'anticoagula\\w*', 'insulina', 'estatina'].join('|')})`
+const GENERICOS = ['doses?', 'medicament\\w*', 'medicac\\w*', 'remedio\\w*', 'anticoagula\\w*', 'insulina', 'estatina']
+const ALVO = `(?:${[...REMEDIOS, ...GENERICOS, 'tratamento\\w*'].join('|')})`
 /* Infinitivo/imperativo e "manutenção" = recomendação. Particípio ("iniciada", "mantida") é fato
-   histórico do registro e passa; "ajuste"/"troca" ficam de fora porque nomeiam consultas antigas. */
-const VERBO = '(?:manter|mantenha|manutencao|continuar|continue|suspender|suspenda|suspensao|parar|pare|interromper|interrompa|iniciar|inicie|comecar|comece|aumentar|aumente|reduzir|reduza|diminuir|diminua|trocar|troque|substituir|substitua|ajustar|retirar|retire)'
+   histórico do registro e passa. */
+const VERBO = '(?:manter|mantenha|manutencao|continuar|continue|suspender|suspenda|suspensao|parar|pare|interromper|interrompa|iniciar|inicie|comecar|comece|aumentar|aumente|reduzir|reduza|diminuir|diminua|trocar|troque|substituir|substitua|ajustar|alterar|altere|mudar|mude|modificar|modifique|retirar|retire)'
 const CONDUTA = new RegExp(`\\b${VERBO}\\b[^.;]{0,40}\\b${ALVO}`)
+/* Substantivo de mudança + remédio ("necessidade de ajuste da metformina"). Sem "tratamento":
+   "ajuste de tratamento" nomeia uma consulta antiga do histórico. */
+const MUDANCA = '(?:ajustes?|alteracao|alteracoes|trocas?|suspensao|aumento|reducao|diminuicao|mudanca|substituicao|interrupcao|retirada)'
+const MEDICAMENTO = `(?:${[...REMEDIOS, ...GENERICOS].join('|')})`
+const CONDUTA_NOMINAL = new RegExp(`\\b${MUDANCA}\\s+(?:d[aoe]s?|n[ao]s?)\\s+(?:[^\\s.;]+\\s+){0,3}?${MEDICAMENTO}\\b`)
 const PERGUNTA_MEDICAMENTO = new RegExp(`\\b(?:${[...REMEDIOS, 'remedio', 'medicament', 'medicac', 'dose', 'tomar', 'tomo', 'parar', 'suspender', 'interromper', 'trocar', 'tratamento', 'anticoagul'].join('|')})`)
 
-export const recomendaConduta = (texto: string) => CONDUTA.test(normalizar(texto))
+export function recomendaConduta(texto: string): boolean {
+  const t = normalizar(texto)
+  return CONDUTA.test(t) || CONDUTA_NOMINAL.test(t)
+}
 
 export const envolveMedicamento = (pergunta: string) => PERGUNTA_MEDICAMENTO.test(normalizar(pergunta))
 

@@ -74,7 +74,7 @@ const anosGlicadaSubiu = (() => {
 })()
 
 /* Verbos de conduta perto de medicamento/tratamento — independente do guardrail do servidor. */
-const CONDUTA = /\b(manter|manutencao|suspend\w*|suspensao|parar|interromp\w*|iniciar|comecar|aumentar|reduzir|diminuir|trocar|substituir|ajustar)\b.{0,40}\b(rivaroxabana|metformina|atorvastatina|levotiroxina|losartana|medicament\w*|medicac\w*|remedio\w*|dose|tratamento|anticoagula\w*)/
+const CONDUTA = /\b(manter|manutencao|suspend\w*|suspensao|parar|interromp\w*|iniciar|comecar|aumentar|reduzir|diminuir|trocar|substituir|ajustar)\b.{0,40}\b(rivaroxabana|metformina|atorvastatina|levotiroxina|losartana|medicament\w*|medicac\w*|remedio\w*|dose|tratamento|anticoagula\w*)|\b(ajustes?|alteracao|trocas?|suspensao|aumento|reducao)\s+d[aoe]s?\s+(\S+\s+){0,3}?(rivaroxabana|metformina|atorvastatina|levotiroxina|losartana|medicament\w*|medicac\w*|remedio\w*|doses?)\b/
 
 await caso('extrair(exemplo): 5 medidas, data 2026-08-18, sem "não traz faixa"', async () => {
   const r = await chamar('/api/extrair', LAUDO_EXEMPLO)

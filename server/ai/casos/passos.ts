@@ -32,7 +32,7 @@ const TAREFA = `Tarefa: listar os próximos passos práticos do acompanhamento d
 2. pendências: retornos, reavaliações ou exames recomendados que não aparecem depois no histórico;
 3. resultados recentes alterados que ainda não aparecem avaliados em uma consulta posterior.
 Use os FATOS DERIVADOS: cada exame possivelmente repetido e cada pendência listados ali deve virar um passo, com os ids que o fato cita. Não diga que um exame não foi feito se ele aparece no histórico.
-Os passos são de organização (levar um laudo, agendar, perguntar, confirmar com quem pediu). Nunca sugira iniciar, manter, suspender ou mudar remédio ou tratamento — nem como pergunta ao médico.
+Os passos são de organização (levar um laudo, agendar, perguntar, confirmar com quem pediu). Nunca sugira iniciar, manter, suspender ou mudar remédio ou tratamento — nem como pergunta ao médico, nem como "verificar/avaliar a necessidade de ajuste, troca, suspensão, aumento ou redução" de um remédio ou dose. Remédios só aparecem como fato registrado no "porque".
 Formato da resposta (JSON):
 {"passos": [{"titulo": "ação curta no imperativo", "porque": "fatos e datas dos registros", "ancoras": ["e01"], "prazo": "ex.: Próxima consulta", "prioridade": "alta" | "media" | "baixa"}]}
 - 1 a ${MAX_PASSOS} passos, os mais importantes primeiro, cada um com os ids que o sustentam em "ancoras".

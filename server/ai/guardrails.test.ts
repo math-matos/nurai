@@ -8,6 +8,13 @@ describe('recomendaConduta', () => {
     'Perguntar se é preciso aumentar a dose de levotiroxina',
     'Iniciar tratamento para a tireoide',
     'Trocar o anticoagulante',
+    'Verificar a necessidade de ajuste da metformina',
+    'Verificar a necessidade de ajustar a metformina',
+    'Avaliar a troca da rivaroxabana',
+    'Discutir a redução da dose de atorvastatina',
+    'Perguntar sobre o aumento do remédio da pressão',
+    'Confirmar a suspensão de medicação antes da cirurgia',
+    'Conversar sobre alteração da losartana',
   ])('detecta conduta medicamentosa: %s', (texto) => {
     expect(recomendaConduta(texto)).toBe(true)
   })
@@ -18,6 +25,9 @@ describe('recomendaConduta', () => {
     'Em 15/02/2023 foi iniciada a rivaroxabana 20 mg ao dia.',
     'Mantida a rivaroxabana no retorno de fevereiro de 2026.',
     'Agendar avaliação com nefrologia',
+    'Metformina iniciada em 2019 pela endocrinologista',
+    'Endocrinologia — ajuste de tratamento',
+    'Glicada em queda após o ajuste. Função renal ainda preservada.',
   ])('não confunde fato histórico ou passo de organização: %s', (texto) => {
     expect(recomendaConduta(texto)).toBe(false)
   })
