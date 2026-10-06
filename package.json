@@ -16,7 +16,8 @@
     "smoke:genai": "tsx server/scripts/smoke-genai.ts",
     "smoke:db": "tsx server/scripts/smoke-db.ts",
     "db:setup": "tsx server/scripts/db-setup.ts",
-    "test:oci": "pnpm smoke:genai && pnpm smoke:db"
+    "test:oci": "pnpm smoke:genai && pnpm smoke:db",
+    "eval:ia": "tsx server/scripts/eval-ia.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",
