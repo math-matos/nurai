@@ -300,6 +300,15 @@ describe('gerarPassos — histórico real do Marcos', () => {
     expect(passos.map((p) => p.titulo).join(' | ')).not.toMatch(/Agendar/)
   })
 
+  it('copiloto: "ficou algo pendente?" com o modelo dizendo que não encontrou responde pelos fatos e cita a consulta de pneumologia', async () => {
+    const { deps: d } = await deps({ texto: ['Não encontrei pendências no seu histórico.'], ancoras: [], serie: null, aviso: null }, 'vazio')
+    for (const e of DEMO_MARCOS) await d.repo.adicionarEvento(e, 'Marcos')
+    const r = await responderCopiloto(d, { pergunta: 'Ficou alguma coisa pendente no meu acompanhamento?' })
+    expect(r.ancoras).toEqual(['d08'])
+    expect(r.texto.join(' ')).toMatch(/nova espirometria com prova broncodilatadora em 04\/11\/2025/)
+    expect(r.texto.join(' ')).toMatch(/Pneumologia.*retorno em 6 meses/)
+  })
+
   it('pendências da consulta de pneumologia viram passos; "confirmar a dosagem" é barrado; o passo concreto do modelo fica', async () => {
     const passos = await gerar()
     expect(passos.slice(2).map((p) => [p.titulo, p.ancoras])).toEqual([

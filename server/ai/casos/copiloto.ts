@@ -67,6 +67,21 @@ function respostaDeRepeticao(eventos: Evento[], pergunta: string, ancoras: strin
   }
 }
 
+const PERGUNTA_PENDENCIA = /pendent|pendenc|faltou|faltando|ficou para tras|esqueci|em aberto|atrasad/
+
+/* Visto em produção: "Ficou alguma coisa pendente?" → "Não encontrei", com retorno e espirometria
+   pedidos em 04/11/2025 e nunca registrados. Pendência é fato calculado: se o modelo não citou
+   nenhuma, a resposta vem dos fatos. */
+function respostaDePendencia(eventos: Evento[], pergunta: string, ancoras: string[]): Omit<RespostaCopiloto, 'geradoPor'> | undefined {
+  if (!PERGUNTA_PENDENCIA.test(normalizar(pergunta))) return undefined
+  const { pendencias } = derivarFatos(eventos)
+  if (!pendencias.length || pendencias.some((p) => ancoras.includes(p.ancoras[0]))) return undefined
+  return {
+    texto: [...pendencias.map((p) => p.descricao), 'Confirme com quem acompanha você se esses itens ainda são necessários.'],
+    ancoras: [...new Set(pendencias.flatMap((p) => p.ancoras))],
+  }
+}
+
 /* O modelo só devolvia "serie" em 4 de 5 perguntas sobre a glicada, e "LDL-colesterol" não casava
    com "colesterol ldl": a série sai da pergunta, pelo analito, sem depender do texto do modelo. */
 export function serieDaPergunta(eventos: Evento[], pergunta: string): Serie | undefined {
@@ -112,8 +127,8 @@ export async function responderCopiloto({ repo, llm, perfil }: ContextoIa, entra
     /* O motor determinístico só conhece o histórico de exemplo: se nenhuma das âncoras dele existe
        aqui, a resposta falaria de registros que a paciente não tem. */
     if (resposta.ancoras.length && !ancoras.length) {
-      const repeticao = respostaDeRepeticao(eventos, entrada.pergunta, [])
-      if (repeticao) return { ...repeticao, geradoPor: llm.nome }
+      const deFatos = respostaDeRepeticao(eventos, entrada.pergunta, []) ?? respostaDePendencia(eventos, entrada.pergunta, [])
+      if (deFatos) return { ...deFatos, geradoPor: llm.nome }
       const aviso = avisoPara(entrada.pergunta, null)
       return { texto: [SEM_BASE], ancoras: [], ...(aviso && { aviso }), geradoPor: llm.nome }
     }
@@ -137,8 +152,8 @@ export async function responderCopiloto({ repo, llm, perfil }: ContextoIa, entra
 
   const texto = limparTextos(r.texto, eventos)
   const ancoras = filtrarAncoras(r.ancoras, validos)
-  const repeticao = respostaDeRepeticao(eventos, entrada.pergunta, ancoras)
-  if (repeticao) return { ...repeticao, geradoPor: llm.nome }
+  const deFatos = respostaDeRepeticao(eventos, entrada.pergunta, ancoras) ?? respostaDePendencia(eventos, entrada.pergunta, ancoras)
+  if (deFatos) return { ...deFatos, geradoPor: llm.nome }
   const aviso = avisoPara(entrada.pergunta, r.aviso && limparTexto(r.aviso, eventos))
   if (!texto.length || !ancoras.length) return { texto: [SEM_BASE], ancoras: [], ...(aviso && { aviso }), geradoPor: llm.nome }
 
