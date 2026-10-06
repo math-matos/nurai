@@ -17,7 +17,7 @@ import '../styles/app.css'
 const NAV: { para: string; rotulo: string; icone: NomeIcone; nota: string }[] = [
   { para: '/app/linha', rotulo: 'Linha do tempo', icone: 'linha', nota: 'Todo o histórico reunido' },
   { para: '/app/fontes', rotulo: 'Fontes e anexos', icone: 'anexar', nota: 'Conectar e enviar documentos' },
-  { para: '/app/copiloto', rotulo: 'Copiloto', icone: 'copiloto', nota: 'Perguntar sobre a própria história' },
+  { para: '/app/copiloto', rotulo: 'Perguntar ao Copiloto', icone: 'copiloto', nota: 'Tire dúvidas sobre o seu histórico — as respostas citam os registros' },
   { para: '/app/cuidado', rotulo: 'Próximos passos', icone: 'bussola', nota: 'O que fazer com esse contexto' },
   { para: '/app/resumo', rotulo: 'Resumo para consulta', icone: 'resumo', nota: 'Uma página para o médico' },
   { para: '/app/privacidade', rotulo: 'Acessos e consentimento', icone: 'escudo', nota: 'Quem vê o quê, e desde quando' },
