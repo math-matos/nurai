@@ -4,11 +4,14 @@ import { Campo } from '../../components/Campo'
 import { Icon } from '../../components/Icon'
 import { Falha } from '../../components/ui'
 import { ErroApi, mensagemDeErro, RELACOES, type MudancasPerfil, type Perfil } from '../../lib/api'
+import { ERRO_AUTORIZACAO, textoDeclaracao } from '../../lib/autorizacao'
+import { formatarDataCurta } from '../../lib/formato'
 import { focarPrimeiroErro } from '../../lib/formulario'
 import { atualizarPerfil, isoHoje } from '../../lib/store'
 import { TID } from '../../lib/testids'
 
-type CampoPerfil = 'nome' | 'dataNascimento' | 'condicoes' | 'alergias' | 'cartaoSus' | 'plano' | 'responsavelNome' | 'relacao'
+type CampoPerfil =
+  | 'nome' | 'dataNascimento' | 'condicoes' | 'alergias' | 'cartaoSus' | 'plano' | 'responsavelNome' | 'relacao' | 'autorizacao'
 type Erros = Partial<Record<CampoPerfil, string>>
 
 const ORDEM: { campo: CampoPerfil; id: string }[] = [
@@ -20,13 +23,16 @@ const ORDEM: { campo: CampoPerfil; id: string }[] = [
   { campo: 'plano', id: 'perfil-plano' },
   { campo: 'responsavelNome', id: 'perfil-responsavel' },
   { campo: 'relacao', id: 'perfil-relacao' },
+  { campo: 'autorizacao', id: 'perfil-autorizacao' },
 ]
 
 const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 const linhas = (texto: string) => texto.split('\n').map((l) => l.trim()).filter(Boolean)
 
-const CAMPO_DO_RESPONSAVEL: Record<string, CampoPerfil> = { 'responsavel.nome': 'responsavelNome', 'responsavel.relacao': 'relacao' }
+const CAMPO_DO_RESPONSAVEL: Record<string, CampoPerfil> = {
+  'responsavel.nome': 'responsavelNome', 'responsavel.relacao': 'relacao', 'responsavel.autorizacao': 'autorizacao',
+}
 
 /* O servidor aponta erro de item de lista como "condicoes.2": a mensagem vai para o campo da lista. */
 function errosDoServidor(campos: Record<string, string>): Erros {
@@ -45,6 +51,7 @@ function formularioDe(p: Perfil) {
     cuidador: Boolean(p.responsavel),
     responsavelNome: p.responsavel?.nome ?? '',
     relacao: p.responsavel?.relacao ?? '',
+    autorizacao: false,
   }
 }
 
@@ -54,6 +61,9 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
+  /* O servidor só pede a declaração enquanto a conta não tem uma: virar cuidador ou conta antiga. */
+  const autorizadoEm = perfil.responsavel?.autorizadoEm
+  const precisaDeclarar = form.cuidador && !autorizadoEm
 
   const mudar = (campo: CampoPerfil, valor: string) => {
     setForm((f) => ({ ...f, [campo]: valor }))
@@ -83,6 +93,7 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
       ...(form.dataNascimento > isoHoje() && { dataNascimento: 'A data de nascimento não pode estar no futuro' }),
       ...(form.cuidador && form.responsavelNome.trim() === '' && { responsavelNome: 'Informe o seu nome' }),
       ...(form.cuidador && form.relacao === '' && { relacao: 'Escolha o que você é dessa pessoa' }),
+      ...(precisaDeclarar && !form.autorizacao && { autorizacao: ERRO_AUTORIZACAO }),
     }
     if (Object.keys(locais).length > 0) return recusar(locais)
 
@@ -94,7 +105,9 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
       alergias: linhas(form.alergias),
       cartaoSus: form.cartaoSus.trim(),
       plano: form.plano.trim(),
-      responsavel: form.cuidador ? { nome: form.responsavelNome.trim(), relacao: form.relacao } : null,
+      responsavel: form.cuidador
+        ? { nome: form.responsavelNome.trim(), relacao: form.relacao, ...(precisaDeclarar && { autorizacao: true as const }) }
+        : null,
     }
     setSalvando(true)
     try {
@@ -170,6 +183,33 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
               {erros.relacao && <p id="perfil-relacao-erro" className="campo__erro">{erros.relacao}</p>}
             </div>
           </div>
+        )}
+        {precisaDeclarar && (
+          <div className={`campo${erros.autorizacao ? ' campo--erro' : ''}`}>
+            <label className="consentimento" htmlFor="perfil-autorizacao">
+              <input
+                id="perfil-autorizacao" type="checkbox" checked={form.autorizacao} disabled={salvando}
+                aria-invalid={erros.autorizacao ? true : undefined}
+                aria-describedby={erros.autorizacao ? 'perfil-autorizacao-erro' : undefined}
+                onChange={(e) => {
+                  const marcado = e.target.checked
+                  setForm((f) => ({ ...f, autorizacao: marcado }))
+                  setSalvo(false)
+                  if (erros.autorizacao) setErros((er) => ({ ...er, autorizacao: undefined }))
+                }}
+                data-testid={TID.perfilAutorizacao}
+              />
+              <span className="consentimento__texto">{textoDeclaracao(form.nome)}</span>
+            </label>
+            {erros.autorizacao && <p id="perfil-autorizacao-erro" className="campo__erro">{erros.autorizacao}</p>}
+          </div>
+        )}
+        {form.cuidador && autorizadoEm && (
+          <p className="meus-dados__declaracao">
+            <Icon nome="check" tamanho={14} /> Você declarou em{' '}
+            <span className="num">{formatarDataCurta(autorizadoEm.slice(0, 10))}</span> ter autorização para organizar
+            os dados de saúde de {perfil.nome}.
+          </p>
         )}
         <div aria-live="polite">
           {erroGeral && <Falha mensagem={erroGeral} />}

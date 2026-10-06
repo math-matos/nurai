@@ -34,6 +34,9 @@ export const TID = {
 
   onboardingVazio: 'onboarding-vazio',
   onboardingExemplo: 'onboarding-exemplo',
+  onboardingAutorizacao: 'onboarding-autorizacao',
+  perfilAutorizacao: 'perfil-autorizacao',
+  pedidoAutorizacao: 'pedido-autorizacao',
 
   shellPerfil: 'shell-perfil',
   shellPerfilNome: 'shell-perfil-nome',

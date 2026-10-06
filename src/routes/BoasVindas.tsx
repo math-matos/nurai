@@ -6,6 +6,7 @@ import { Porta } from '../components/Porta'
 import { Falha } from '../components/ui'
 import type { ModoOnboarding, PacienteCuidado } from '../lib/api'
 import { ErroApi, mensagemDeErro, RELACOES } from '../lib/api'
+import { ERRO_AUTORIZACAO, textoDeclaracao } from '../lib/autorizacao'
 import { focarPrimeiroErro } from '../lib/formulario'
 import { navegar } from '../lib/router'
 import { concluirOnboarding, isoHoje, sair, useSessao } from '../lib/store'
@@ -13,25 +14,27 @@ import { TID } from '../lib/testids'
 
 type ParaQuem = 'mim' | 'cuidado'
 type CampoPaciente = 'nome' | 'dataNascimento' | 'relacao'
-type Erros = Partial<Record<CampoPaciente, string>>
+type Erros = Partial<Record<CampoPaciente | 'autorizacao', string>>
 
-const ORDEM: { campo: CampoPaciente; id: string }[] = [
+const ORDEM: { campo: CampoPaciente | 'autorizacao'; id: string }[] = [
   { campo: 'nome', id: 'cuidado-nome' },
   { campo: 'dataNascimento', id: 'cuidado-nascimento' },
   { campo: 'relacao', id: 'cuidado-relacao' },
+  { campo: 'autorizacao', id: 'cuidado-autorizacao' },
 ]
 
 const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
-function validar(p: Record<CampoPaciente, string>): Erros {
+function validar(p: Record<CampoPaciente, string>, autorizacao: boolean): Erros {
   return {
     ...(p.nome.trim() === '' && { nome: 'Informe o nome de quem você cuida' }),
     ...(p.dataNascimento > isoHoje() && { dataNascimento: 'A data de nascimento não pode estar no futuro' }),
     ...(p.relacao === '' && { relacao: 'Escolha o que você é dessa pessoa' }),
+    ...(!autorizacao && { autorizacao: ERRO_AUTORIZACAO }),
   }
 }
 
-/* O servidor aponta o erro como "paciente.nome": a mensagem vai para o campo. */
+/* O servidor aponta o erro como "paciente.nome" ou "paciente.autorizacao": a mensagem vai para o campo. */
 const errosDoServidor = (campos: Record<string, string>): Erros =>
   Object.fromEntries(Object.entries(campos).map(([chave, msg]) => [chave.split('.').at(-1), msg])) as Erros
 
@@ -41,6 +44,7 @@ export function BoasVindas() {
   const [erro, setErro] = useState<string | null>(null)
   const [paraQuem, setParaQuem] = useState<ParaQuem>('mim')
   const [paciente, setPaciente] = useState<Record<CampoPaciente, string>>({ nome: '', dataNascimento: '', relacao: '' })
+  const [autorizacao, setAutorizacao] = useState(false)
   const [erros, setErros] = useState<Erros>({})
 
   const mudar = (campo: CampoPaciente, valor: string) => {
@@ -57,11 +61,12 @@ export function BoasVindas() {
     if (escolhendo) return
     let cuidado: PacienteCuidado | undefined
     if (paraQuem === 'cuidado') {
-      const locais = validar(paciente)
+      const locais = validar(paciente, autorizacao)
       if (Object.keys(locais).length > 0) return recusar(locais)
       cuidado = {
         nome: paciente.nome.trim(),
         relacao: paciente.relacao,
+        autorizacao: true,
         ...(paciente.dataNascimento && { dataNascimento: paciente.dataNascimento }),
       }
     }
@@ -142,6 +147,22 @@ export function BoasVindas() {
                 As ações que você fizer ficam registradas no seu nome, como responsável.
               </p>
               {erros.relacao && <p id="cuidado-relacao-erro" className="campo__erro">{erros.relacao}</p>}
+            </div>
+            <div className={`campo${erros.autorizacao ? ' campo--erro' : ''}`}>
+              <label className="consentimento" htmlFor="cuidado-autorizacao">
+                <input
+                  id="cuidado-autorizacao" type="checkbox" checked={autorizacao} disabled={escolhendo !== null}
+                  aria-invalid={erros.autorizacao ? true : undefined}
+                  aria-describedby={erros.autorizacao ? 'cuidado-autorizacao-erro' : undefined}
+                  onChange={(e) => {
+                    setAutorizacao(e.target.checked)
+                    if (erros.autorizacao) setErros((er) => ({ ...er, autorizacao: undefined }))
+                  }}
+                  data-testid={TID.onboardingAutorizacao}
+                />
+                <span className="consentimento__texto">{textoDeclaracao(paciente.nome)}</span>
+              </label>
+              {erros.autorizacao && <p id="cuidado-autorizacao-erro" className="campo__erro">{erros.autorizacao}</p>}
             </div>
           </>
         )}

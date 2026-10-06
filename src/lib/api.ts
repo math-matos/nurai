@@ -10,8 +10,10 @@ export interface Compartilhamento { codigo: string; criadoEm: string; para: stri
 export type Onboarding = 'pendente' | 'vazio' | 'exemplo'
 export type ModoOnboarding = Exclude<Onboarding, 'pendente'>
 
-/* Quem usa a conta para cuidar do histórico de outra pessoa; relacao é o que ele é do paciente (ex.: "filho"). */
-export interface Responsavel { nome: string; relacao: string }
+/* Quem usa a conta para cuidar do histórico de outra pessoa; relacao é o que ele é do paciente (ex.: "filho").
+   autorizadoEm: quando declarou poder tratar os dados de saúde do paciente (ISO). autorizacaoPendente: conta
+   cuidador criada antes da declaração existir; o app pede a declaração. */
+export interface Responsavel { nome: string; relacao: string; autorizadoEm?: string; autorizacaoPendente?: true }
 
 /* Vai para o log e para o médico como "Rafael (filho)". */
 export const RELACOES = ['filho', 'filha', 'pai', 'mãe', 'cônjuge', 'outro'] as const
@@ -33,7 +35,7 @@ export interface Perfil {
 }
 
 /* "Para alguém que eu cuido": o histórico passa a ser deste paciente e quem criou a conta vira o responsável. */
-export interface PacienteCuidado { nome: string; dataNascimento?: string; relacao: string }
+export interface PacienteCuidado { nome: string; dataNascimento?: string; relacao: string; autorizacao: true }
 
 export interface Usuario { id: string; email: string }
 export interface Conta { usuario: Usuario; perfil: Perfil }
@@ -54,8 +56,8 @@ export interface MudancasPerfil {
   alergias?: string[]
   cartaoSus?: string
   plano?: string
-  /* null: o histórico volta a ser do próprio usuário. */
-  responsavel?: Responsavel | null
+  /* null: o histórico volta a ser do próprio usuário. autorizacao é exigida enquanto a conta não tem a declaração. */
+  responsavel?: { nome: string; relacao: string; autorizacao?: true } | null
 }
 
 /* Calculado no acesso a partir dos registros (não depende dos passos gravados pelo paciente). */
