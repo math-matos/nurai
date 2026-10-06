@@ -6,7 +6,7 @@ import { recomendaConduta } from '../guardrails.js'
 import { pedirJson } from '../json.js'
 import { contextoHistorico, descreverPerfil, mensagens } from '../prompts.js'
 import { limparTexto } from '../texto.js'
-import { dataBR, filtrarAncoras, idsDe, normalizar, porData, type ContextoIa } from './comum.js'
+import { dataBR, filtrarAncoras, formatarNumero, idsDe, normalizar, porData, type ContextoIa } from './comum.js'
 
 export interface RespostaPassos {
   passos: ProximoPasso[]
@@ -34,6 +34,8 @@ Use os FATOS DERIVADOS: cada exame possivelmente repetido e cada pendência list
 Os passos são de organização (levar um laudo, agendar, perguntar, confirmar com quem pediu). Nunca sugira iniciar, manter, suspender ou mudar remédio ou tratamento — nem como pergunta ao médico, nem como "verificar/avaliar a necessidade de ajuste, troca, suspensão, aumento ou redução" de um remédio ou dose. Remédios só aparecem como fato registrado no "porque".
 Formato da resposta (JSON):
 {"passos": [{"titulo": "ação curta no imperativo", "porque": "fatos e datas dos registros", "ancoras": ["e01"], "prazo": "ex.: Próxima consulta", "prioridade": "alta" | "media" | "baixa"}]}
+- "porque": cite o valor ou achado concreto e a data do registro (ex.: "Hemoglobina de 12,4 g/dL em 12/06/2026, abaixo da referência de 13,5 a 17,5 g/dL"). Comece com letra maiúscula.
+- Não escreva passos genéricos como "discutir os resultados com o médico" sem dizer qual valor ou achado: um passo sem achado concreto será descartado.
 - 1 a ${MAX_PASSOS} passos, os mais importantes primeiro, cada um com os ids que o sustentam em "ancoras".
 - Em "titulo" e "porque", refira-se a um registro pelo nome e pela data (ex.: "o exame de 05/03/2026"), nunca pelo id.`
 
@@ -64,6 +66,10 @@ function pendencias({ pendencias }: Fatos): PassoBruto[] {
   }))
 }
 
+const alteradas = (e: Evento) => (e.medidas ?? []).filter((m) => m.sinal === 'alterado')
+  .map((m) => `${m.nome} de ${formatarNumero(m.valor)} ${m.unidade} (referência ${formatarNumero(m.refMin)} a ${formatarNumero(m.refMax)})`)
+  .join('; ')
+
 function resultadosRecentes(eventos: Evento[], jaCitados: Set<string>): PassoBruto[] {
   const ultimaData = eventos.at(-1)?.data ?? ''
   return eventos
@@ -71,11 +77,36 @@ function resultadosRecentes(eventos: Evento[], jaCitados: Set<string>): PassoBru
     .filter((e) => (e.sinal === 'alterado' || e.sinal === 'atencao') && dias(e.data, ultimaData) <= JANELA_RECENTE_DIAS)
     .map((e) => ({
       titulo: `Levar "${e.titulo}" à próxima consulta`,
-      porque: `Resultado de ${dataBR(e.data)} (${e.instituicao}) marcado para atenção: ${e.resumo}`,
+      porque: `Resultado de ${dataBR(e.data)} (${e.instituicao}) marcado para atenção: ${alteradas(e) || e.resumo}`,
       ancoras: [e.id],
       prazo: 'Próxima consulta',
       prioridade: 'media' as const,
     }))
+}
+
+const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+const semDatas = (s: string) => s.replace(/\b\d{2}\/\d{2}\/\d{4}\b/g, '')
+/* "Hemoglobina glicada (HbA1c)" é citada como "hemoglobina glicada" ou "hba1c". */
+const nomesDaMedida = (nome: string) =>
+  [nome.replace(/\s*\(.*?\)/g, ''), ...(nome.match(/\(([^)]+)\)/g) ?? []).map((p) => p.slice(1, -1))].map(normalizar)
+
+/* Passo concreto diz qual achado o sustenta: um fato derivado, um valor, o nome de uma medida, ou um
+   registro sem medidas (laudo, consulta), em que o achado é o próprio texto. "Discutir os resultados
+   do hemograma" ancorado num exame com medidas, sem dizer qual, é descartado. */
+function concreto(p: PassoBruto, eventos: Evento[], fatos: Fatos): boolean {
+  const cobreFato = fatos.repeticoes.some((r) => p.ancoras.includes(r.feito) && p.ancoras.includes(r.pedido))
+    || fatos.pendencias.some((f) => p.ancoras.includes(f.ancoras[0]))
+  const ancorados = eventos.filter((e) => p.ancoras.includes(e.id))
+  const texto = normalizar(p.porque)
+  return cobreFato || /\d/.test(semDatas(p.porque)) || ancorados.some((e) => !e.medidas?.length)
+    || ancorados.flatMap((e) => e.medidas ?? []).some((m) => nomesDaMedida(m.nome).some((n) => texto.includes(n)))
+}
+
+/* Cada exame possivelmente repetido vira passo, mesmo que o modelo o tenha deixado de fora. */
+function comRepeticoes(passos: PassoBruto[], fatos: Fatos): PassoBruto[] {
+  const faltando = examesRepetidos(fatos).filter((r) =>
+    !passos.some((p) => r.ancoras.every((a) => p.ancoras.includes(a))))
+  return [...faltando, ...passos]
 }
 
 function passosSemIa(eventos: Evento[]): PassoBruto[] {
@@ -94,13 +125,15 @@ export async function gerarPassos({ repo, llm, perfil }: ContextoIa): Promise<Re
     : (await pedirJson(llm, mensagens(TAREFA, descreverPerfil(perfil), contextoHistorico(eventos)), esquema, { maxTokens: 2000 })).passos
 
   const validos = idsDe(eventos)
+  const fatos = derivarFatos(eventos)
   const feitos = new Set(atuais.filter((p) => p.feito).map((p) => normalizar(p.titulo)))
-  const passos: ProximoPasso[] = brutos
+  const limpos = brutos
     .map((p) => ({
-      ...p, titulo: limparTexto(p.titulo, eventos), porque: limparTexto(p.porque, eventos), prazo: limparTexto(p.prazo, eventos),
-      ancoras: filtrarAncoras(p.ancoras, validos),
+      ...p, titulo: maiuscula(limparTexto(p.titulo, eventos)), porque: maiuscula(limparTexto(p.porque, eventos)),
+      prazo: limparTexto(p.prazo, eventos), ancoras: filtrarAncoras(p.ancoras, validos),
     }))
-    .filter((p) => p.titulo && p.ancoras.length && !recomendaConduta(`${p.titulo} ${p.porque}`))
+    .filter((p) => p.titulo && p.ancoras.length && !recomendaConduta(`${p.titulo} ${p.porque}`) && concreto(p, eventos, fatos))
+  const passos: ProximoPasso[] = comRepeticoes(limpos, fatos)
     .slice(0, MAX_PASSOS)
     .map((p, i) => ({ id: `p-ia-${i + 1}`, ...p, feito: feitos.has(normalizar(p.titulo)) }))
   /* Não apagar a lista atual da paciente por uma resposta sem nenhum passo sustentado. */
