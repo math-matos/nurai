@@ -27,14 +27,14 @@ const esquema = z.object({
   perguntasSugeridas: z.array(z.string()),
 })
 
-const tarefa = (especialidade: string) => `Tarefa: preparar um resumo pré-consulta para a especialidade "${especialidade}", que a paciente vai levar ao médico. Selecione apenas o que é relevante para essa especialidade.
+const tarefa = (especialidade: string) => `Tarefa: preparar um resumo pré-consulta para a especialidade "${especialidade}", que a pessoa vai levar ao médico. Selecione apenas o que é relevante para essa especialidade.
 Formato da resposta (JSON):
 {"sintese": ["frase"], "pontos": [{"texto": "fato objetivo e datado", "ancoras": ["e01"]}], "perguntasSugeridas": ["..."]}
 - "sintese": 1 a 3 frases sobre o quadro registrado relevante para a especialidade.
 - "pontos": até ${MAX_PONTOS} fatos objetivos e datados (mudanças recentes, exames alterados, medicamentos, pendências), cada um com os ids que o sustentam.
 - Para dizer se uma medida subiu ou caiu, use a variação indicada nos FATOS DERIVADOS para aquela data; não calcule tendência por conta própria.
 - Descreva o que foi registrado; não recomende manter, iniciar, suspender ou mudar remédios.
-- "perguntasSugeridas": 2 a 4 perguntas para a paciente levar à consulta.
+- "perguntasSugeridas": 2 a 4 perguntas para a pessoa levar à consulta.
 - No texto, refira-se a um registro pelo nome e pela data (ex.: "o exame de 05/03/2026"), nunca pelo id; ids vão só em "ancoras".`
 
 function relevantes(eventos: Evento[], especialidade: string): Evento[] {

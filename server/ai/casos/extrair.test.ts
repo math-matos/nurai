@@ -281,3 +281,22 @@ describe('extrairEvento — prompt de grafia e de conduta', () => {
     expect(prompt).toMatch(/consulta[^\n]*"resumo"[^\n]*remédio iniciado[^\n]*exame solicitado[^\n]*retorno com o prazo/)
   })
 })
+
+/* Visto em produção: "A paciente apresenta asma…" no resumo da consulta de um homem (Marcos). */
+const GENERO = /(?<![\p{L}])(?:a|o|as|os|da|do|na|no|à|ao|pela|pelo|uma|um) pacientes?\b/iu
+
+describe('extrairEvento — sem presumir gênero', () => {
+  it('o prompt manda escrever o resumo sem gênero e não usa artigo de gênero antes de "paciente"', async () => {
+    const { llm, recebidas } = llmFixo(bruto([]))
+    await extrairEvento({ llm, perfil: MARCOS }, { texto: PEDIDO })
+    const prompt = instrucoes(recebidas)
+    expect(prompt).toMatch(/não (?:deduza|presuma) o gênero[^\n]*"Paciente com[^\n]*"Foi solicitada/)
+    expect(prompt).not.toMatch(GENERO)
+  })
+
+  it('resumo que ainda começa com "A paciente"/"O paciente" sai neutro', () => {
+    const resumo = 'A paciente apresenta asma parcialmente controlada, com baixa adesão à técnica inalatória. O paciente refere tosse. Foi solicitada nova espirometria.'
+    const { evento } = montarEvento(bruto([], { tipo: 'consulta', resumo }))
+    expect(evento.resumo).toBe('Paciente apresenta asma parcialmente controlada, com baixa adesão à técnica inalatória. Paciente refere tosse. Foi solicitada nova espirometria.')
+  })
+})

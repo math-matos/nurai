@@ -33,7 +33,7 @@ const SEM_BASE = 'Não encontrei no seu histórico registros que sustentem uma r
 export const HISTORICO_VAZIO = 'Seu histórico ainda está vazio. Anexe um exame ou laudo em Fontes para eu poder responder com base nele.'
 const TURNOS_ANTERIORES = 6
 
-const TAREFA = `Tarefa: responder à pergunta da paciente usando apenas os registros do histórico abaixo.
+const TAREFA = `Tarefa: responder à pergunta da pessoa usando apenas os registros do histórico abaixo.
 Formato da resposta (JSON):
 {"texto": ["parágrafo curto"], "ancoras": ["e01"], "serie": {"medida": "nome exato de uma medida"} ou null, "aviso": "lembrete curto" ou null}
 - "texto": 1 a 4 parágrafos curtos, citando datas e valores dos registros. Refira-se a um registro pelo nome e pela data (ex.: "o exame de 05/03/2026"), nunca pelo id.

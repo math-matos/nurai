@@ -27,7 +27,7 @@ const esquemaPasso = z.object({
 type PassoBruto = z.infer<typeof esquemaPasso>
 const esquema = z.object({ passos: z.array(esquemaPasso) })
 
-const TAREFA = `Tarefa: listar os próximos passos práticos do acompanhamento da paciente com base no histórico. Procure especialmente:
+const TAREFA = `Tarefa: listar os próximos passos práticos do acompanhamento da pessoa com base no histórico. Procure especialmente:
 1. exames repetidos ou duplicados: o mesmo exame pedido ou feito de novo pouco tempo depois de um já realizado (cite os dois registros);
 2. pendências: retornos, reavaliações ou exames recomendados que não aparecem depois no histórico;
 3. resultados recentes alterados que ainda não aparecem avaliados em uma consulta posterior.

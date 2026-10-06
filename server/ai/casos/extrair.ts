@@ -59,11 +59,11 @@ export const esquemaExtracao = z.discriminatedUnion('clinico', [
 export type ExtracaoBruta = z.infer<typeof esquemaExtracao>
 type ExtracaoClinica = Extract<ExtracaoBruta, { clinico: true }>
 
-const TAREFA = `Tarefa: ler o texto de um documento de saúde enviado pela paciente (laudo, resultado de exame, receita, relatório) e estruturá-lo como um registro do histórico.
+const TAREFA = `Tarefa: ler o texto de um documento de saúde enviado por quem usa o app (laudo, resultado de exame, receita, relatório) e estruturá-lo como um registro do histórico.
 Formato da resposta (JSON):
-{"clinico": true, "pacienteNoDocumento": "nome do paciente" ou null, "data": "AAAA-MM-DD" ou null, "tipo": "${TIPOS.join('" | "')}", "titulo": "título curto", "instituicao": "nome" ou null, "especialidade": "nome" ou null, "resumo": "1 a 2 frases fiéis ao documento", "medidas": [{"nome": "Colesterol LDL", "valor": 162, "unidade": "mg/dL", "refMin": null, "refMax": 130}], "tags": ["colesterol"], "confianca": 0.9, "avisos": ["o que ficou ilegível ou ambíguo"]}
+{"clinico": true, "pacienteNoDocumento": "nome impresso" ou null, "data": "AAAA-MM-DD" ou null, "tipo": "${TIPOS.join('" | "')}", "titulo": "título curto", "instituicao": "nome" ou null, "especialidade": "nome" ou null, "resumo": "1 a 2 frases fiéis ao documento", "medidas": [{"nome": "Colesterol LDL", "valor": 162, "unidade": "mg/dL", "refMin": null, "refMax": 130}], "tags": ["colesterol"], "confianca": 0.9, "avisos": ["o que ficou ilegível ou ambíguo"]}
 - Se o texto não for um documento de saúde, responda apenas {"clinico": false}.
-- "pacienteNoDocumento": o nome do paciente como está impresso (campo "Paciente", "Nome", destinatário da receita), com a grafia original. Nunca o nome do médico, do solicitante ou do responsável técnico. null se o documento não identificar o paciente.
+- "pacienteNoDocumento": o nome de quem é paciente, como está impresso (campo "Paciente", "Nome", destinatário da receita), com a grafia original. Nunca o nome do médico, do solicitante ou do responsável técnico. null se o documento não identificar quem é paciente.
 - "data": a data do exame/atendimento: em exame, a da coleta ou realização, antes da data de emissão do laudo (use a emissão só se for a única); em receita, pedido ou guia, a data da emissão ou da solicitação. Nunca a de impressão nem a de nascimento. Use null só se o documento não trouxer nenhuma dessas datas.
 - "tipo": o que o documento é, não o que ele cita ou pede:
   - "exame": resultado de exame laboratorial ou funcional (sangue, urina, eletrocardiograma, espirometria, Holter).
@@ -82,6 +82,7 @@ Formato da resposta (JSON):
 - Referência em "% do previsto" (espirometria, por exemplo): registre a medida pelo valor em % do previsto, com unidade "% do previsto", para a faixa e o valor ficarem na mesma unidade.
 - "resumo": descreva o que o documento registra, sem interpretar nem diagnosticar. Em pedido ou guia, cite os exames pedidos pelo nome (ex.: "Pedido de perfil lipídico e hemograma.").
 - Em consulta, relatório ou alta, o "resumo" (até 4 frases) precisa trazer o que o documento registra de conduta, com os nomes como estão no texto: remédio iniciado, trocado ou suspenso, com a dose (ex.: "Iniciada losartana 50 mg."); cada exame solicitado pelo nome (ex.: "Solicitados MAPA de 24 horas, perfil lipídico e nova espirometria."); e o retorno com o prazo (ex.: "Retorno em 6 meses."). Esses itens são fatos do registro, não recomendações.
+- No "resumo", não presuma o gênero de quem é paciente, nem pelo nome: nada de artigo masculino ou feminino antes de "paciente". Comece por "Paciente" sem artigo ou use a voz passiva (ex.: "Paciente com asma parcialmente controlada.", "Foi solicitada nova espirometria."), salvo o que o documento declarar.
 - "avisos": frases completas, começando com letra maiúscula.
 - "confianca": de 0 a 1, o quanto o texto estava legível e completo.`
 
@@ -108,6 +109,10 @@ function lerMedida(m: MedidaBruta): Medida | string {
   return { nome: m.nome, valor: m.valor, unidade: m.unidade, ...faixa, sinal: sinalDaFaixa(m.valor, faixa) }
 }
 
+/* Rede de segurança para a regra do prompt: "A paciente apresenta…" vira "Paciente apresenta…". */
+const ARTIGO_NO_INICIO = /(^|[.!?;]\s+)[OA] (paciente\b)/g
+const semGenero = (resumo: string) => resumo.replace(ARTIGO_NO_INICIO, (_, antes: string) => `${antes}Paciente`)
+
 /* Pós-processamento comum ao modelo e à heurística: sinal e validações ficam no servidor.
    Com o texto do documento, limite 0 que não aparece impresso é descartado. */
 export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string, texto?: string): Montado {
@@ -131,7 +136,7 @@ export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string, texto
     instituicao: bruto.instituicao?.trim() || 'Não identificada',
     fonte: 'paciente',
     ...(especialidade && { especialidade }),
-    resumo: limparTexto(bruto.resumo),
+    resumo: semGenero(limparTexto(bruto.resumo)),
     sinal: medidas.some((m) => m.sinal === 'alterado') ? 'alterado' : medidas.length ? 'normal' : 'info',
     ...(medidas.length && { medidas }),
     tags: bruto.tags.map((t) => t.trim()).filter(Boolean),

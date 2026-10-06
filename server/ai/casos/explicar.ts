@@ -25,12 +25,12 @@ const esquema = z.object({
   ancoras: z.array(z.string()),
 })
 
-const tarefa = (evento: Evento) => `Tarefa: explicar para a paciente, em linguagem simples, o registro "${evento.titulo}" de ${dataBR(evento.data)}, comparando com os registros anteriores relacionados quando houver.
+const tarefa = (evento: Evento) => `Tarefa: explicar para a pessoa, em linguagem simples, o registro "${evento.titulo}" de ${dataBR(evento.data)}, comparando com os registros anteriores relacionados quando houver.
 Formato da resposta (JSON):
 {"explicacao": ["parágrafo curto"], "pontosDeAtencao": ["..."], "perguntasParaMedico": ["..."], "ancoras": ["${evento.id}"]}
 - "explicacao": 1 a 3 parágrafos curtos sobre o que o exame mede e o que o registro mostra.
 - "pontosDeAtencao": valores fora da faixa de referência e mudanças em relação aos registros anteriores, descritos sem interpretar como diagnóstico. Pode ser [].
-- "perguntasParaMedico": 2 a 4 perguntas que a paciente pode levar à consulta.
+- "perguntasParaMedico": 2 a 4 perguntas que a pessoa pode levar à consulta.
 - Para citar um registro no texto, use o nome do exame e a data (ex.: "o exame de 05/03/2026"). Nunca escreva ids como "e11" ou "[e11]" no texto: eles vão só em "ancoras".
 - "ancoras": ids dos registros citados.`
 

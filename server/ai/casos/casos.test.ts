@@ -429,3 +429,24 @@ describe('retorno vencido da consulta de pneumologia (evento real de produção)
     expect(passos.some((p) => /espirometria/i.test(p.titulo))).toBe(true)
   })
 })
+
+/* Visto em produção: "A paciente…" para um homem. Nenhum prompt presume o gênero de quem usa o app. */
+describe('prompts sem gênero presumido', () => {
+  const GENERO = /(?<![\p{L}])(?:a|o|as|os|da|do|na|no|à|ao|pela|pelo|uma|um) pacientes?\b/iu
+
+  it('sistema, copiloto, passos, resumo e explicação não usam artigo de gênero antes de "paciente"', async () => {
+    const copiloto = await deps({ texto: ['ok'], ancoras: ['e21'], serie: null, aviso: null })
+    await responderCopiloto(copiloto.deps, { pergunta: 'Como está minha creatinina?' })
+    const passos = await deps({ passos: [{ titulo: 'Mostrar a creatinina', porque: 'Creatinina de 1,1 mg/dL em 05/03/2026.', ancoras: ['e21'], prazo: 'Próxima consulta', prioridade: 'media' }] })
+    await gerarPassos(passos.deps)
+    const resumo = await deps({ resumo: ['ok'], medicamentos: [], pontosDeAtencao: [], perguntasSugeridas: [], ancoras: ['e21'] })
+    await gerarResumo(resumo.deps, 'Cardiologia').catch(() => undefined)
+    const explicar = await deps({ explicacao: ['ok'], pontosDeAtencao: [], perguntasParaMedico: [], ancoras: ['e21'] })
+    await explicarExame(explicar.deps, 'e21').catch(() => undefined)
+    for (const { chamadas } of [copiloto, passos, resumo, explicar]) {
+      const instrucoes = chamadas[0].map((m) => m.content).join('\n').split('Histórico (')[0]
+      expect(instrucoes).not.toMatch(GENERO)
+      expect(instrucoes).toMatch(/não presuma o gênero/i)
+    }
+  })
+})
