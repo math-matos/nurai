@@ -1,5 +1,6 @@
 /* Eval dos fluxos de IA contra o OCI Generative AI real, com checagens objetivas.
    Uso: pnpm eval:ia — imprime PASS/FAIL por caso e sai com código ≠ 0 se algum falhar. */
+import { readFile } from 'node:fs/promises'
 import { EVENTOS } from '../../src/data/seed.js'
 import { LAUDO_EXEMPLO } from '../../src/data/exemplos.js'
 import { configOciDoAmbiente, criarLlmOci } from '../ai/oci.js'
@@ -36,12 +37,14 @@ const resultados: Resultado[] = []
 const textos: { origem: string; texto: string }[] = []
 let chamadas = 0
 
-async function chamar(caminho: string, corpo?: unknown): Promise<{ status: number; body: Corpo; ms: number }> {
+async function chamar(caminho: string, corpo?: unknown, sessao = SESSAO): Promise<{ status: number; body: Corpo; ms: number }> {
   chamadas++
   const inicio = performance.now()
   const res = await app.request(caminho, corpo === undefined
-    ? { method: 'POST', headers: SESSAO }
-    : { method: 'POST', headers: { ...SESSAO, 'content-type': 'application/json' }, body: JSON.stringify(corpo) })
+    ? { method: 'POST', headers: sessao }
+    : corpo instanceof FormData
+      ? { method: 'POST', headers: sessao, body: corpo }
+      : { method: 'POST', headers: { ...sessao, 'content-type': 'application/json' }, body: JSON.stringify(corpo) })
   const body = await res.json() as Corpo
   return { status: res.status, body, ms: Math.round(performance.now() - inicio) }
 }
@@ -68,8 +71,8 @@ const frases = (s: string) => s.split(/(?<=[.!?])\s+/)
 const ancorasDe = (b: Corpo) => (b.ancoras as string[] | undefined) ?? []
 const textoDe = (b: Corpo) => ((b.texto as string[] | undefined) ?? []).join(' ')
 
-async function copiloto(pergunta: string) {
-  const r = await chamar('/api/copiloto', { pergunta })
+async function copiloto(pergunta: string, sessao = SESSAO) {
+  const r = await chamar('/api/copiloto', { pergunta }, sessao)
   if (r.status !== 200) throw new Error(`HTTP ${r.status} ${String(r.body.codigo ?? '')}`)
   coletar(`copiloto "${pergunta}"`, r.body.texto, r.body.aviso)
   return r
@@ -163,6 +166,82 @@ await caso('passos: todos ancorados, nenhum de conduta medicamentosa', async () 
   }
 })
 
+/* Conta do Marcos com os PDFs reais passando pela extração (01, 02, 08 e 09): o shape que a paciente
+   terá — a fixture montada à mão escondia que o pedido 09 vira "Pedido de exame" do tipo documento. */
+const DOCUMENTOS = new URL('../../e2e/fixtures/documentos/', import.meta.url)
+const PDFS_MARCOS = {
+  hemograma1: '01-hemograma-2026-03-10.pdf', lipidico: '02-perfil-lipidico-2026-03-12.pdf',
+  hemograma2: '08-hemograma-2026-06-12.pdf', pedido: '09-pedido-perfil-lipidico-2026-04-02.pdf',
+}
+
+async function contaMarcos(): Promise<typeof SESSAO> {
+  const cadastro = await app.request('/api/auth/cadastro', {
+    method: 'POST',
+    headers: { 'x-nurai': '1', 'content-type': 'application/json' },
+    body: JSON.stringify({ nome: 'Marcos Vinícius Teixeira', email: 'eval-marcos@nurai.test', senha: 'Nurai-eval-2026!', aceiteLgpd: true }),
+  })
+  const sessao = { cookie: cadastro.headers.get('set-cookie')?.split(';')[0] ?? '', 'x-nurai': '1' }
+  const onboarding = await app.request('/api/onboarding', {
+    method: 'POST', headers: { ...sessao, 'content-type': 'application/json' }, body: JSON.stringify({ modo: 'vazio' }),
+  })
+  if (cadastro.status !== 201 || onboarding.status !== 200) throw new Error(`cadastro HTTP ${cadastro.status}, onboarding HTTP ${onboarding.status}`)
+  return sessao
+}
+
+const marcos = await contaMarcos()
+const idsMarcos: Partial<Record<keyof typeof PDFS_MARCOS, string>> = {}
+const extraidos: Partial<Record<keyof typeof PDFS_MARCOS, { titulo: string; tipo: string; resumo: string }>> = {}
+for (const [chave, arquivo] of Object.entries(PDFS_MARCOS) as [keyof typeof PDFS_MARCOS, string][]) {
+  const form = new FormData()
+  form.append('arquivo', new File([await readFile(new URL(arquivo, DOCUMENTOS))], arquivo, { type: 'application/pdf' }))
+  const r = await chamar('/api/extrair', form, marcos)
+  if (r.status !== 200) continue
+  const evento = r.body.evento as { titulo: string; tipo: string; resumo: string }
+  extraidos[chave] = evento
+  const salvo = await app.request('/api/eventos', {
+    method: 'POST', headers: { ...marcos, 'content-type': 'application/json' }, body: JSON.stringify({ ...evento, id: `m-${chave}` }),
+  })
+  if (salvo.status === 201) idsMarcos[chave] = ((await salvo.json()) as { id: string }).id
+}
+
+await caso('extrair(pedido 09): título nomeia o perfil lipídico', async () => {
+  const e = extraidos.pedido
+  return { ok: !!e && /lip/i.test(e.titulo), ms: 0, detalhe: e ? `tipo=${e.tipo} titulo="${e.titulo}"` : 'extração falhou' }
+})
+
+await caso('copiloto Marcos "não preciso repetir": âncoras ⊇ perfil (02) e pedido (09)', async () => {
+  const r = await copiloto('Tem algum exame que eu não preciso repetir?', marcos)
+  const a = ancorasDe(r.body)
+  const ok = !!idsMarcos.lipidico && !!idsMarcos.pedido && a.includes(idsMarcos.lipidico) && a.includes(idsMarcos.pedido)
+  return { ok, ms: r.ms, detalhe: `ancoras=[${a.join(',')}] texto="${textoDe(r.body).slice(0, 70)}"` }
+})
+
+/* "14.6 g/dL" chegou à paciente: ponto decimal em inglês antes de unidade. */
+const DECIMAL_COM_UNIDADE = /(?<![\p{L}\d.,])\d+\.\d+\s?(?:[mµn]?g\/[dm]?L|mmol\/L|mU?I\/m?L|mEq\/L|U\/L|%|bpm|ms|mm|cm|kg|fL|pg)/u
+
+await caso('copiloto Marcos "hemoglobina": cita os dois hemogramas sem "14.6 g/dL"', async () => {
+  const r = await copiloto('Como evoluiu minha hemoglobina entre os dois hemogramas?', marcos)
+  const texto = textoDe(r.body)
+  const a = ancorasDe(r.body)
+  const ambos = !!idsMarcos.hemograma1 && !!idsMarcos.hemograma2 && a.includes(idsMarcos.hemograma1) && a.includes(idsMarcos.hemograma2)
+  const ponto = DECIMAL_COM_UNIDADE.test(texto)
+  return { ok: ambos && !ponto, ms: r.ms, detalhe: `ancoras=[${a.join(',')}]${ponto ? ` "…${trecho(texto, DECIMAL_COM_UNIDADE)}…"` : ''}` }
+})
+
+await caso('passos Marcos: aponta perfil lipídico repetido, porque concreto e com maiúscula', async () => {
+  const r = await chamar('/api/passos/gerar', undefined, marcos)
+  if (r.status !== 200) throw new Error(`HTTP ${r.status}`)
+  const passos = r.body.passos as { titulo: string; porque: string; ancoras: string[] }[]
+  coletar('passos Marcos', passos.map((p) => [p.titulo, p.porque]))
+  const repetido = passos.some((p) => p.ancoras.includes(idsMarcos.lipidico ?? '') && p.ancoras.includes(idsMarcos.pedido ?? ''))
+  const minusculas = passos.filter((p) => /^\p{Ll}/u.test(p.porque) || /^\p{Ll}/u.test(p.titulo))
+  return {
+    ok: repetido && !minusculas.length,
+    ms: r.ms,
+    detalhe: `passos=${passos.length} repetido=${repetido} minúsculas=${minusculas.length}${minusculas.length ? ` "${minusculas[0].porque.slice(0, 50)}"` : ''}`,
+  }
+})
+
 /* Artigo sem nome ("como o e o,", "do ."): sobra de um id removido do meio da frase. */
 const ARTIGO_ORFAO = /\b(?:o|a|os|as|do|da|dos|das|no|na|nos|nas|ao|aos)\s+(?:e\s+(?:o|a|os|as|do|da|no|na)\b|[,;.:])|\[e\d/i
 
@@ -183,6 +262,11 @@ await caso('formato: nenhum texto com "[e" nem data AAAA-MM-DD', async () => {
   const re = /\[e\d|\b\d{4}-\d{2}-\d{2}\b/
   const ruins = textos.filter((t) => re.test(t.texto))
   return { ok: !ruins.length, ms: 0, detalhe: ruins.length ? `${ruins.length}/${textos.length} textos; ex. ${ruins[0].origem}: "…${trecho(ruins[0].texto, re)}…"` : `${textos.length} textos ok` }
+})
+
+await caso('formato: nenhum decimal com ponto antes de unidade ("14.6 g/dL")', async () => {
+  const ruins = textos.filter((t) => DECIMAL_COM_UNIDADE.test(t.texto))
+  return { ok: !ruins.length, ms: 0, detalhe: ruins.length ? `${ruins.length}/${textos.length} textos; ex. ${ruins[0].origem}: "…${trecho(ruins[0].texto, DECIMAL_COM_UNIDADE)}…"` : `${textos.length} textos ok` }
 })
 
 await caso('formato: decimais com vírgula (sem "7.8")', async () => {
