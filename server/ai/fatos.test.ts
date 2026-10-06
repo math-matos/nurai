@@ -30,17 +30,48 @@ describe('derivarFatos — tendências', () => {
 
 describe('derivarFatos — tendências com faixa unilateral', () => {
   it('série de HDL só com piso ("> 40") e de LDL só com teto ("< 130") viram tendência e serializam', () => {
-    const hdl = (valor: number) => ({ nome: 'HDL', valor, unidade: 'mg/dL', refMin: 40, sinal: valor < 40 ? 'alterado' as const : 'normal' as const })
-    const ldl = (valor: number) => ({ nome: 'LDL', valor, unidade: 'mg/dL', refMax: 130, sinal: valor > 130 ? 'alterado' as const : 'normal' as const })
+    const hdl = (valor: number) => ({ nome: 'HDL-colesterol', valor, unidade: 'mg/dL', refMin: 40, sinal: valor < 40 ? 'alterado' as const : 'normal' as const })
+    const ldl = (valor: number) => ({ nome: 'LDL-colesterol', valor, unidade: 'mg/dL', refMax: 130, sinal: valor > 130 ? 'alterado' as const : 'normal' as const })
     const fatos = derivarFatos([
       evento({ id: 'a', data: '2024-09-05', medidas: [hdl(39), ldl(168)] }),
       evento({ id: 'b', data: '2025-09-18', medidas: [hdl(41), ldl(142)] }),
       evento({ id: 'c', data: '2026-03-12', medidas: [hdl(38), ldl(138)] }),
     ])
     expect(fatos.tendencias.map((t) => [t.nome, t.variacoes])).toEqual([
-      ['HDL', ['subiu', 'caiu']], ['LDL', ['caiu', 'caiu']],
+      ['Colesterol HDL', ['subiu', 'caiu']], ['Colesterol LDL', ['caiu', 'caiu']],
     ])
     expect(serializarFatos(fatos)).toMatch(/HDL \(mg\/dL\): 39 em 05\/09\/2024 \(a\); 41 em 18\/09\/2025 \(b\), subiu; 38 em 12\/03\/2026 \(c\), caiu/)
+  })
+
+  /* Shape real da extração (OCI) dos docs demo 04 (20/01/2025) e 10 (15/05/2026): TFG "≥ 90" só com piso.
+     Antes, a TFG de 85 era descartada e o copiloto dizia que não havia alteração posterior. */
+  const TFG = 'Taxa de filtração glomerular estimada (TFG)'
+  const renal = (id: string, data: string, tfg: number, creatinina: number) => evento({
+    id, data, titulo: id === 'd04' ? 'Glicemia, Hemoglobina Glicada e Função Renal' : 'Hemograma completo e função renal',
+    sinal: tfg < 90 ? 'alterado' : 'normal', origem: 'OCR + IA', fonte: 'paciente',
+    medidas: [
+      { nome: 'Creatinina', valor: creatinina, unidade: 'mg/dL', refMin: 0.7, refMax: 1.3, sinal: 'normal' },
+      { nome: TFG, valor: tfg, unidade: 'mL/min/1,73 m²', refMin: 90, sinal: tfg < 90 ? 'alterado' : 'normal' },
+    ],
+  })
+
+  it('TFG unilateral dos dois laudos vira uma série com a queda de 101 para 85', () => {
+    const fatos = derivarFatos([renal('d10', '2026-05-15', 85, 1.08), renal('d04', '2025-01-20', 101, 0.94)])
+    const tfg = fatos.tendencias.find((t) => t.nome === 'Taxa de filtração glomerular')!
+    expect(tfg.pontos.map((p) => [p.id, p.valor])).toEqual([['d04', 101], ['d10', 85]])
+    expect(tfg.ultima).toBe('caiu')
+    expect(serializarFatos(fatos)).toMatch(/Taxa de filtração glomerular \(mL\/min\/1,73 m²\): 101 em 20\/01\/2025 \(d04\); 85 em 15\/05\/2026 \(d10\), caiu/)
+  })
+
+  it('nomes diferentes do mesmo analito entram na mesma série; medidas desconhecidas só com mesmo nome e unidade', () => {
+    const m = (nome: string, valor: number, unidade = 'mL/min/1,73 m²') => ({ nome, valor, unidade, refMin: 60, sinal: 'normal' as const })
+    const { tendencias } = derivarFatos([
+      evento({ id: 'a', data: '2024-01-01', medidas: [m('TFG estimada (CKD-EPI)', 92), m('VEF1', 2.9, 'L'), m('VEF1', 78, '% do previsto')] }),
+      evento({ id: 'b', data: '2025-01-01', medidas: [m(TFG, 88), m('VEF1', 3.1, 'L')] }),
+    ])
+    expect(tendencias.map((t) => [t.nome, t.pontos.map((p) => p.valor)])).toEqual([
+      ['Taxa de filtração glomerular', [92, 88]], ['VEF1', [2.9, 3.1]],
+    ])
   })
 })
 

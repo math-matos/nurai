@@ -1,4 +1,5 @@
 import type { Evento } from '../../src/data/types.js'
+import { chaveDaMedida, nomeDaSerie } from './analitos.js'
 import { dataBR, formatarNumero, normalizar, porData } from './casos/comum.js'
 
 /* Fatos calculados de forma determinística a partir dos registros. O modelo erra tendência
@@ -88,16 +89,18 @@ function direcao(anterior: number, atual: number): Direcao {
   return atual > anterior ? 'subiu' : 'caiu'
 }
 
+/* Agrupa pelo analito: "Taxa de filtração glomerular estimada (TFG)" e "TFG estimada" são a mesma série. */
 function tendencias(eventos: Evento[]): Tendencia[] {
-  const porNome = new Map<string, { unidade: string; pontos: Tendencia['pontos'] }>()
+  const porChave = new Map<string, { nome: string; unidade: string; pontos: Tendencia['pontos'] }>()
   for (const e of eventos) {
     for (const m of e.medidas ?? []) {
-      const serie = porNome.get(m.nome) ?? { unidade: m.unidade, pontos: [] }
+      const chave = chaveDaMedida(m)
+      const serie = porChave.get(chave) ?? { nome: nomeDaSerie(m), unidade: m.unidade, pontos: [] }
       serie.pontos.push({ id: e.id, data: e.data, valor: m.valor })
-      porNome.set(m.nome, serie)
+      porChave.set(chave, serie)
     }
   }
-  return [...porNome].filter(([, s]) => s.pontos.length >= 2).map(([nome, { unidade, pontos }]) => {
+  return [...porChave.values()].filter((s) => s.pontos.length >= 2).map(({ nome, unidade, pontos }) => {
     const variacoes = pontos.slice(1).map((p, i) => direcao(pontos[i].valor, p.valor))
     return { nome, unidade, pontos, variacoes, ultima: variacoes.at(-1)! }
   })

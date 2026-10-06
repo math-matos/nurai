@@ -61,6 +61,48 @@ describe('responderCopiloto', () => {
     expect(r.serie?.nome).toBe('Colesterol LDL')
   })
 
+  /* Shape real da extração dos laudos de LDL: o nome muda de laudo para laudo. A mesma pergunta
+     devolvia gráfico numa vez e não na outra, conforme o modelo preenchia "serie". */
+  it('série de LDL é determinística com nomes de laudo diferentes, com ou sem "serie" do modelo', async () => {
+    const ldl = (id: string, data: string, nome: string, valor: number) => ({
+      id, data, tipo: 'exame' as const, titulo: 'Perfil lipídico', instituicao: 'Laboratório Quaresmeira', fonte: 'paciente' as const,
+      resumo: 'Perfil lipídico.', sinal: 'alterado' as const, tags: [], origem: 'OCR + IA' as const,
+      medidas: [{ nome, valor, unidade: 'mg/dL', refMax: 130, sinal: valor > 130 ? 'alterado' as const : 'normal' as const }],
+    })
+    const pergunta = 'Como meu colesterol LDL evoluiu?'
+    for (const serieDoModelo of [null, { medida: 'LDL-colesterol' }, { medida: 'Colesterol LDL' }]) {
+      const { deps: d } = await deps({ texto: ['Seu LDL caiu.'], ancoras: ['d03'], serie: serieDoModelo, aviso: null }, 'vazio')
+      await d.repo.adicionarEvento(ldl('d03', '2024-09-05', 'LDL-colesterol', 168), 'Marcos')
+      await d.repo.adicionarEvento(ldl('d07', '2025-09-18', 'Colesterol LDL', 142), 'Marcos')
+      await d.repo.adicionarEvento(ldl('d12', '2026-03-12', 'LDL-colesterol (Martin/Hopkins)', 138), 'Marcos')
+      const r = await responderCopiloto(d, { pergunta })
+      expect(r.serie, JSON.stringify(serieDoModelo)).toEqual({
+        nome: 'Colesterol LDL', unidade: 'mg/dL',
+        pontos: [{ data: '09/2024', valor: 168 }, { data: '09/2025', valor: 142 }, { data: '03/2026', valor: 138 }],
+      })
+    }
+  })
+
+  it('não deixa passar "sem alterações" quando a série dos registros mudou (TFG 101 → 85)', async () => {
+    const tfg = (id: string, data: string, valor: number) => ({
+      id, data, tipo: 'exame' as const, titulo: 'Função renal', instituicao: 'Laboratório Quaresmeira', fonte: 'paciente' as const,
+      resumo: 'Função renal.', sinal: 'normal' as const, tags: [], origem: 'OCR + IA' as const,
+      medidas: [{ nome: 'Taxa de filtração glomerular estimada (TFG)', valor, unidade: 'mL/min/1,73 m²', refMin: 90, sinal: valor < 90 ? 'alterado' as const : 'normal' as const }],
+    })
+    const { deps: d, chamadas } = await deps({
+      texto: ['A sua TFG foi de 94.4 mL/min/1,73 m² em 20/01/2025 e não há registros de alterações subsequentes.'],
+      ancoras: ['d04'], serie: null, aviso: null,
+    }, 'vazio')
+    await d.repo.adicionarEvento(tfg('d04', '2025-01-20', 101), 'Marcos')
+    await d.repo.adicionarEvento(tfg('d10', '2026-05-15', 85), 'Marcos')
+    const r = await responderCopiloto(d, { pergunta: 'Como está minha função renal?' })
+    expect(prompt(chamadas)).toMatch(/Taxa de filtração glomerular \(mL\/min\/1,73 m²\): 101 em 20\/01\/2025 \(d04\); 85 em 15\/05\/2026 \(d10\), caiu/)
+    expect(prompt(chamadas)).toMatch(/nunca que "não houve alteração"/)
+    expect(r.texto.join(' ')).not.toMatch(/alteraç/)
+    expect(r.texto.at(-1)).toBe('Nos seus registros, Taxa de filtração glomerular foi: 101 mL/min/1,73 m² em 01/2025; 85 mL/min/1,73 m² em 05/2026.')
+    expect(r.serie?.pontos.map((p) => p.valor)).toEqual([101, 85])
+  })
+
   it('"Não encontrei" mantém o aviso do médico quando a pergunta é sobre remédio', async () => {
     const { deps: d } = await deps({ texto: ['Não encontrei.'], ancoras: [], serie: null, aviso: null })
     const r = await responderCopiloto(d, { pergunta: 'Posso parar a rivaroxabana?' })

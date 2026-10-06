@@ -1,13 +1,14 @@
 import { z } from 'zod'
 import { responder } from '../../../src/data/copiloto.js'
-import type { Evento } from '../../../src/data/types.js'
+import type { Evento, Medida } from '../../../src/data/types.js'
+import { analitoDaPergunta, analitoDe, chaveDaMedida } from '../analitos.js'
 import { derivarFatos } from '../fatos.js'
 import { avisoPara } from '../guardrails.js'
 import { pedirJson } from '../json.js'
 import { SISTEMA, contextoHistorico, descreverPerfil } from '../prompts.js'
 import type { MensagemLlm } from '../provider.js'
 import { limparTexto, limparTextos } from '../texto.js'
-import { dataBR, filtrarAncoras, idsDe, mesAno, normalizar, porData, type ContextoIa } from './comum.js'
+import { dataBR, filtrarAncoras, formatarNumero, idsDe, mesAno, normalizar, porData, type ContextoIa } from './comum.js'
 
 export interface EntradaCopiloto {
   pergunta: string
@@ -39,6 +40,7 @@ Formato da resposta (JSON):
 - "ancoras": ids de todos os registros que sustentam a resposta. Se nada no histórico sustenta uma resposta, use [] e diga que não encontrou.
 - Perguntas sobre exames repetidos ou desnecessários, pendências ou evolução de uma medida: responda a partir dos FATOS DERIVADOS e inclua nas âncoras os ids que eles citam.
 - Perguntas sobre parar, trocar ou ajustar um remédio: não diga se pode ou não; conte o que os registros mostram sobre esse remédio (com âncoras) e preencha o "aviso".
+- Evolução de uma medida: cite todos os valores listados para ela em "Evolução das medidas" dos FATOS DERIVADOS, com as datas. Não registrar algo não é o mesmo que não mudar: sem registro posterior, diga que não há registro posterior no histórico, nunca que "não houve alteração".
 - "serie": só quando a pergunta for sobre a evolução de uma medida numérica; use o nome da medida exatamente como aparece em "Medidas". Caso contrário, null.
 - "aviso": quando a pergunta envolver uma decisão de saúde (parar, trocar, cancelar algo), um lembrete para confirmar com o médico; caso contrário, null.`
 
@@ -65,39 +67,37 @@ function respostaDeRepeticao(eventos: Evento[], pergunta: string, ancoras: strin
   }
 }
 
-/* Nome popular na pergunta → trecho do nome da medida nos registros. HDL antes de "colesterol". */
-const MEDIDAS_POPULARES: [RegExp, string][] = [
-  [/glicada|hba1c|\ba1c\b/, 'glicada'],
-  [/\bhdl\b/, 'colesterol hdl'],
-  [/\bldl\b|colesterol/, 'colesterol ldl'],
-  [/triglicer/, 'triglicerides'],
-  [/glicemia|glicose/, 'glicemia'],
-  [/creatinina/, 'creatinina'],
-  [/filtracao|\btfg\b|funcao renal/, 'filtracao glomerular'],
-  [/\btsh\b/, 'tsh'],
-  [/albumin/, 'albuminuria'],
-  [/fibrilacao|holter/, 'carga de fibrilacao'],
-  [/frequencia cardiaca|batimento/, 'frequencia cardiaca'],
-]
-
-/* O modelo só devolvia "serie" em 4 de 5 perguntas sobre a glicada; a pergunta já diz a medida. */
+/* O modelo só devolvia "serie" em 4 de 5 perguntas sobre a glicada, e "LDL-colesterol" não casava
+   com "colesterol ldl": a série sai da pergunta, pelo analito, sem depender do texto do modelo. */
 export function serieDaPergunta(eventos: Evento[], pergunta: string): Serie | undefined {
-  const texto = normalizar(pergunta)
-  const alvo = MEDIDAS_POPULARES.find(([re]) => re.test(texto))?.[1]
+  const alvo = analitoDaPergunta(pergunta)
   return alvo ? montarSerie(eventos, alvo) : undefined
+}
+
+/* Medida fora da lista de analitos: o nome exato, ou o único que contém o texto pedido. */
+function chaveDoPedido(medidas: Medida[], medida: string): string | undefined {
+  const analito = analitoDe(medida)
+  if (analito) return analito
+  const alvo = normalizar(medida)
+  const nomes = [...new Set(medidas.map((m) => m.nome))]
+  const contendo = nomes.filter((n) => normalizar(n).includes(alvo))
+  const nome = nomes.find((n) => normalizar(n) === alvo) ?? (contendo.length === 1 ? contendo[0] : undefined)
+  const exemplo = nome && medidas.find((m) => m.nome === nome)
+  return exemplo ? chaveDaMedida(exemplo) : undefined
 }
 
 /* Os números da série vêm sempre dos registros, nunca do modelo. */
 export function montarSerie(eventos: Evento[], medida: string): Serie | undefined {
-  const alvo = normalizar(medida)
-  const nomes = [...new Set(eventos.flatMap((e) => e.medidas ?? []).map((m) => m.nome))]
-  const contendo = nomes.filter((n) => normalizar(n).includes(alvo))
-  const nome = nomes.find((n) => normalizar(n) === alvo) ?? (contendo.length === 1 ? contendo[0] : undefined)
-  if (!nome) return undefined
-  const pontos = [...eventos].sort(porData).flatMap((e) =>
-    (e.medidas ?? []).filter((m) => m.nome === nome).map((m) => ({ data: mesAno(e.data), valor: m.valor, unidade: m.unidade })))
+  const chave = chaveDoPedido(eventos.flatMap((e) => e.medidas ?? []), medida)
+  if (!chave) return undefined
+  const pontos = [...eventos].sort(porData).flatMap((e) => (e.medidas ?? []).filter((m) => chaveDaMedida(m) === chave)
+    .map((m) => ({ data: mesAno(e.data), valor: m.valor, unidade: m.unidade, nome: m.nome })))
   if (pontos.length < 2) return undefined
-  return { nome, unidade: pontos[0].unidade, pontos: pontos.map(({ data, valor }) => ({ data, valor })) }
+  return {
+    nome: analitoDe(medida) ?? pontos[0].nome,
+    unidade: pontos.at(-1)!.unidade,
+    pontos: pontos.map(({ data, valor }) => ({ data, valor })),
+  }
 }
 
 export async function responderCopiloto({ repo, llm, perfil }: ContextoIa, entrada: EntradaCopiloto): Promise<RespostaCopiloto> {
@@ -143,5 +143,19 @@ export async function responderCopiloto({ repo, llm, perfil }: ContextoIa, entra
   if (!texto.length || !ancoras.length) return { texto: [SEM_BASE], ancoras: [], ...(aviso && { aviso }), geradoPor: llm.nome }
 
   const serie = serieDaPergunta(eventos, entrada.pergunta) ?? (r.serie ? montarSerie(eventos, r.serie.medida) : undefined)
-  return { texto, ancoras, ...(serie && { serie }), ...(aviso && { aviso }), geradoPor: llm.nome }
+  return { texto: semNegarMudanca(texto, serie), ancoras, ...(serie && { serie }), ...(aviso && { aviso }), geradoPor: llm.nome }
+}
+
+const NEGA_MUDANCA = /\b(?:nao|sem)\b[^.]{0,40}\b(?:alterac|mudanc|variac)\w*|\b(?:manteve|mantem|permaneceu)\b[^.]{0,20}\b(?:estavel|igual|o mesmo)/
+
+/* Visto em produção: "não há registros de alterações subsequentes" com a TFG caindo de 101 para 85.
+   Se a série dos registros mudou, a frase que nega a mudança sai e a evolução vem dos números. */
+function semNegarMudanca(texto: string[], serie: Serie | undefined): string[] {
+  if (!serie) return texto
+  const valores = serie.pontos.map((p) => p.valor)
+  if (valores.every((v) => v === valores[0])) return texto
+  const mantidos = texto.filter((t) => !NEGA_MUDANCA.test(normalizar(t)))
+  if (mantidos.length === texto.length) return texto
+  const evolucao = serie.pontos.map((p) => `${formatarNumero(p.valor)} ${serie.unidade} em ${p.data}`).join('; ')
+  return [...mantidos, `Nos seus registros, ${serie.nome} foi: ${evolucao}.`]
 }
