@@ -474,6 +474,16 @@
 }
 .folha-resumo__alerta .label { color: #99503c; }
 .folha-resumo__alerta p:last-child { font-size: 14.5px; font-weight: 650; }
+.folha-resumo__alerta--neutra {
+  flex-wrap: wrap; background: var(--panel); border-color: var(--line); color: var(--ink-2);
+}
+.folha-resumo__alerta--neutra p:last-of-type { font-size: 14px; font-weight: 400; }
+.folha-resumo__informar {
+  margin-left: auto; padding: 0; background: none; border: 0; cursor: pointer;
+  font: inherit; font-size: 13.5px; font-weight: 600; color: var(--accent-deep);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+@media print { .folha-resumo__informar { display: none; } }
 .folha-resumo__bloco { margin-top: var(--sp-5); }
 .folha-resumo__bloco h3 {
   font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;

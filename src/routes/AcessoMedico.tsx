@@ -144,13 +144,16 @@ function VisaoMedico({ dados, codigo, profissional, aoSair }: Liberado & { aoSai
                   {paciente.condicoes.map((c) => <li key={c} className="chip">{c}</li>)}
                 </ul>
               )}
-              <p className="medico__alergias">
-                <Icon nome="alerta" tamanho={15} />
-                <span>
-                  <strong>Alergias:</strong>{' '}
-                  {paciente.alergias.length > 0 ? paciente.alergias.join(' · ') : 'nenhuma registrada no histórico'}
-                </span>
-              </p>
+              {paciente.alergias.length > 0 ? (
+                <p className="medico__alergias">
+                  <Icon nome="alerta" tamanho={15} />
+                  <span><strong>Alergias:</strong> {paciente.alergias.join(' · ')}</span>
+                </p>
+              ) : (
+                <p className="medico__alergias medico__alergias--neutra">
+                  <span><strong>Alergias:</strong> não informadas pelo paciente</span>
+                </p>
+              )}
             </div>
           </section>
 

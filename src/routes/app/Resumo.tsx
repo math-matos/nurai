@@ -143,13 +143,24 @@ function FolhaResumo() {
           </p>
         </header>
 
-        <section className="folha-resumo__alerta">
-          <Icon nome="alerta" tamanho={16} />
-          <div>
-            <p className="label">Alergias</p>
-            <p>{perfil.alergias.length > 0 ? perfil.alergias.join(' · ') : 'Nenhuma alergia registrada'}</p>
-          </div>
-        </section>
+        {/* Lista vazia é "não informado", não "sem alergias": o alerta vermelho só aparece com alergia registrada. */}
+        {perfil.alergias.length > 0 ? (
+          <section className="folha-resumo__alerta">
+            <Icon nome="alerta" tamanho={16} />
+            <div>
+              <p className="label">Alergias</p>
+              <p>{perfil.alergias.join(' · ')}</p>
+            </div>
+          </section>
+        ) : (
+          <section className="folha-resumo__alerta folha-resumo__alerta--neutra">
+            <Icon nome="pessoa" tamanho={16} />
+            <p><strong>Alergias:</strong> não informadas</p>
+            <button type="button" className="folha-resumo__informar" onClick={() => navegar('/app/privacidade')}>
+              Informar em Meus dados
+            </button>
+          </section>
+        )}
 
         {(sintese || gerandoPara === foco || erroIa?.foco === foco) && (
           <section className="folha-resumo__bloco sintese-ia" aria-live="polite" data-testid={TID.resumoSintese}>

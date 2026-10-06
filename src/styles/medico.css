@@ -15,6 +15,7 @@
   font-size: 13.5px; color: var(--sig-alterado);
 }
 .medico__alergias svg { flex: none; margin-top: 2px; }
+.medico__alergias--neutra { color: var(--ink-2); }
 .medico__grade { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: var(--sp-5); align-items: start; }
 .medico__lateral { display: grid; gap: var(--sp-5); position: sticky; top: var(--sp-4); }
 .medico .painel { margin-bottom: 0; }
