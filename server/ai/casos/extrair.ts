@@ -66,9 +66,10 @@ Formato da resposta (JSON):
   - "cirurgia": descrição de cirurgia ou procedimento.
   - "vacina": comprovante ou registro de vacinação.
   - "documento": pedido de exame, guia, atestado, encaminhamento e outros documentos.
+- "titulo": o que o documento é, com o nome do exame. Em pedido, guia ou requisição, nomeie o(s) exame(s) pedido(s), ex.: "Pedido de perfil lipídico", "Guia de ultrassom de abdome" — nunca só "Pedido de exame".
 - "medidas": só valores numéricos presentes no texto, com ponto decimal; refMin/refMax da faixa de referência impressa. Não invente faixas.
 - Faixa "X a Y": refMin X e refMax Y. Faixa só com teto ("< X", "≤ X", "até X", "inferior a X"): refMin null e refMax X. Faixa só com piso ("> X", "≥ X", "acima de X", "superior a X"): refMin X e refMax null. Use null nos dois só quando o documento não trouxer referência para a medida.
-- "resumo": descreva o que o documento registra, sem interpretar nem diagnosticar.
+- "resumo": descreva o que o documento registra, sem interpretar nem diagnosticar. Em pedido ou guia, cite os exames pedidos pelo nome (ex.: "Pedido de perfil lipídico e hemograma.").
 - "confianca": de 0 a 1, o quanto o texto estava legível e completo.`
 
 type MedidaBruta = ExtracaoClinica['medidas'][number]
