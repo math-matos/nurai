@@ -4,7 +4,11 @@ import type { AtualizacaoPerfil, NovoPaciente, Onboarding, Perfil, Responsavel }
 export type PerfilGravado = Omit<Perfil, 'iniciais' | 'idade'>
 
 export function iniciaisDe(nome: string): string {
-  const palavras = nome.trim().split(/\s+/).filter(Boolean)
+  const palavras = nome
+    .replace(/\([^)]*\)?/g, ' ')
+    .split(/\s+/)
+    .map((p) => p.replace(/[^\p{L}]/gu, ''))
+    .filter(Boolean)
   const letras = palavras.length > 1 ? [palavras[0], palavras.at(-1)!] : palavras
   return letras.map((p) => p[0]).join('').toUpperCase()
 }
