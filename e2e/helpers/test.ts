@@ -32,6 +32,8 @@ interface FixturesTeste {
 export const test = base.extend<FixturesTeste>({
   ignorarErros: [[], { option: true }],
 
+  /* O Playwright exige o objeto de fixtures desestruturado, mesmo vazio. */
+  // eslint-disable-next-line no-empty-pattern
   ip: async ({}, usar) => {
     await usar(ipAleatorio())
   },
