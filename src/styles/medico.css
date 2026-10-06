@@ -1,5 +1,6 @@
 /* Visão do profissional: só leitura, densidade de prontuário. */
 
+.medico__marca { display: inline-flex; align-items: center; gap: var(--sp-4); }
 .medico { width: 100%; max-width: 1180px; display: grid; gap: var(--sp-5); }
 .medico__cabeca {
   display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--sp-4);

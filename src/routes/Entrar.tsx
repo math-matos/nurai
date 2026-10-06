@@ -7,7 +7,7 @@ import { Porta } from '../components/Porta'
 import { Falha } from '../components/ui'
 import { ErroApi, mensagemDeErro } from '../lib/api'
 import { descartarAviso, entrar, useSessao } from '../lib/store'
-import { focarPrimeiroErro } from '../lib/formulario'
+import { focar, focarPrimeiroErro } from '../lib/formulario'
 import { TID } from '../lib/testids'
 
 type CampoEntrar = 'email' | 'senha'
@@ -55,7 +55,7 @@ export function Entrar({ volta }: { volta: string | null }) {
       setErroGeral(mensagemDeErro(erro))
       if (erro instanceof ErroApi && erro.codigo === 'CREDENCIAIS_INVALIDAS') {
         setSenha('')
-        document.getElementById('entrar-senha')?.focus()
+        focar('entrar-senha')
       }
     }
   }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Campo } from '../components/Campo'
 import { Icon } from '../components/Icon'
 import { Porta } from '../components/Porta'
-import { AvisoIa, ChipSinal, Falha, Regua, SeloIa, Vazio } from '../components/ui'
+import { AvisoIa, ChipSinal, Falha, Marca, Regua, SeloIa, Vazio } from '../components/ui'
 import { FONTES, TIPOS } from '../data/seed'
 import type { Evento } from '../data/types'
 import { api, ErroApi, mensagemDeErro, podeRepetir, type AcessoMedico as Acesso, type ResumoIa } from '../lib/api'
@@ -123,7 +123,10 @@ function VisaoMedico({ dados, codigo, profissional, aoSair }: Liberado & { aoSai
   return (
     <div className="porta grid-paper">
       <header className="porta__topo">
-        <span className="label">Acesso do profissional · somente leitura</span>
+        <span className="medico__marca">
+          <Marca tamanho={24} />
+          <span className="label">Acesso do profissional · somente leitura</span>
+        </span>
         <button type="button" className="btn btn--ghost" onClick={aoSair} data-testid={TID.medicoSair}>
           Encerrar acesso
         </button>

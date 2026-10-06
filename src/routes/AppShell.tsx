@@ -182,7 +182,7 @@ export function AppShell({ rota }: { rota: string }) {
               type="button" className="btn btn--quiet" data-testid={TID.botaoReiniciar}
               onClick={() => setConfirmandoReinicio(true)}
             >
-              <Icon nome="recomecar" tamanho={16} /> {exemplo ? 'Reiniciar o histórico de exemplo' : 'Reiniciar meu histórico'}
+              <Icon nome="recomecar" tamanho={16} /> {exemplo ? 'Reiniciar o exemplo' : 'Reiniciar meu histórico'}
             </button>
           )}
           <button
