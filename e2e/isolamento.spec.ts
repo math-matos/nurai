@@ -9,6 +9,7 @@ const ROTAS_PROTEGIDAS: { metodo: 'GET' | 'POST' | 'PATCH' | 'DELETE'; caminho: 
   { metodo: 'GET', caminho: '/api/estado' },
   { metodo: 'GET', caminho: '/api/acessos' },
   { metodo: 'POST', caminho: '/api/eventos', corpo: {} },
+  { metodo: 'DELETE', caminho: '/api/eventos/e01' },
   { metodo: 'PATCH', caminho: '/api/consentimentos/c1' },
   { metodo: 'PATCH', caminho: '/api/passos/p1' },
   { metodo: 'POST', caminho: '/api/fontes/f1/conectar' },

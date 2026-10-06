@@ -58,7 +58,9 @@ test('profissional abre o histórico pelo código, só lê, e perde o acesso qua
   await expect(pagina.locator('input#medico-especialidade')).toHaveCount(1)
   const botoes = await pagina.getByRole('button').allTextContents()
   expect(botoes.filter((b) => ACOES_DE_ESCRITA.test(b))).toEqual([])
+  await expect(pagina.getByTestId('evento-excluir')).toHaveCount(0)
   expect((await contexto.request.get('/api/estado')).status()).toBe(401)
+  expect((await contexto.request.delete(`/api/eventos/${estado.eventos[0].id}`, { headers: CSRF })).status()).toBe(401)
 
   const gerado = respostaDe(pagina, 'POST', '/api/acesso-medico/resumo')
   await pagina.getByTestId('medico-gerar-resumo').click()
