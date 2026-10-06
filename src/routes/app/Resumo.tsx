@@ -1,12 +1,13 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Icon } from '../../components/Icon'
 import { AvisoIa, Falha, Regua, SeloIa, VazioHistorico } from '../../components/ui'
 import { formatarData, ordenarRecentes } from '../../lib/formato'
 import { agruparEspecialidades, chaveEspecialidade } from '../../data/especialidades'
 import { MEDICACOES } from '../../data/seed'
-import type { Evento } from '../../data/types'
-import { api, mensagemDeErro, podeRepetir, type Compartilhamento, type ResumoIa } from '../../lib/api'
+import type { Evento, ProximoPasso } from '../../data/types'
+import { api, mensagemDeErro, podeRepetir, type Compartilhamento, type PontoEmAberto, type ResumoIa } from '../../lib/api'
+import { agruparPontos } from '../../lib/pontos'
 import { navegar } from '../../lib/router'
 import { hoje, useAcoes, useEstado, usePerfil } from '../../lib/store'
 import { TID } from '../../lib/testids'
@@ -344,18 +345,7 @@ function FolhaResumo() {
           )}
         </section>
 
-        <section className="folha-resumo__bloco">
-          <h3>Pendências identificadas no histórico</h3>
-          <ul className="pendencias">
-            {pendentes.map((p) => (
-              <li key={p.id}>
-                <strong>{p.titulo}</strong>
-                <span>{p.prazo}</span>
-              </li>
-            ))}
-            {pendentes.length === 0 && <li>Nenhuma pendência em aberto.</li>}
-          </ul>
-        </section>
+        <PontosEmAberto eventos={eventos} pendentes={pendentes} />
 
         <footer className="folha-resumo__pe">
           Documento gerado pela Nurai a partir do histórico reunido pelo próprio titular.
@@ -422,5 +412,79 @@ function PainelAcesso({ compartilhamento, aoRevogar }: {
       </div>
       <p className="acesso__codigo num" data-testid={TID.acessoCodigo}>{compartilhamento.codigo}</p>
     </div>
+  )
+}
+
+/* Simulação R2 (P13): a folha dizia "Nenhuma pendência" enquanto a tela do médico listava o exame repetido.
+   Os pontos vêm do mesmo cálculo do servidor; os próximos passos marcados pelo paciente vêm depois. */
+function PontosEmAberto({ eventos, pendentes }: { eventos: Evento[]; pendentes: ProximoPasso[] }) {
+  const [tentativa, setTentativa] = useState(0)
+  const [resultado, setResultado] = useState<{ pontos: PontoEmAberto[] | null; erro: string | null; de: unknown }>(
+    { pontos: null, erro: null, de: null },
+  )
+
+  /* Refaz a conta quando o histórico muda (anexo ou exclusão). */
+  useEffect(() => {
+    let ativo = true
+    api.pontosEmAberto()
+      .then(({ pontosEmAberto }) => { if (ativo) setResultado({ pontos: pontosEmAberto, erro: null, de: eventos }) })
+      .catch((erro: unknown) => { if (ativo) setResultado({ pontos: null, erro: mensagemDeErro(erro), de: eventos }) })
+    return () => { ativo = false }
+  }, [eventos, tentativa])
+
+  const atual = resultado.de === eventos
+  const grupos = atual && resultado.pontos ? agruparPontos(resultado.pontos) : []
+  const titulo = (id: string) => {
+    const e = eventos.find((x) => x.id === id)
+    return e ? `${formatarData(e.data)} · ${e.titulo}` : null
+  }
+
+  return (
+    <section className="folha-resumo__bloco" aria-busy={!atual} data-testid={TID.resumoPontos}>
+      <h3>Pontos em aberto nos registros</h3>
+      <p className="folha-resumo__nota">
+        Os mesmos que o profissional vê pelo código de acesso: identificados a partir das datas e textos dos
+        registros, sem IA. Confira no documento de origem.
+      </p>
+      {!atual && <p className="painel__nada">Conferindo os registros…</p>}
+      {atual && resultado.erro && (
+        <Falha
+          mensagem={resultado.erro}
+          aoTentar={() => {
+            setResultado((r) => ({ ...r, de: null }))
+            setTentativa((n) => n + 1)
+          }}
+        />
+      )}
+      {grupos.map((g) => (
+        <div key={g.tipo} className="folha-resumo__grupo">
+          <p className="label">{g.titulo}</p>
+          <ul className="pendencias">
+            {g.itens.map((p, i) => (
+              <li key={i} data-testid={TID.resumoPonto}>
+                <strong>{p.texto}</strong>
+                <span>{p.ancoras.map(titulo).filter(Boolean).join(' · ')}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      {atual && resultado.pontos?.length === 0 && (
+        <p className="painel__nada">Nenhum ponto em aberto identificado nos registros.</p>
+      )}
+      {pendentes.length > 0 && (
+        <div className="folha-resumo__grupo">
+          <p className="label">Próximos passos ainda não resolvidos</p>
+          <ul className="pendencias">
+            {pendentes.map((p) => (
+              <li key={p.id}>
+                <strong>{p.titulo}</strong>
+                <span>{p.prazo}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   )
 }

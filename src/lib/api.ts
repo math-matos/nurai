@@ -292,6 +292,8 @@ export const api = {
 
   saude: () => requisitar<Saude>('/health'),
   estado: () => requisitar<EstadoServidor>('/estado'),
+  /* Os mesmos pontos que o médico vê pelo código, calculados dos registros sem IA. */
+  pontosEmAberto: () => requisitar<{ pontosEmAberto: PontoEmAberto[] }>('/pontos-em-aberto'),
   acessos: () => requisitar<AcessoLog[]>('/acessos'),
   reiniciar: () => requisitar<EstadoServidor>('/reiniciar', json('POST')),
 

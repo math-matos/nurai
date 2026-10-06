@@ -10,6 +10,7 @@ import {
   api, ErroApi, mensagemDeErro, podeRepetir, type AcessoMedico as Acesso, type PontoEmAberto, type ResumoIa,
 } from '../lib/api'
 import { formatarData, ordenarRecentes } from '../lib/formato'
+import { agruparPontos } from '../lib/pontos'
 import { focarPrimeiroErro } from '../lib/formulario'
 import { TID } from '../lib/testids'
 import '../styles/medico.css'
@@ -27,13 +28,6 @@ const INTERVALO_MINIMO_MS = 10_000
 
 const codigoRecusado = (erro: unknown): erro is ErroApi => erro instanceof ErroApi && erro.codigo === 'CODIGO_INVALIDO'
 
-/* Ordem de leitura do profissional: o que pode ser evitado (exame repetido) antes do que está pendente. */
-const GRUPOS_PONTOS: { tipo: PontoEmAberto['tipo']; titulo: string }[] = [
-  { tipo: 'repeticao', titulo: 'Possíveis exames repetidos' },
-  { tipo: 'pedido', titulo: 'Pedidos sem resultado' },
-  { tipo: 'retorno', titulo: 'Retornos sem consulta registrada' },
-  { tipo: 'reavaliacao', titulo: 'Reavaliações sem nova medição' },
-]
 
 /* Porta do profissional de saúde: sem conta, só com o código que o paciente gerou. Nenhuma ação de escrita. */
 export function AcessoMedico() {
@@ -280,9 +274,7 @@ function PontosEmAberto({ pontos, eventos, aoAncorar }: {
   eventos: Evento[]
   aoAncorar: (id: string) => void
 }) {
-  const grupos = GRUPOS_PONTOS
-    .map((g) => ({ ...g, itens: pontos.filter((p) => p.tipo === g.tipo) }))
-    .filter((g) => g.itens.length > 0)
+  const grupos = agruparPontos(pontos)
 
   return (
     <section className="painel" aria-labelledby="medico-pendencias" data-testid={TID.medicoPendencias}>

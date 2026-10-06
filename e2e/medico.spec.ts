@@ -288,8 +288,18 @@ test('pontos em aberto vêm do histórico mesmo sem "Reanalisar"; tentativa com 
   const verificar = () => api.post('/api/acesso-medico/verificar', { headers: CSRF, data: { codigo } })
   expect((await verificar()).status()).toBe(204)
 
+  /* Simulação R2 (P13): a folha do paciente dizia "Nenhuma pendência" enquanto o médico via o exame repetido. */
+  const pontosDoPaciente = respostaDe(page, 'GET', '/api/pontos-em-aberto')
   await page.goto('/#/app/resumo')
   await esperarApp(page)
+  const lidos = await pontosDoPaciente
+  expect(lidos.status()).toBe(200)
+  expect((await lidos.json()).pontosEmAberto).toEqual(corpo.pontosEmAberto)
+  const folha = page.getByTestId('resumo-pontos')
+  await expect(folha.getByText('Possíveis exames repetidos')).toBeVisible()
+  await expect(page.getByTestId('resumo-ponto')).toHaveCount(corpo.pontosEmAberto.length)
+  await expect(page.getByTestId('resumo-ponto').filter({ hasText: /^Possível exame repetido: pedido de perfil lipídico/ })).toHaveCount(1)
+  await expect(folha).not.toContainText('Nenhum ponto em aberto')
   await page.getByTestId('acesso-revogar').click()
   await expect(page.getByTestId('acesso-painel')).toHaveCount(0)
   expect((await verificar()).status()).toBe(404)
