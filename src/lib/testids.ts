@@ -8,7 +8,8 @@
    Linha do tempo: evento-item, evento-detalhe, ia-explicar, ia-explicacao, evento-excluir,
    evento-excluir-confirmar, evento-excluido.
    Fontes/conferência: fontes-texto, fontes-ler-texto, fontes-pdf, conferencia, conferencia-titulo,
-   conferencia-salvar, conferencia-descartar, conferencia-identidade, conferencia-confirmo-meu.
+   conferencia-salvar, conferencia-descartar, conferencia-identidade, conferencia-confirmo-meu,
+   conferencia-confirmo-meu-rodape, conferencia-motivo, conferencia-ir-confirmacao.
    IA: copiloto-pergunta, copiloto-enviar, copiloto-resposta, ia-passos, ia-resumo, resumo-sintese.
    Compartilhamento: acesso-gerar, acesso-painel, acesso-codigo, acesso-validade, acesso-copiar, acesso-revogar.
    Médico: medico-form, medico-codigo, medico-profissional, medico-entrar, medico-erro, medico-paciente,
@@ -61,6 +62,9 @@ export const TID = {
   conferenciaDescartar: 'conferencia-descartar',
   conferenciaIdentidade: 'conferencia-identidade',
   conferenciaConfirmoMeu: 'conferencia-confirmo-meu',
+  conferenciaConfirmoMeuRodape: 'conferencia-confirmo-meu-rodape',
+  conferenciaMotivo: 'conferencia-motivo',
+  conferenciaIrConfirmacao: 'conferencia-ir-confirmacao',
 
   copilotoPergunta: 'copiloto-pergunta',
   copilotoEnviar: 'copiloto-enviar',

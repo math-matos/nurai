@@ -367,7 +367,19 @@
 .revisao__campos label { display: grid; gap: 5px; }
 .revisao__rotulo { margin-top: var(--sp-2); }
 .revisao__nota { font-size: 13px; color: var(--ink-3); border-top: 1px solid var(--line); padding-top: var(--sp-3); }
-.revisao__acoes { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.revisao__acoes { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; }
+.revisao__motivo { flex-basis: 100%; font-size: 13.5px; line-height: 1.5; color: var(--sig-alterado); }
+.revisao__motivo:empty { display: none; }
+.revisao__confirmar-rodape {
+  display: flex; gap: 8px; align-items: center; padding: var(--sp-2) var(--sp-3);
+  border: 1.5px solid var(--sig-alterado); border-radius: var(--r-md); background: #fbefec;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.btn-link {
+  padding: 0; background: none; border: 0; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--accent-deep);
+  text-decoration: underline; text-underline-offset: 3px;
+}
 
 .fontes__lista { display: grid; gap: 6px; }
 .fonte {

@@ -211,11 +211,28 @@ test('documento de outro paciente exige confirmação antes de salvar', async ({
   const salvar = page.getByTestId('conferencia-salvar')
   await expect(salvar).toBeDisabled()
 
-  await page.getByTestId('conferencia-confirmo-meu').check()
+  await expect(alerta).toContainText('Confirmo que este documento é de Joana Prado Lima')
+
+  /* O botão desabilitado diz o porquê ao lado e leva até a caixa do topo. */
+  const motivo = page.getByTestId('conferencia-motivo')
+  const topo = page.getByTestId('conferencia-confirmo-meu')
+  const rodape = page.getByTestId('conferencia-confirmo-meu-rodape')
+  await expect(motivo).toContainText('Para salvar, confirme acima que o documento é de Joana Prado Lima')
+  await page.getByTestId('conferencia-ir-confirmacao').click()
+  await expect(topo).toBeFocused()
+  await expect(topo).toBeInViewport()
+
+  /* A confirmação repetida junto ao botão é o mesmo estado da do topo. */
+  await rodape.check()
+  await expect(topo).toBeChecked()
   await expect(salvar).toBeEnabled()
-  await page.getByTestId('conferencia-confirmo-meu').uncheck()
+  await expect(motivo).toBeEmpty()
+  await topo.uncheck()
+  await expect(rodape).not.toBeChecked()
   await expect(salvar).toBeDisabled()
-  await page.getByTestId('conferencia-confirmo-meu').check()
+  await expect(motivo).toContainText('Para salvar')
+  await topo.check()
+  await expect(rodape).toBeChecked()
 
   const gravacao = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/eventos')
   await salvar.click()
