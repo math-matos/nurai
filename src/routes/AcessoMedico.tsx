@@ -18,9 +18,10 @@ const ORDEM = [{ campo: 'codigo', id: 'medico-codigo' }, { campo: 'profissional'
 
 interface Liberado { dados: Acesso; codigo: string; profissional: string }
 
-/* Revalidar custa uma linha no registro do paciente (a rota pública registra cada abertura):
-   trocar de aba várias vezes seguidas conta uma vez só. */
-const INTERVALO_REVALIDACAO_MS = 10_000
+/* /verificar não registra acesso, mas divide com a abertura e o resumo o limite de 10 chamadas por minuto
+   por IP: trocar de aba várias vezes seguidas conta uma vez só. */
+const PERIODO_REVALIDACAO_MS = 60_000
+const INTERVALO_MINIMO_MS = 10_000
 
 const codigoRecusado = (erro: unknown): erro is ErroApi => erro instanceof ErroApi && erro.codigo === 'CODIGO_INVALIDO'
 
@@ -33,7 +34,6 @@ export function AcessoMedico() {
     setEncerrado(false)
     setLiberado(l)
   }
-  const atualizar = useCallback((dados: Acesso) => setLiberado((atual) => (atual ? { ...atual, dados } : atual)), [])
   /* Código revogado ou expirado com a tela aberta: os dados do paciente saem da tela na hora. */
   const encerrar = useCallback(() => {
     setLiberado(null)
@@ -41,7 +41,7 @@ export function AcessoMedico() {
   }, [])
 
   if (liberado) {
-    return <VisaoMedico {...liberado} aoSair={() => setLiberado(null)} aoAtualizar={atualizar} aoEncerrar={encerrar} />
+    return <VisaoMedico {...liberado} aoSair={() => setLiberado(null)} aoEncerrar={encerrar} />
   }
   return <FormularioCodigo aoLiberar={liberar} encerrado={encerrado} />
 }
@@ -134,13 +134,12 @@ function FormularioCodigo({ aoLiberar, encerrado }: { aoLiberar: (l: Liberado) =
 
 interface AcoesVisao {
   aoSair: () => void
-  aoAtualizar: (dados: Acesso) => void
   aoEncerrar: () => void
 }
 
-function VisaoMedico({ dados, codigo, profissional, aoSair, aoAtualizar, aoEncerrar }: Liberado & AcoesVisao) {
+function VisaoMedico({ dados, codigo, profissional, aoSair, aoEncerrar }: Liberado & AcoesVisao) {
   const { paciente, eventos, passos, expiraEm, para } = dados
-  useRevalidarAoVoltar(codigo, profissional, aoAtualizar, aoEncerrar)
+  useRevalidarCodigo(codigo, aoEncerrar)
   const [abertos, setAbertos] = useState<Set<string>>(() => new Set())
   const ordenados = ordenarRecentes(eventos)
   const pendentes = passos.filter((p) => !p.feito)
@@ -252,32 +251,31 @@ function VisaoMedico({ dados, codigo, profissional, aoSair, aoAtualizar, aoEncer
   )
 }
 
-/* Ao voltar para a aba, confere se o paciente não revogou o código enquanto a tela estava aberta. */
-function useRevalidarAoVoltar(
-  codigo: string, profissional: string, aoAtualizar: (dados: Acesso) => void, aoEncerrar: () => void,
-) {
+/* Confere, ao voltar para a aba e a cada minuto, se o paciente não revogou o código com a tela aberta. */
+function useRevalidarCodigo(codigo: string, aoEncerrar: () => void) {
   useEffect(() => {
     let ativo = true
     let ultima = 0
     const revalidar = async () => {
-      if (document.visibilityState !== 'visible' || Date.now() - ultima < INTERVALO_REVALIDACAO_MS) return
+      if (document.visibilityState !== 'visible' || Date.now() - ultima < INTERVALO_MINIMO_MS) return
       ultima = Date.now()
       try {
-        const dados = await api.acessoMedico(codigo, profissional)
-        if (ativo) aoAtualizar(dados)
+        await api.verificarAcessoMedico(codigo)
       } catch (erro) {
         if (ativo && codigoRecusado(erro)) aoEncerrar()
       }
     }
     const aoVoltar = () => { void revalidar() }
+    const relogio = window.setInterval(aoVoltar, PERIODO_REVALIDACAO_MS)
     window.addEventListener('focus', aoVoltar)
     document.addEventListener('visibilitychange', aoVoltar)
     return () => {
       ativo = false
+      window.clearInterval(relogio)
       window.removeEventListener('focus', aoVoltar)
       document.removeEventListener('visibilitychange', aoVoltar)
     }
-  }, [codigo, profissional, aoAtualizar, aoEncerrar])
+  }, [codigo, aoEncerrar])
 }
 
 function ItemCompacto({ evento: e, aberto, aoAlternar }: { evento: Evento; aberto: boolean; aoAlternar: (a: boolean) => void }) {

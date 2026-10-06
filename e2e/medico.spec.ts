@@ -112,7 +112,8 @@ test('tela aberta do profissional se fecha quando ele volta à aba depois da rev
 
   expect((await page.request.delete(`/api/compartilhamentos/${codigo}`, { headers: CSRF })).status()).toBeLessThan(300)
 
-  const conferencia = respostaDe(pagina, 'POST', '/api/acesso-medico')
+  /* A conferência usa /verificar, que não registra uma nova abertura no histórico do paciente. */
+  const conferencia = respostaDe(pagina, 'POST', '/api/acesso-medico/verificar')
   await pagina.evaluate(() => window.dispatchEvent(new Event('focus')))
   expect((await conferencia).status()).toBe(404)
   const aviso = pagina.getByTestId('medico-encerrado')
@@ -120,6 +121,8 @@ test('tela aberta do profissional se fecha quando ele volta à aba depois da rev
   await expect(aviso).toBeFocused()
   await expect(pagina.getByTestId('medico-paciente')).toHaveCount(0)
   await expect(pagina.locator('body')).not.toContainText(conta.nome)
+  const aberturas = (await lerEstado(page.request)).acessos.filter((a) => a.acao === 'Abriu o histórico pelo código')
+  expect(aberturas).toHaveLength(1)
 
   /* Um código novo abre de novo e tira o aviso. */
   const novo = await (await page.request.post('/api/compartilhamentos', { headers: CSRF, data: { para: 'Dra. Teste' } })).json()
