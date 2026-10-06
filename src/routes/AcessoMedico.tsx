@@ -160,8 +160,24 @@ function VisaoMedico({ dados, codigo, profissional, aoSair, aoEncerrar }: Libera
     return novo
   })
 
-  const irPara = (id: string) => {
+  /* Abrir um registro mostra dado clínico novo na tela: antes, confere se o paciente não revogou o código
+     (simulação R2: com a tela aberta, a médica ainda abriu um registro depois da revogação). Só a recusa
+     do código impede; limite excedido ou falha de rede seguem a regra da conferência periódica. */
+  const abrir = async (id: string) => {
+    try {
+      await api.verificarAcessoMedico(codigo)
+    } catch (erro) {
+      if (codigoRecusado(erro)) {
+        aoEncerrar()
+        return false
+      }
+    }
     alternar(id, true)
+    return true
+  }
+
+  const irPara = async (id: string) => {
+    if (!(await abrir(id))) return
     requestAnimationFrame(() => {
       const alvo = document.getElementById(`medico-evento-${id}`)
       alvo?.scrollIntoView({ block: 'center' })
@@ -233,7 +249,10 @@ function VisaoMedico({ dados, codigo, profissional, aoSair, aoEncerrar }: Libera
                 <ol className="compacta">
                   {ordenados.map((e) => (
                     <li key={e.id}>
-                      <ItemCompacto evento={e} aberto={abertos.has(e.id)} aoAlternar={(a) => alternar(e.id, a)} />
+                      <ItemCompacto
+                        evento={e} aberto={abertos.has(e.id)}
+                        aoAbrir={() => { void abrir(e.id) }} aoFechar={() => alternar(e.id, false)}
+                      />
                     </li>
                   ))}
                 </ol>
@@ -241,10 +260,11 @@ function VisaoMedico({ dados, codigo, profissional, aoSair, aoEncerrar }: Libera
             </section>
 
             <div className="medico__lateral">
-              <PontosEmAberto pontos={pontosEmAberto} eventos={eventos} aoAncorar={irPara} />
+              <PontosEmAberto pontos={pontosEmAberto} eventos={eventos} aoAncorar={(id) => { void irPara(id) }} />
 
               <ResumoMedico
-                codigo={codigo} profissional={profissional} eventos={eventos} aoAncorar={irPara} aoEncerrar={aoEncerrar}
+                codigo={codigo} profissional={profissional} eventos={eventos} aoAncorar={(id) => { void irPara(id) }}
+                aoEncerrar={aoEncerrar}
               />
             </div>
           </div>
@@ -336,15 +356,28 @@ function useRevalidarCodigo(codigo: string, aoEncerrar: () => void) {
   }, [codigo, aoEncerrar])
 }
 
-function ItemCompacto({ evento: e, aberto, aoAlternar }: { evento: Evento; aberto: boolean; aoAlternar: (a: boolean) => void }) {
+/* A abertura passa pela conferência do código: o clique no resumo não abre direto. */
+function ItemCompacto({ evento: e, aberto, aoAbrir, aoFechar }: {
+  evento: Evento
+  aberto: boolean
+  aoAbrir: () => void
+  aoFechar: () => void
+}) {
   return (
     <details
       id={`medico-evento-${e.id}`} className="compacta__item" open={aberto}
       style={{ ['--c' as string]: FONTES[e.fonte].cor }}
-      onToggle={(ev) => aoAlternar((ev.currentTarget as HTMLDetailsElement).open)}
+      onToggle={(ev) => { if (!(ev.currentTarget as HTMLDetailsElement).open) aoFechar() }}
       data-testid={TID.medicoEvento}
     >
-      <summary className="compacta__resumo">
+      <summary
+        className="compacta__resumo"
+        onClick={(ev) => {
+          if (aberto) return
+          ev.preventDefault()
+          aoAbrir()
+        }}
+      >
         <time className="compacta__data num" dateTime={e.data}>{formatarData(e.data)}</time>
         <span>
           <span className="compacta__titulo">{e.titulo}</span>
