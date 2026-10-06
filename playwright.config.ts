@@ -45,7 +45,8 @@ export default defineConfig({
         {
           command: 'pnpm dev:api',
           url: 'http://localhost:3001/api/health',
-          reuseExistingServer: true,
+          env: { NURAI_SEM_ENV_LOCAL: '1' },
+          reuseExistingServer: false,
           timeout: 120_000,
           stdout: 'ignore',
           stderr: 'pipe',
