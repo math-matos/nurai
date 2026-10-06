@@ -5,7 +5,7 @@ import { Icon } from '../../components/Icon'
 import { Falha } from '../../components/ui'
 import { ErroApi, mensagemDeErro, RELACOES, type MudancasPerfil, type Perfil } from '../../lib/api'
 import { focarPrimeiroErro } from '../../lib/formulario'
-import { atualizarPerfil, excluirConta, isoHoje } from '../../lib/store'
+import { atualizarPerfil, isoHoje } from '../../lib/store'
 import { TID } from '../../lib/testids'
 
 type CampoPerfil = 'nome' | 'dataNascimento' | 'condicoes' | 'alergias' | 'cartaoSus' | 'plano' | 'responsavelNome' | 'relacao'
@@ -147,8 +147,8 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
             onChange={(e) => alternarCuidador(e.target.checked)}
           />
           <span className="consentimento__texto">
-            <strong>Este histórico é de alguém que eu cuido.</strong> O nome acima é o do paciente; as ações
-            que você fizer ficam registradas no seu nome, como responsável. Desmarque se o histórico for seu.
+            <strong>Este histórico é de alguém que eu cuido.</strong> Os dados acima são do paciente, e o que
+            você fizer fica registrado como ação sua, de responsável. Desmarque se o histórico for seu.
           </span>
         </label>
         {form.cuidador && (
@@ -207,68 +207,5 @@ function AreaLista({ id, rotulo, valor, erro, exemplo, aoMudar, desabilitado }: 
       <p id={`${id}-dica`} className="campo__dica">Uma por linha.</p>
       {erro && <p id={`${id}-erro`} className="campo__erro">{erro}</p>}
     </div>
-  )
-}
-
-const PALAVRA = 'EXCLUIR'
-
-export function ExcluirConta({ convidado }: { convidado: boolean }) {
-  const [confirmando, setConfirmando] = useState(false)
-  const [digitado, setDigitado] = useState('')
-  const [excluindo, setExcluindo] = useState(false)
-  const [erro, setErro] = useState<string | null>(null)
-
-  const excluir = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (excluindo || digitado.trim() !== PALAVRA) return
-    setExcluindo(true)
-    setErro(null)
-    try {
-      await excluirConta()
-    } catch (falha) {
-      setErro(mensagemDeErro(falha))
-      setExcluindo(false)
-    }
-  }
-
-  const cancelar = () => {
-    setConfirmando(false)
-    setDigitado('')
-    setErro(null)
-  }
-
-  return (
-    <section className="painel painel--perigo" aria-labelledby="excluir-conta">
-      <div className="painel__cabeca">
-        <h2 id="excluir-conta">Excluir minha conta</h2>
-        <p>
-          Apaga {convidado ? 'esta conta de demonstração' : 'a sua conta'}, todo o histórico,
-          as permissões, os acessos compartilhados e o registro de acessos. Não dá para desfazer.
-        </p>
-      </div>
-      {confirmando ? (
-        <form className="formulario excluir" noValidate onSubmit={(e) => { void excluir(e) }} aria-busy={excluindo}>
-          <Campo
-            id="excluir-confirmacao" rotulo={`Para confirmar, digite ${PALAVRA}`} value={digitado}
-            autoComplete="off" spellCheck={false} autoFocus disabled={excluindo}
-            onChange={(e) => setDigitado(e.target.value)} data-testid={TID.excluirConfirmacao}
-          />
-          <div aria-live="assertive">{erro && <Falha mensagem={erro} />}</div>
-          <div className="excluir__acoes">
-            <button
-              type="submit" className="btn btn--perigo" data-testid={TID.excluirBotao}
-              disabled={excluindo || digitado.trim() !== PALAVRA}
-            >
-              {excluindo ? 'Excluindo…' : 'Excluir definitivamente'}
-            </button>
-            <button type="button" className="btn btn--ghost" onClick={cancelar} disabled={excluindo}>Cancelar</button>
-          </div>
-        </form>
-      ) : (
-        <button type="button" className="btn btn--ghost btn--perigo-leve" onClick={() => setConfirmando(true)}>
-          Excluir minha conta
-        </button>
-      )}
-    </section>
   )
 }
