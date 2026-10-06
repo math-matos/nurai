@@ -1,6 +1,9 @@
-import { comConexao, fecharPool, oracleConfigurado, variaveisOracleAusentes } from '../db/conexao.js'
-import { criarRepoOracle } from '../db/oracle.js'
-import { aplicarSchema } from '../db/schema.js'
+/* pnpm db:setup            cria o que faltar do schema (idempotente; não semeia paciente)
+   pnpm db:setup --recriar  DERRUBA e recria todas as tabelas da Nurai: APAGA todos os dados
+                            (pacientes, contas, sessões, históricos). Necessário uma vez para sair
+                            do schema single-patient antigo. */
+import { fecharPool, oracleConfigurado, variaveisOracleAusentes } from '../db/conexao.js'
+import { aplicarSchema, derrubarSchema, TABELAS } from '../db/schema.js'
 
 try {
   process.loadEnvFile('.env.local')
@@ -13,20 +16,14 @@ if (!oracleConfigurado()) {
   process.exit(1)
 }
 
-const resetar = process.argv.includes('--reset')
+const recriar = process.argv.includes('--recriar')
 
 try {
-  console.log(`[db:setup] schema: ${await aplicarSchema()} blocos aplicados`)
-  const eventos = await comConexao(async (conn) => {
-    const r = await conn.execute<{ N: number }>("SELECT COUNT(*) n FROM eventos WHERE paciente_id = 'helena'")
-    return r.rows?.[0].N ?? 0
-  })
-  if (eventos === 0 || resetar) {
-    await criarRepoOracle().reiniciar()
-    console.log(`[db:setup] seed aplicado${resetar ? ' (--reset)' : ''}`)
-  } else {
-    console.log(`[db:setup] seed mantido: ${eventos} eventos já existem (use --reset para re-semear)`)
+  if (recriar) {
+    await derrubarSchema()
+    console.log(`[db:setup] --recriar: tabelas derrubadas (${TABELAS.join(', ')})`)
   }
+  console.log(`[db:setup] schema: ${await aplicarSchema()} blocos aplicados`)
 } catch (erro) {
   console.error('[db:setup] falhou:', erro instanceof Error ? erro.message : erro)
   process.exitCode = 1

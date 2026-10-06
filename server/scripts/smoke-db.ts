@@ -1,4 +1,5 @@
 import { comConexao, fecharPool, oracleConfigurado, usaWallet, variaveisOracleAusentes } from '../db/conexao.js'
+import { TABELAS } from '../db/schema.js'
 
 try {
   process.loadEnvFile('.env.local')
@@ -24,8 +25,15 @@ try {
     )
     console.log(`[smoke:db] ${versao.rows?.[0].V} (${ms(t)})`)
     t = performance.now()
-    const eventos = await conn.execute<{ N: number }>("SELECT COUNT(*) n FROM eventos WHERE paciente_id = 'helena'")
-    console.log(`[smoke:db] eventos da paciente: ${eventos.rows?.[0].N} (${ms(t)})`)
+    const tabelas = await conn.execute<{ N: number }>(
+      `SELECT COUNT(*) n FROM user_tables WHERE table_name IN (${TABELAS.map((t) => `'${t.toUpperCase()}'`).join(', ')})`,
+    )
+    console.log(`[smoke:db] tabelas da Nurai: ${tabelas.rows?.[0].N}/${TABELAS.length} (${ms(t)})`)
+    t = performance.now()
+    const contas = await conn.execute<{ U: number; P: number }>(
+      'SELECT (SELECT COUNT(*) FROM usuarios) u, (SELECT COUNT(*) FROM pacientes) p FROM dual',
+    )
+    console.log(`[smoke:db] usuários: ${contas.rows?.[0].U}, pacientes: ${contas.rows?.[0].P} (${ms(t)})`)
   })
   console.log(`[smoke:db] ok — total ${ms(inicio)}`)
 } catch (erro) {

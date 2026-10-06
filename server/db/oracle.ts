@@ -1,21 +1,23 @@
 import { randomUUID } from 'node:crypto'
 import oracledb from 'oracledb'
-import {
-  ACESSOS, CONSENTIMENTOS, EVENTOS, FONTES_CONECTADAS, PACIENTE, PROXIMOS_PASSOS,
-} from '../../src/data/seed.js'
 import type { AcessoLog, Consentimento, Evento, ProximoPasso } from '../../src/data/types.js'
 import { comConexao, transacao } from './conexao.js'
 import { gerarCodigo } from './codigo.js'
 import { agora, hoje } from './datas.js'
+import { dadosIniciais } from './exemplo.js'
+import { contasOracle, gravarPerfil, lerPerfil, violouChave } from './oracle-contas.js'
+import { montarPerfil } from './perfil.js'
 import {
-  ErroConflito, semOpcionaisVazios, type Compartilhamento, type FonteConectada, type NovoAcesso, type Repositorio,
+  ErroConflito, semOpcionaisVazios, type Compartilhamento, type FonteConectada, type ModoOnboarding, type NovoAcesso,
+  type Onboarding, type Repositorio, type RepositorioPaciente,
 } from './repo.js'
 
 type Linha = Record<string, unknown>
 type Bind = Record<string, string | number | null>
 
-const PACIENTE_ID = 'helena'
-const TABELAS = ['eventos', 'consentimentos', 'acessos', 'passos', 'fontes', 'compartilhamentos']
+const TABELAS_DO_PACIENTE = ['eventos', 'consentimentos', 'acessos', 'passos', 'fontes', 'compartilhamentos']
+/* 31^6 códigos: colisão é rara, mas o código é chave global. */
+const TENTATIVAS_CODIGO = 3
 
 /* Instantes trafegam no formato exibido (horário de Brasília) e o banco guarda TIMESTAMP WITH TIME ZONE:
    a ida e a volta usam o mesmo fuso, então o texto devolvido é exatamente o que foi gravado. */
@@ -61,8 +63,6 @@ const SQL = {
     VALUES (:paciente, :id, :nome, :fonte, :estado, :registros, :ultima)`,
   inserirCompartilhamento: `INSERT INTO compartilhamentos (paciente_id, codigo, criado_em, para, expira_em)
     VALUES (:paciente, :codigo, ${instante('criadoEm')}, :para, ${instante('criadoEm')} + INTERVAL '30' DAY)`,
-  inserirPaciente: `MERGE INTO pacientes p USING (SELECT :paciente id, :nome nome FROM dual) s ON (p.id = s.id)
-    WHEN NOT MATCHED THEN INSERT (id, nome) VALUES (s.id, s.nome)`,
 }
 
 const semNulos = (l: Linha) => Object.fromEntries(Object.entries(l).filter(([, v]) => v !== null))
@@ -91,23 +91,18 @@ const paraPasso = (l: Linha) => ({
 const paraFonte = (l: Linha) => l as FonteConectada
 const paraCompartilhamento = (l: Linha) => l as unknown as Compartilhamento
 
-const linhaEvento = (e: Evento): Bind => ({
-  paciente: PACIENTE_ID, id: e.id, data: e.data, tipo: e.tipo, titulo: e.titulo, instituicao: e.instituicao,
+const linhaEvento = (paciente: string, e: Evento): Bind => ({
+  paciente, id: e.id, data: e.data, tipo: e.tipo, titulo: e.titulo, instituicao: e.instituicao,
   fonte: e.fonte, especialidade: e.especialidade ?? null, resumo: e.resumo, sinal: e.sinal,
   medidas: e.medidas ? JSON.stringify(e.medidas) : null, tags: JSON.stringify(e.tags), origem: e.origem,
   confianca: e.confianca ?? null, documento: e.documento ?? null, novo: e.novo === undefined ? null : Number(e.novo),
 })
 
-const linhaConsentimento = (c: Consentimento): Bind => ({ paciente: PACIENTE_ID, ...c, ativo: Number(c.ativo) })
-const linhaAcesso = (a: AcessoLog): Bind => ({ paciente: PACIENTE_ID, ...a })
-const linhaPasso = (p: ProximoPasso): Bind =>
-  ({ paciente: PACIENTE_ID, ...p, ancoras: JSON.stringify(p.ancoras), feito: Number(p.feito) })
-const linhaFonte = (f: FonteConectada): Bind => ({ paciente: PACIENTE_ID, ...f })
-
-async function selecionar(conn: oracledb.Connection, sql: string, binds: Bind = {}) {
-  const r = await conn.execute<Linha>(sql, { paciente: PACIENTE_ID, ...binds })
-  return r.rows ?? []
-}
+const linhaConsentimento = (paciente: string, c: Consentimento): Bind => ({ paciente, ...c, ativo: Number(c.ativo) })
+const linhaAcesso = (paciente: string, a: AcessoLog): Bind => ({ paciente, ...a })
+const linhaPasso = (paciente: string, p: ProximoPasso): Bind =>
+  ({ paciente, ...p, ancoras: JSON.stringify(p.ancoras), feito: Number(p.feito) })
+const linhaFonte = (paciente: string, f: FonteConectada): Bind => ({ paciente, ...f })
 
 /* executeMany precisa dos tipos declarados: colunas opcionais vêm null em várias linhas. */
 async function inserirVarios(conn: oracledb.Connection, sql: string, linhas: Bind[]) {
@@ -121,20 +116,31 @@ async function inserirVarios(conn: oracledb.Connection, sql: string, linhas: Bin
   await conn.executeMany(sql, linhas, { bindDefs })
 }
 
-/* ORA-00001: unique constraint violated; a mensagem traz o nome da constraint. */
-const violouChave = (e: unknown, constraint: string) =>
-  (e as { errorNum?: number }).errorNum === 1 && (e as Error).message.toUpperCase().includes(constraint)
-
-async function registrar(conn: oracledb.Connection, log: NovoAcesso): Promise<AcessoLog> {
-  const completo = { id: `a${Date.now()}-${randomUUID().slice(0, 8)}`, quando: agora(), ...log }
-  await conn.execute(SQL.inserirAcesso, linhaAcesso(completo))
-  return completo
+/* Apaga os dados do paciente e grava o ponto de partida do modo (exemplo: seed; vazio/pendente: nada). */
+async function recomecar(conn: oracledb.Connection, paciente: string, modo: Onboarding, titular: string) {
+  for (const tabela of TABELAS_DO_PACIENTE) {
+    await conn.execute(`DELETE FROM ${tabela} WHERE paciente_id = :paciente`, { paciente })
+  }
+  const dados = dadosIniciais(modo, titular)
+  await inserirVarios(conn, SQL.inserirEvento, dados.eventos.map((e) => linhaEvento(paciente, e)))
+  await inserirVarios(conn, SQL.inserirConsentimento, dados.consentimentos.map((c) => linhaConsentimento(paciente, c)))
+  /* O log vem do mais recente para o mais antigo; a leitura ordena por "ordem" decrescente. */
+  await inserirVarios(conn, SQL.inserirAcesso, dados.acessos.toReversed().map((a) => linhaAcesso(paciente, a)))
+  await inserirVarios(conn, SQL.inserirPasso, dados.passos.map((p) => linhaPasso(paciente, p)))
+  await inserirVarios(conn, SQL.inserirFonte, dados.fontes.map((f) => linhaFonte(paciente, f)))
 }
 
-export function criarRepoOracle(): Repositorio {
-  return {
-    nome: 'oracle',
+function repoPaciente(paciente: string): RepositorioPaciente {
+  const selecionar = async (conn: oracledb.Connection, sql: string, binds: Bind = {}) =>
+    (await conn.execute<Linha>(sql, { paciente, ...binds })).rows ?? []
 
+  async function registrar(conn: oracledb.Connection, log: NovoAcesso): Promise<AcessoLog> {
+    const completo = { id: `a${Date.now()}-${randomUUID().slice(0, 8)}`, quando: agora(), ...log }
+    await conn.execute(SQL.inserirAcesso, linhaAcesso(paciente, completo))
+    return completo
+  }
+
+  return {
     estado: () => comConexao(async (conn) => ({
       eventos: (await selecionar(conn, SQL.eventos)).map(paraEvento),
       consentimentos: (await selecionar(conn, SQL.consentimentos)).map(paraConsentimento),
@@ -146,7 +152,7 @@ export function criarRepoOracle(): Repositorio {
 
     adicionarEvento: (evento, autor) => transacao(async (conn) => {
       try {
-        await conn.execute(SQL.inserirEvento, linhaEvento(evento))
+        await conn.execute(SQL.inserirEvento, linhaEvento(paciente, evento))
       } catch (e) {
         if (violouChave(e, 'EVENTOS_PK')) throw new ErroConflito(`Evento "${evento.id}" já existe`)
         throw e
@@ -157,8 +163,7 @@ export function criarRepoOracle(): Repositorio {
 
     alternarConsentimento: (id, autor) => transacao(async (conn) => {
       const r = await conn.execute(
-        'UPDATE consentimentos SET ativo = 1 - ativo WHERE paciente_id = :paciente AND id = :id',
-        { paciente: PACIENTE_ID, id },
+        'UPDATE consentimentos SET ativo = 1 - ativo WHERE paciente_id = :paciente AND id = :id', { paciente, id },
       )
       if (!r.rowsAffected) return null
       const [c] = (await selecionar(conn, SQL.consentimento, { id })).map(paraConsentimento)
@@ -170,31 +175,36 @@ export function criarRepoOracle(): Repositorio {
 
     alternarPasso: (id) => transacao(async (conn) => {
       const r = await conn.execute(
-        'UPDATE passos SET feito = 1 - feito WHERE paciente_id = :paciente AND id = :id',
-        { paciente: PACIENTE_ID, id },
+        'UPDATE passos SET feito = 1 - feito WHERE paciente_id = :paciente AND id = :id', { paciente, id },
       )
       if (!r.rowsAffected) return null
       return (await selecionar(conn, SQL.passo, { id })).map(paraPasso)[0]
     }),
 
     substituirPassos: (passos) => transacao(async (conn) => {
-      await conn.execute('DELETE FROM passos WHERE paciente_id = :paciente', { paciente: PACIENTE_ID })
-      await inserirVarios(conn, SQL.inserirPasso, passos.map(linhaPasso))
+      await conn.execute('DELETE FROM passos WHERE paciente_id = :paciente', { paciente })
+      await inserirVarios(conn, SQL.inserirPasso, passos.map((p) => linhaPasso(paciente, p)))
       return structuredClone(passos)
     }),
 
     criarCompartilhamento: (para, autor) => transacao(async (conn) => {
-      const codigo = gerarCodigo()
-      const compartilhamento: Compartilhamento = { codigo, criadoEm: agora(), para }
-      await conn.execute(SQL.inserirCompartilhamento, { paciente: PACIENTE_ID, ...compartilhamento })
-      await registrar(conn, { quem: autor, papel: 'Titular', acao: 'Gerou acesso temporário', itens: `${para}, 30 dias` })
-      return compartilhamento
+      for (let tentativa = 1; ; tentativa++) {
+        const compartilhamento: Compartilhamento = { codigo: gerarCodigo(), criadoEm: agora(), para }
+        try {
+          await conn.execute(SQL.inserirCompartilhamento, { paciente, ...compartilhamento })
+        } catch (e) {
+          if (violouChave(e, 'COMPARTILHAMENTOS_PK') && tentativa < TENTATIVAS_CODIGO) continue
+          throw e
+        }
+        await registrar(conn, { quem: autor, papel: 'Titular', acao: 'Gerou acesso temporário', itens: `${para}, 30 dias` })
+        return compartilhamento
+      }
     }),
 
     conectarFonte: (id) => transacao(async (conn) => {
       const r = await conn.execute(
         `UPDATE fontes SET estado = 'conectado', ultima = :ultima WHERE paciente_id = :paciente AND id = :id`,
-        { paciente: PACIENTE_ID, id, ultima: hoje() },
+        { paciente, id, ultima: hoje() },
       )
       if (!r.rowsAffected) return null
       return (await selecionar(conn, SQL.fonte, { id })).map(paraFonte)[0]
@@ -205,16 +215,26 @@ export function criarRepoOracle(): Repositorio {
     registrarAcesso: (log) => transacao((conn) => registrar(conn, log)),
 
     reiniciar: () => transacao(async (conn) => {
-      await conn.execute(SQL.inserirPaciente, { paciente: PACIENTE_ID, nome: PACIENTE.nome })
-      for (const tabela of TABELAS) {
-        await conn.execute(`DELETE FROM ${tabela} WHERE paciente_id = :paciente`, { paciente: PACIENTE_ID })
-      }
-      await inserirVarios(conn, SQL.inserirEvento, EVENTOS.map(linhaEvento))
-      await inserirVarios(conn, SQL.inserirConsentimento, CONSENTIMENTOS.map(linhaConsentimento))
-      /* ACESSOS vem do mais recente para o mais antigo; a leitura ordena por "ordem" decrescente. */
-      await inserirVarios(conn, SQL.inserirAcesso, ACESSOS.toReversed().map(linhaAcesso))
-      await inserirVarios(conn, SQL.inserirPasso, PROXIMOS_PASSOS.map(linhaPasso))
-      await inserirVarios(conn, SQL.inserirFonte, FONTES_CONECTADAS.map(linhaFonte))
+      const perfil = await lerPerfil(conn, paciente, true)
+      if (!perfil) throw new Error(`Paciente "${paciente}" não existe`)
+      await recomecar(conn, paciente, perfil.onboarding, perfil.nome)
+    }),
+  }
+}
+
+export function criarRepoOracle(): Repositorio {
+  return {
+    nome: 'oracle',
+    paraPaciente: repoPaciente,
+    ...contasOracle(),
+
+    aplicarOnboarding: (id, modo: ModoOnboarding) => transacao(async (conn) => {
+      const atual = await lerPerfil(conn, id, true)
+      if (!atual) return null
+      const perfil = { ...atual, onboarding: modo }
+      await gravarPerfil(conn, perfil)
+      await recomecar(conn, id, modo, perfil.nome)
+      return montarPerfil(perfil)
     }),
   }
 }

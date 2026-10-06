@@ -1,13 +1,16 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import {
-  ACESSOS, CONSENTIMENTOS, EVENTOS, FONTES_CONECTADAS, PROXIMOS_PASSOS,
-} from '../../src/data/seed.js'
+import { randomUUID } from 'node:crypto'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Evento, ProximoPasso } from '../../src/data/types.js'
-import { ErroConflito, type Repositorio } from './repo.js'
+import { dadosExemplo } from './exemplo.js'
+import {
+  ErroConflito, type Perfil, type Repositorio, type RepositorioPaciente,
+} from './repo.js'
 
-const AUTOR = 'Helena Duarte Nogueira'
+const AUTOR = 'Paciente Teste da Silva'
+const EXEMPLO = dadosExemplo(AUTOR)
 const FORMATO_QUANDO = /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/
 const FORMATO_DIA = /^\d{2}\/\d{2}\/\d{4}$/
+const MINUTO = 60_000
 
 const EVENTO_NOVO: Evento = {
   id: 'u1', data: '2026-09-01', tipo: 'exame', titulo: 'Perfil lipídico',
@@ -17,121 +20,134 @@ const EVENTO_NOVO: Evento = {
   medidas: [{ nome: 'LDL', valor: 162, unidade: 'mg/dL', refMin: 0, refMax: 130, sinal: 'alterado' }],
 }
 
+/* O Oracle de teste persiste entre execuções: emails e chaves únicos, e cada teste apaga quem criou. */
+const emailUnico = (prefixo = 'teste') => `${prefixo}+${randomUUID()}@exemplo.com`
+
 export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Promise<Repositorio>) {
   describe(`Repositorio (${nome})`, () => {
-    let repo: Repositorio
+    let raiz: Repositorio
+    let criados: string[]
 
     beforeEach(async () => {
-      repo = await fabrica()
-      await repo.reiniciar()
+      raiz = await fabrica()
+      criados = []
     })
 
-    it('começa com o estado do seed', async () => {
-      expect(await repo.estado()).toEqual({
-        eventos: EVENTOS,
-        consentimentos: CONSENTIMENTOS,
-        acessos: ACESSOS,
-        passos: PROXIMOS_PASSOS,
-        fontes: FONTES_CONECTADAS,
-        compartilhamento: null,
+    afterEach(async () => {
+      for (const id of criados) await raiz.excluirPaciente(id)
+    })
+
+    async function novoPaciente(modo: 'pendente' | 'vazio' | 'exemplo' = 'exemplo', nomePaciente = AUTOR) {
+      const perfil = await raiz.criarPaciente({ nome: nomePaciente, convidado: false })
+      criados.push(perfil.pacienteId)
+      if (modo !== 'pendente') await raiz.aplicarOnboarding(perfil.pacienteId, modo)
+      return { perfil, repo: raiz.paraPaciente(perfil.pacienteId) }
+    }
+
+    describe('dados do paciente', () => {
+      let repo: RepositorioPaciente
+
+      beforeEach(async () => {
+        repo = (await novoPaciente('exemplo')).repo
       })
-    })
 
-    it('estado() devolve uma cópia que não altera o repositório', async () => {
-      const e = await repo.estado()
-      e.eventos.pop()
-      e.consentimentos[0].ativo = !e.consentimentos[0].ativo
-      expect((await repo.estado()).eventos).toHaveLength(EVENTOS.length)
-      expect((await repo.estado()).consentimentos[0].ativo).toBe(CONSENTIMENTOS[0].ativo)
-    })
+      it('onboarding exemplo começa com o seed, com o nome do titular no log', async () => {
+        expect(await repo.estado()).toEqual({ ...EXEMPLO, compartilhamento: null })
+        expect(EXEMPLO.acessos.filter((a) => a.papel === 'Titular').map((a) => a.quem)).toEqual([AUTOR])
+      })
 
-    describe('adicionarEvento', () => {
-      it('anexa o evento ao fim e registra o acesso do autor', async () => {
-        const salvo = await repo.adicionarEvento(EVENTO_NOVO, AUTOR)
-        expect(salvo).toEqual(EVENTO_NOVO)
+      it('estado() devolve uma cópia que não altera o repositório', async () => {
+        const e = await repo.estado()
+        e.eventos.pop()
+        e.consentimentos[0].ativo = !e.consentimentos[0].ativo
+        expect((await repo.estado()).eventos).toHaveLength(EXEMPLO.eventos.length)
+        expect((await repo.estado()).consentimentos[0].ativo).toBe(EXEMPLO.consentimentos[0].ativo)
+      })
 
-        const { eventos, acessos } = await repo.estado()
-        expect(eventos).toHaveLength(EVENTOS.length + 1)
-        expect(eventos.at(-1)).toEqual(EVENTO_NOVO)
-        expect(acessos).toHaveLength(ACESSOS.length + 1)
-        expect(acessos[0]).toMatchObject({
-          quem: AUTOR, papel: 'Titular', acao: 'Anexou documento ao histórico', itens: 'Perfil lipídico',
+      describe('adicionarEvento', () => {
+        it('anexa o evento ao fim e registra o acesso do autor', async () => {
+          const salvo = await repo.adicionarEvento(EVENTO_NOVO, AUTOR)
+          expect(salvo).toEqual(EVENTO_NOVO)
+
+          const { eventos, acessos } = await repo.estado()
+          expect(eventos).toHaveLength(EXEMPLO.eventos.length + 1)
+          expect(eventos.at(-1)).toEqual(EVENTO_NOVO)
+          expect(acessos).toHaveLength(EXEMPLO.acessos.length + 1)
+          expect(acessos[0]).toMatchObject({
+            quem: AUTOR, papel: 'Titular', acao: 'Anexou documento ao histórico', itens: 'Perfil lipídico',
+          })
+          expect(acessos[0].id).toMatch(/^a/)
+          expect(acessos[0].quando).toMatch(FORMATO_QUANDO)
         })
-        expect(acessos[0].id).toMatch(/^a/)
-        expect(acessos[0].quando).toMatch(FORMATO_QUANDO)
-      })
-    })
 
-    /* O Oracle grava '' como NULL: string opcional vazia equivale a campo ausente nos dois repositórios. */
-    it('adicionarEvento trata especialidade e documento vazios como ausentes', async () => {
-      const comVazios = { ...EVENTO_NOVO, especialidade: '', documento: '' }
-      const esperado = Object.fromEntries(Object.entries(comVazios).filter(([, v]) => v !== ''))
-      expect(await repo.adicionarEvento(comVazios, AUTOR)).toEqual(esperado)
-      const salvo = (await repo.estado()).eventos.at(-1)
-      expect(salvo).toEqual(esperado)
-      expect(salvo).not.toHaveProperty('especialidade')
-      expect(salvo).not.toHaveProperty('documento')
-    })
-
-    describe('adicionarEvento com id repetido', () => {
-      it('lança ErroConflito sem gravar o evento nem o acesso', async () => {
-        await repo.adicionarEvento(EVENTO_NOVO, AUTOR)
-        const antes = await repo.estado()
-        await expect(repo.adicionarEvento({ ...EVENTO_NOVO, titulo: 'Outro' }, AUTOR))
-          .rejects.toBeInstanceOf(ErroConflito)
-        expect(await repo.estado()).toEqual(antes)
-      })
-
-      it('também para id que já vem do seed', async () => {
-        await expect(repo.adicionarEvento({ ...EVENTO_NOVO, id: EVENTOS[0].id }, AUTOR))
-          .rejects.toBeInstanceOf(ErroConflito)
-        expect((await repo.estado()).eventos).toEqual(EVENTOS)
-      })
-    })
-
-    describe('alternarConsentimento', () => {
-      it('revoga um consentimento ativo e registra "Revogou acesso"', async () => {
-        const c = await repo.alternarConsentimento('c1', AUTOR)
-        expect(c).toMatchObject({ id: 'c1', ativo: false })
-
-        const { consentimentos, acessos } = await repo.estado()
-        expect(consentimentos.find((x) => x.id === 'c1')?.ativo).toBe(false)
-        expect(acessos[0]).toMatchObject({
-          quem: AUTOR, papel: 'Titular', acao: 'Revogou acesso',
-          itens: 'Rede Nacional de Dados em Saúde (RNDS)',
+        /* O Oracle grava '' como NULL: string opcional vazia equivale a campo ausente nos dois repositórios. */
+        it('trata especialidade e documento vazios como ausentes', async () => {
+          const comVazios = { ...EVENTO_NOVO, especialidade: '', documento: '' }
+          const esperado = Object.fromEntries(Object.entries(comVazios).filter(([, v]) => v !== ''))
+          expect(await repo.adicionarEvento(comVazios, AUTOR)).toEqual(esperado)
+          const salvo = (await repo.estado()).eventos.at(-1)
+          expect(salvo).toEqual(esperado)
+          expect(salvo).not.toHaveProperty('especialidade')
+          expect(salvo).not.toHaveProperty('documento')
         })
-        expect(acessos[0].quando).toMatch(FORMATO_QUANDO)
-      })
 
-      it('concede um consentimento inativo e registra "Concedeu acesso"', async () => {
-        const c = await repo.alternarConsentimento('c5', AUTOR)
-        expect(c).toMatchObject({ id: 'c5', ativo: true })
-        expect((await repo.listarAcessos())[0]).toMatchObject({
-          acao: 'Concedeu acesso', itens: 'Vitalis Saúde (operadora)',
+        it('id repetido lança ErroConflito sem gravar o evento nem o acesso', async () => {
+          await repo.adicionarEvento(EVENTO_NOVO, AUTOR)
+          const antes = await repo.estado()
+          await expect(repo.adicionarEvento({ ...EVENTO_NOVO, titulo: 'Outro' }, AUTOR))
+            .rejects.toBeInstanceOf(ErroConflito)
+          expect(await repo.estado()).toEqual(antes)
+        })
+
+        it('id repetido também para id que já vem do seed', async () => {
+          await expect(repo.adicionarEvento({ ...EVENTO_NOVO, id: EXEMPLO.eventos[0].id }, AUTOR))
+            .rejects.toBeInstanceOf(ErroConflito)
+          expect((await repo.estado()).eventos).toEqual(EXEMPLO.eventos)
         })
       })
 
-      it('devolve null e não registra acesso para id inexistente', async () => {
-        expect(await repo.alternarConsentimento('nao-existe', AUTOR)).toBeNull()
-        expect(await repo.listarAcessos()).toEqual(ACESSOS)
-      })
-    })
+      describe('alternarConsentimento', () => {
+        it('revoga um consentimento ativo e registra "Revogou acesso"', async () => {
+          const c = await repo.alternarConsentimento('c1', AUTOR)
+          expect(c).toMatchObject({ id: 'c1', ativo: false })
 
-    describe('alternarPasso', () => {
-      it('inverte "feito" sem registrar acesso', async () => {
-        expect(await repo.alternarPasso('p1')).toMatchObject({ id: 'p1', feito: true })
-        expect((await repo.estado()).passos.find((p) => p.id === 'p1')?.feito).toBe(true)
-        expect(await repo.alternarPasso('p1')).toMatchObject({ id: 'p1', feito: false })
-        expect(await repo.listarAcessos()).toEqual(ACESSOS)
+          const { consentimentos, acessos } = await repo.estado()
+          expect(consentimentos.find((x) => x.id === 'c1')?.ativo).toBe(false)
+          expect(acessos[0]).toMatchObject({
+            quem: AUTOR, papel: 'Titular', acao: 'Revogou acesso',
+            itens: 'Rede Nacional de Dados em Saúde (RNDS)',
+          })
+          expect(acessos[0].quando).toMatch(FORMATO_QUANDO)
+        })
+
+        it('concede um consentimento inativo e registra "Concedeu acesso"', async () => {
+          const c = await repo.alternarConsentimento('c5', AUTOR)
+          expect(c).toMatchObject({ id: 'c5', ativo: true })
+          expect((await repo.listarAcessos())[0]).toMatchObject({
+            acao: 'Concedeu acesso', itens: 'Vitalis Saúde (operadora)',
+          })
+        })
+
+        it('devolve null e não registra acesso para id inexistente', async () => {
+          expect(await repo.alternarConsentimento('nao-existe', AUTOR)).toBeNull()
+          expect(await repo.listarAcessos()).toEqual(EXEMPLO.acessos)
+        })
       })
 
-      it('devolve null para id inexistente', async () => {
-        expect(await repo.alternarPasso('nao-existe')).toBeNull()
-      })
-    })
+      describe('alternarPasso', () => {
+        it('inverte "feito" sem registrar acesso', async () => {
+          expect(await repo.alternarPasso('p1')).toMatchObject({ id: 'p1', feito: true })
+          expect((await repo.estado()).passos.find((p) => p.id === 'p1')?.feito).toBe(true)
+          expect(await repo.alternarPasso('p1')).toMatchObject({ id: 'p1', feito: false })
+          expect(await repo.listarAcessos()).toEqual(EXEMPLO.acessos)
+        })
 
-    describe('substituirPassos', () => {
-      it('troca a lista inteira de passos', async () => {
+        it('devolve null para id inexistente', async () => {
+          expect(await repo.alternarPasso('nao-existe')).toBeNull()
+        })
+      })
+
+      it('substituirPassos troca a lista inteira de passos', async () => {
         const novos: ProximoPasso[] = [{
           id: 'p9', titulo: 'Novo passo', porque: 'Motivo', ancoras: ['e01'],
           prazo: 'Em até 30 dias', prioridade: 'baixa', feito: false,
@@ -139,10 +155,8 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
         expect(await repo.substituirPassos(novos)).toEqual(novos)
         expect((await repo.estado()).passos).toEqual(novos)
       })
-    })
 
-    describe('criarCompartilhamento', () => {
-      it('gera código de 6 caracteres e registra o acesso temporário', async () => {
+      it('criarCompartilhamento gera código de 6 caracteres e registra o acesso temporário', async () => {
         const comp = await repo.criarCompartilhamento('Dra. Renata Aguiar', AUTOR)
         expect(comp.codigo).toMatch(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/)
         expect(comp.para).toBe('Dra. Renata Aguiar')
@@ -155,58 +169,274 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
           itens: 'Dra. Renata Aguiar, 30 dias',
         })
       })
-    })
 
-    describe('conectarFonte', () => {
-      it('marca a fonte como conectada com a data de hoje', async () => {
-        const f = await repo.conectarFonte('f5')
-        expect(f).toMatchObject({ id: 'f5', estado: 'conectado' })
-        expect(f?.ultima).toMatch(FORMATO_DIA)
-        expect((await repo.estado()).fontes.find((x) => x.id === 'f5')).toEqual(f)
-      })
-
-      it('devolve null para id inexistente', async () => {
-        expect(await repo.conectarFonte('nao-existe')).toBeNull()
-      })
-    })
-
-    describe('acessos', () => {
-      it('listarAcessos espelha estado().acessos', async () => {
-        expect(await repo.listarAcessos()).toEqual((await repo.estado()).acessos)
-      })
-
-      it('registrarAcesso completa id e quando e coloca no topo', async () => {
-        const log = await repo.registrarAcesso({
-          quem: 'Assistente Nurai', papel: 'IA', acao: 'Consultou o histórico', itens: '3 eventos',
+      describe('conectarFonte', () => {
+        it('marca a fonte como conectada com a data de hoje', async () => {
+          const f = await repo.conectarFonte('f5')
+          expect(f).toMatchObject({ id: 'f5', estado: 'conectado' })
+          expect(f?.ultima).toMatch(FORMATO_DIA)
+          expect((await repo.estado()).fontes.find((x) => x.id === 'f5')).toEqual(f)
         })
-        expect(log.id).toMatch(/^a/)
-        expect(log.quando).toMatch(FORMATO_QUANDO)
-        expect((await repo.listarAcessos())[0]).toEqual(log)
+
+        it('devolve null para id inexistente', async () => {
+          expect(await repo.conectarFonte('nao-existe')).toBeNull()
+        })
       })
 
-      it('gera ids distintos para ações no mesmo instante', async () => {
-        await repo.alternarConsentimento('c1', AUTOR)
-        await repo.alternarConsentimento('c1', AUTOR)
-        const [a, b] = await repo.listarAcessos()
-        expect(a.id).not.toBe(b.id)
-      })
-    })
+      describe('acessos', () => {
+        it('listarAcessos espelha estado().acessos', async () => {
+          expect(await repo.listarAcessos()).toEqual((await repo.estado()).acessos)
+        })
 
-    describe('reiniciar', () => {
-      it('volta ao estado do seed após mudanças', async () => {
+        it('registrarAcesso completa id e quando e coloca no topo', async () => {
+          const log = await repo.registrarAcesso({
+            quem: 'Assistente Nurai', papel: 'IA', acao: 'Consultou o histórico', itens: '3 eventos',
+          })
+          expect(log.id).toMatch(/^a/)
+          expect(log.quando).toMatch(FORMATO_QUANDO)
+          expect((await repo.listarAcessos())[0]).toEqual(log)
+        })
+
+        it('gera ids distintos para ações no mesmo instante', async () => {
+          await repo.alternarConsentimento('c1', AUTOR)
+          await repo.alternarConsentimento('c1', AUTOR)
+          const [a, b] = await repo.listarAcessos()
+          expect(a.id).not.toBe(b.id)
+        })
+      })
+
+      it('reiniciar volta ao histórico de exemplo após mudanças', async () => {
         await repo.adicionarEvento(EVENTO_NOVO, AUTOR)
         await repo.alternarConsentimento('c1', AUTOR)
         await repo.alternarPasso('p1')
         await repo.conectarFonte('f5')
         await repo.criarCompartilhamento('Dr. X', AUTOR)
         await repo.reiniciar()
-        const e = await repo.estado()
-        expect(e.eventos).toEqual(EVENTOS)
-        expect(e.consentimentos).toEqual(CONSENTIMENTOS)
-        expect(e.acessos).toEqual(ACESSOS)
-        expect(e.passos).toEqual(PROXIMOS_PASSOS)
-        expect(e.fontes).toEqual(FONTES_CONECTADAS)
-        expect(e.compartilhamento).toBeNull()
+        expect(await repo.estado()).toEqual({ ...EXEMPLO, compartilhamento: null })
+      })
+    })
+
+    describe('onboarding', () => {
+      it('paciente novo fica pendente e com o histórico vazio', async () => {
+        const { perfil, repo } = await novoPaciente('pendente')
+        expect(perfil.onboarding).toBe('pendente')
+        expect(await repo.estado()).toEqual({
+          eventos: [], consentimentos: [], acessos: [], passos: [], fontes: [], compartilhamento: null,
+        })
+      })
+
+      it('vazio mantém o histórico vazio e reiniciar volta ao vazio', async () => {
+        const { perfil } = await novoPaciente('pendente')
+        expect((await raiz.aplicarOnboarding(perfil.pacienteId, 'vazio'))?.onboarding).toBe('vazio')
+        const repo = raiz.paraPaciente(perfil.pacienteId)
+        await repo.adicionarEvento(EVENTO_NOVO, AUTOR)
+        await repo.reiniciar()
+        expect((await repo.estado()).eventos).toEqual([])
+        expect((await raiz.obterPerfil(perfil.pacienteId))?.onboarding).toBe('vazio')
+      })
+
+      it('exemplo copia o seed e troca de modo recomeça os dados', async () => {
+        const { perfil, repo } = await novoPaciente('pendente')
+        expect((await raiz.aplicarOnboarding(perfil.pacienteId, 'exemplo'))?.onboarding).toBe('exemplo')
+        expect((await repo.estado()).eventos).toEqual(EXEMPLO.eventos)
+        await raiz.aplicarOnboarding(perfil.pacienteId, 'vazio')
+        expect((await repo.estado()).eventos).toEqual([])
+      })
+
+      it('devolve null para paciente inexistente', async () => {
+        expect(await raiz.aplicarOnboarding('nao-existe', 'exemplo')).toBeNull()
+      })
+    })
+
+    describe('isolamento entre pacientes', () => {
+      let a: { perfil: Perfil; repo: RepositorioPaciente }
+      let b: { perfil: Perfil; repo: RepositorioPaciente }
+
+      beforeEach(async () => {
+        a = await novoPaciente('vazio', 'Ana Alves')
+        b = await novoPaciente('exemplo', 'Bruno Braga')
+      })
+
+      it('A não vê eventos nem acessos de B', async () => {
+        await b.repo.adicionarEvento(EVENTO_NOVO, 'Bruno Braga')
+        const estadoA = await a.repo.estado()
+        expect(estadoA.eventos).toEqual([])
+        expect(estadoA.acessos).toEqual([])
+        expect(await a.repo.listarAcessos()).toEqual([])
+      })
+
+      it('o mesmo id de evento pode existir em pacientes diferentes', async () => {
+        await a.repo.adicionarEvento({ ...EVENTO_NOVO, id: 'e01' }, 'Ana Alves')
+        expect((await a.repo.estado()).eventos.map((e) => e.id)).toEqual(['e01'])
+        expect((await b.repo.estado()).eventos).toEqual(dadosExemplo('Bruno Braga').eventos)
+      })
+
+      it('A não altera consentimento, passo nem fonte de B', async () => {
+        const antes = await b.repo.estado()
+        expect(await a.repo.alternarConsentimento('c1', 'Ana Alves')).toBeNull()
+        expect(await a.repo.alternarPasso('p1')).toBeNull()
+        expect(await a.repo.conectarFonte('f5')).toBeNull()
+        expect(await b.repo.estado()).toEqual(antes)
+      })
+
+      it('substituirPassos e compartilhamento de A não tocam B', async () => {
+        const antes = await b.repo.estado()
+        await a.repo.substituirPassos([])
+        await a.repo.criarCompartilhamento('Dr. X', 'Ana Alves')
+        expect(await b.repo.estado()).toEqual(antes)
+      })
+
+      it('reiniciar de A não afeta B', async () => {
+        await b.repo.alternarPasso('p1')
+        const antes = await b.repo.estado()
+        await a.repo.reiniciar()
+        expect(await b.repo.estado()).toEqual(antes)
+      })
+
+      it('excluirPaciente apaga tudo de A e só de A', async () => {
+        const emailA = emailUnico('ana')
+        const usuarioA = await raiz.criarUsuario({ email: emailA, senhaHash: 'h', pacienteId: a.perfil.pacienteId })
+        const tokenA = `tok-${randomUUID()}`
+        await raiz.criarSessao({ tokenHash: tokenA, usuarioId: usuarioA.id, expiraEm: new Date(Date.now() + MINUTO) })
+        await a.repo.adicionarEvento(EVENTO_NOVO, 'Ana Alves')
+        await a.repo.criarCompartilhamento('Dr. X', 'Ana Alves')
+        const antesB = await b.repo.estado()
+
+        expect(await raiz.excluirPaciente(a.perfil.pacienteId)).toBe(true)
+
+        expect(await raiz.obterPerfil(a.perfil.pacienteId)).toBeNull()
+        expect(await raiz.buscarUsuarioPorEmail(emailA)).toBeNull()
+        expect(await raiz.buscarSessao(tokenA)).toBeNull()
+        expect((await a.repo.estado()).eventos).toEqual([])
+        expect(await b.repo.estado()).toEqual(antesB)
+        expect(await raiz.obterPerfil(b.perfil.pacienteId)).not.toBeNull()
+        expect(await raiz.excluirPaciente(a.perfil.pacienteId)).toBe(false)
+      })
+    })
+
+    describe('perfil', () => {
+      it('criarPaciente devolve o perfil com iniciais e idade derivadas', async () => {
+        const perfil = await raiz.criarPaciente({
+          nome: 'Maria Clara Souza', dataNascimento: '1990-01-15', convidado: false,
+        })
+        criados.push(perfil.pacienteId)
+        expect(perfil).toEqual({
+          pacienteId: expect.any(String), nome: 'Maria Clara Souza', iniciais: 'MS',
+          dataNascimento: '1990-01-15', idade: expect.any(Number), condicoes: [], alergias: [],
+          onboarding: 'pendente', convidado: false,
+        })
+        expect(perfil.idade).toBeGreaterThanOrEqual(36)
+        expect(await raiz.obterPerfil(perfil.pacienteId)).toEqual(perfil)
+      })
+
+      it('gera ids distintos por paciente', async () => {
+        const { perfil: p1 } = await novoPaciente('pendente')
+        const { perfil: p2 } = await novoPaciente('pendente')
+        expect(p1.pacienteId).not.toBe(p2.pacienteId)
+      })
+
+      it('atualizarPerfil troca campos, mantém os omitidos e remove opcionais com ""', async () => {
+        const perfil = await raiz.criarPaciente({
+          nome: 'Joana Dias', cartaoSus: '123', plano: 'Plano X', convidado: false,
+        })
+        criados.push(perfil.pacienteId)
+        const atualizado = await raiz.atualizarPerfil(perfil.pacienteId, {
+          condicoes: ['Asma'], alergias: ['Penicilina'], cartaoSus: '', dataNascimento: '2000-06-30',
+        })
+        expect(atualizado).toEqual({
+          ...perfil, condicoes: ['Asma'], alergias: ['Penicilina'], cartaoSus: undefined,
+          dataNascimento: '2000-06-30', idade: expect.any(Number),
+        })
+        expect(atualizado).not.toHaveProperty('cartaoSus')
+        expect(await raiz.obterPerfil(perfil.pacienteId)).toEqual(atualizado)
+      })
+
+      it('obterPerfil e atualizarPerfil devolvem null para paciente inexistente', async () => {
+        expect(await raiz.obterPerfil('nao-existe')).toBeNull()
+        expect(await raiz.atualizarPerfil('nao-existe', { nome: 'X' })).toBeNull()
+      })
+
+      it('guarda a flag de convidado', async () => {
+        const perfil = await raiz.criarPaciente({ nome: 'Visitante', convidado: true })
+        criados.push(perfil.pacienteId)
+        expect(perfil).toMatchObject({ convidado: true, iniciais: 'V' })
+      })
+    })
+
+    describe('usuários', () => {
+      it('criarUsuario normaliza o email e buscarUsuarioPorEmail ignora maiúsculas', async () => {
+        const { perfil } = await novoPaciente('pendente')
+        const email = emailUnico('Maria')
+        const usuario = await raiz.criarUsuario({ email: email.toUpperCase(), senhaHash: 'scrypt$x', pacienteId: perfil.pacienteId })
+        expect(usuario).toEqual({ id: expect.any(String), email: email.toLowerCase() })
+        expect(await raiz.buscarUsuarioPorEmail(email)).toEqual({
+          ...usuario, pacienteId: perfil.pacienteId, senhaHash: 'scrypt$x',
+        })
+      })
+
+      it('email repetido lança ErroConflito', async () => {
+        const { perfil } = await novoPaciente('pendente')
+        const { perfil: outro } = await novoPaciente('pendente')
+        const email = emailUnico()
+        await raiz.criarUsuario({ email, senhaHash: 'h', pacienteId: perfil.pacienteId })
+        await expect(raiz.criarUsuario({ email: email.toUpperCase(), senhaHash: 'h', pacienteId: outro.pacienteId }))
+          .rejects.toBeInstanceOf(ErroConflito)
+      })
+
+      it('conta convidada não tem senha', async () => {
+        const { perfil } = await novoPaciente('pendente')
+        const email = emailUnico('convidado')
+        await raiz.criarUsuario({ email, senhaHash: null, pacienteId: perfil.pacienteId })
+        expect((await raiz.buscarUsuarioPorEmail(email))?.senhaHash).toBeNull()
+      })
+
+      it('buscarUsuarioPorEmail devolve null para email desconhecido', async () => {
+        expect(await raiz.buscarUsuarioPorEmail(emailUnico('ninguem'))).toBeNull()
+      })
+    })
+
+    describe('sessões', () => {
+      it('buscarSessao devolve usuário, perfil e expiração; apagarSessao invalida', async () => {
+        const { perfil } = await novoPaciente('exemplo')
+        const usuario = await raiz.criarUsuario({ email: emailUnico(), senhaHash: 'h', pacienteId: perfil.pacienteId })
+        const tokenHash = `tok-${randomUUID()}`
+        const expiraEm = new Date(Date.now() + 7 * 24 * 60 * MINUTO)
+        await raiz.criarSessao({ tokenHash, usuarioId: usuario.id, expiraEm })
+
+        expect(await raiz.buscarSessao(tokenHash)).toEqual({
+          usuario, perfil: { ...perfil, onboarding: 'exemplo' }, expiraEm,
+        })
+        await raiz.apagarSessao(tokenHash)
+        expect(await raiz.buscarSessao(tokenHash)).toBeNull()
+      })
+
+      it('sessão expirada continua visível com a data no passado', async () => {
+        const { perfil } = await novoPaciente('pendente')
+        const usuario = await raiz.criarUsuario({ email: emailUnico(), senhaHash: 'h', pacienteId: perfil.pacienteId })
+        const tokenHash = `tok-${randomUUID()}`
+        const expiraEm = new Date(Date.now() - MINUTO)
+        await raiz.criarSessao({ tokenHash, usuarioId: usuario.id, expiraEm })
+        expect((await raiz.buscarSessao(tokenHash))?.expiraEm).toEqual(expiraEm)
+      })
+
+      it('token desconhecido devolve null', async () => {
+        expect(await raiz.buscarSessao(`tok-${randomUUID()}`)).toBeNull()
+        await raiz.apagarSessao(`tok-${randomUUID()}`)
+      })
+    })
+
+    describe('tentativas', () => {
+      it('conta só as tentativas da chave a partir do instante pedido', async () => {
+        const chave = `login-${randomUUID()}`
+        const agora = Date.now()
+        await raiz.registrarTentativa(chave, new Date(agora - 20 * MINUTO))
+        await raiz.registrarTentativa(chave)
+        await raiz.registrarTentativa(chave)
+        await raiz.registrarTentativa(`outra-${randomUUID()}`)
+        expect(await raiz.contarTentativas(chave, new Date(agora - 15 * MINUTO))).toBe(2)
+        expect(await raiz.contarTentativas(chave, new Date(agora - 30 * MINUTO))).toBe(3)
+        expect(await raiz.contarTentativas(chave, new Date(agora + MINUTO))).toBe(0)
+        expect(await raiz.contarTentativas(`nada-${randomUUID()}`, new Date(0))).toBe(0)
       })
     })
   })
