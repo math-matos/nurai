@@ -77,19 +77,55 @@ test('profissional abre o histórico pelo código, só lê, e perde o acesso qua
   await page.goto('/#/app/resumo')
   await page.getByTestId('acesso-revogar').click()
   await expect(page.getByTestId('acesso-painel')).toHaveCount(0)
+  /* O painel some, mas a confirmação fica, com o foco nela. */
+  const revogado = page.getByTestId('acesso-revogado')
+  await expect(revogado).toContainText(`O código ${codigo} não abre mais o histórico.`)
+  await expect(revogado).toContainText(/Acesso revogado em \d{2}\/\d{2}\/\d{4} às \d{2}:\d{2}/)
+  await expect(revogado).toBeFocused()
   expect((await lerEstado(page.request)).compartilhamento).toBeNull()
 
-  /* Na tela já aberta, pedir o resumo de novo falha; recarregando, o código não abre mais. */
+  /* Na tela já aberta, pedir o resumo de novo é recusado e os dados saem da tela; recarregando, o código não abre mais. */
   const negado = respostaDe(pagina, 'POST', '/api/acesso-medico/resumo')
   await pagina.getByTestId('medico-gerar-resumo').click()
   expect((await negado).status()).toBe(404)
-  await expect(pagina.getByTestId('medico-resumo').getByRole('alert')).toContainText(CODIGO_INVALIDO)
-  await expect(pagina.getByTestId('medico-resumo').getByRole('button', { name: 'Tentar de novo' })).toHaveCount(0)
+  await expect(pagina.getByTestId('medico-encerrado')).toContainText('Este acesso foi encerrado pelo paciente')
+  await expect(pagina.getByTestId('medico-paciente')).toHaveCount(0)
+  await expect(pagina.getByTestId('medico-evento')).toHaveCount(0)
+  await expect(pagina.locator('body')).not.toContainText(conta.nome)
 
   await pagina.reload()
   expect((await informarCodigo(pagina, codigo)).status()).toBe(404)
   await expect(pagina.locator('#medico-codigo-erro')).toHaveText(CODIGO_INVALIDO)
   await expect(pagina.getByTestId('medico-paciente')).toHaveCount(0)
+})
+
+/* A tela do profissional não fica mostrando o histórico depois da revogação: ao voltar para a aba, ela confere o código. */
+test('tela aberta do profissional se fecha quando ele volta à aba depois da revogação', async ({ page, contas, novoNavegador }) => {
+  const conta = await contas.criar({ request: page.request, nome: 'Helena Duarte Nogueira', modo: 'exemplo' })
+  const criado = await page.request.post('/api/compartilhamentos', { headers: CSRF, data: { para: 'Dra. Teste' } })
+  const { codigo } = await criado.json()
+
+  const { pagina } = await novoNavegador()
+  await pagina.goto('/#/acesso')
+  expect((await informarCodigo(pagina, codigo)).status()).toBe(200)
+  await expect(pagina.getByTestId('medico-paciente')).toContainText(conta.nome)
+
+  expect((await page.request.delete(`/api/compartilhamentos/${codigo}`, { headers: CSRF })).status()).toBeLessThan(300)
+
+  const conferencia = respostaDe(pagina, 'POST', '/api/acesso-medico')
+  await pagina.evaluate(() => window.dispatchEvent(new Event('focus')))
+  expect((await conferencia).status()).toBe(404)
+  const aviso = pagina.getByTestId('medico-encerrado')
+  await expect(aviso).toContainText('Este acesso foi encerrado pelo paciente')
+  await expect(aviso).toBeFocused()
+  await expect(pagina.getByTestId('medico-paciente')).toHaveCount(0)
+  await expect(pagina.locator('body')).not.toContainText(conta.nome)
+
+  /* Um código novo abre de novo e tira o aviso. */
+  const novo = await (await page.request.post('/api/compartilhamentos', { headers: CSRF, data: { para: 'Dra. Teste' } })).json()
+  expect((await informarCodigo(pagina, novo.codigo)).status()).toBe(200)
+  await expect(pagina.getByTestId('medico-paciente')).toContainText(conta.nome)
+  await expect(aviso).toHaveCount(0)
 })
 
 test('código inexistente e campos inválidos mostram erro no campo', async ({ novoNavegador }) => {
