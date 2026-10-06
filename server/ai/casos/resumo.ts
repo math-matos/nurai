@@ -75,15 +75,14 @@ export async function gerarResumo(
   autor: AutorResumo = { quem: perfil.nome, papel: 'Titular', acao: 'Gerou resumo pré-consulta' },
 ): Promise<RespostaResumo> {
   const { eventos } = await repo.estado()
+  const semBase = (sintese: string): RespostaResumo =>
+    ({ especialidade, sintese: [sintese], pontos: [], perguntasSugeridas: [], aviso: AVISO, geradoPor: llm.nome })
   if (!eventos.length) {
-    return {
-      especialidade,
-      sintese: [`Seu histórico ainda está vazio, então não há registros para montar um resumo de ${especialidade}. Anexe exames ou laudos em Fontes e gere o resumo de novo.`],
-      pontos: [],
-      perguntasSugeridas: [],
-      aviso: AVISO,
-      geradoPor: llm.nome,
-    }
+    return semBase(`Seu histórico ainda está vazio, então não há registros para montar um resumo de ${especialidade}. Anexe exames ou laudos em Fontes e gere o resumo de novo.`)
+  }
+  /* Especialidade livre ("Outra…") pode não casar com nada; sem registro do tema nem alterado, não há o que resumir. */
+  if (!relevantes(eventos, especialidade).length) {
+    return semBase(`Não encontrei registros de ${especialidade} no histórico, nem resultados alterados para levar à consulta. Anexe exames, laudos ou receitas dessa especialidade em Fontes e gere o resumo de novo.`)
   }
   let corpo: Omit<RespostaResumo, 'especialidade' | 'aviso' | 'geradoPor'>
   if (llm.nome === 'mock') {
