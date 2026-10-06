@@ -39,7 +39,16 @@ const CONTRATO = {
   resumo: z.object({
     especialidade: z.string(), sintese: textos.min(1),
     pontos: z.array(z.object({ texto: z.string().min(1), ancoras: z.array(z.string()).min(1) })),
-    perguntasSugeridas: textos, aviso: z.string().min(1), geradoPor,
+    perguntasSugeridas: textos,
+    pontosEmAberto: z.array(z.object({
+      tipo: z.enum(['repeticao', 'pedido', 'retorno', 'reavaliacao']), texto: z.string().min(1), ancoras: z.array(z.string()).min(1),
+    }).strict()),
+    aviso: z.string().min(1), geradoPor,
+  }).strict(),
+  pontosEmAberto: z.object({
+    pontosEmAberto: z.array(z.object({
+      tipo: z.enum(['repeticao', 'pedido', 'retorno', 'reavaliacao']), texto: z.string().min(1), ancoras: z.array(z.string()).min(1),
+    }).strict()),
   }).strict(),
   passos: z.object({
     passos: z.array(z.object({
@@ -438,7 +447,11 @@ describe('rotas de IA com provider real (fake)', () => {
       expect(res.status).toBe(200)
       const body = CONTRATO.resumo.parse(await res.json())
       expect(body.especialidade).toBe('Cardiologia')
-      expect(body.pontos).toEqual([{ texto: 'Carga de fibrilação subiu para 6,3%.', ancoras: ['e09', 'e23'] }])
+      expect(body.pontosEmAberto.length).toBeGreaterThan(0)
+      expect(body.pontos).toEqual([
+        ...body.pontosEmAberto.map(({ texto, ancoras }) => ({ texto, ancoras })),
+        { texto: 'Carga de fibrilação subiu para 6,3%.', ancoras: ['e09', 'e23'] },
+      ])
       const [acesso] = await repo.listarAcessos()
       expect(acesso).toMatchObject({
         quem: NOME, papel: 'Titular', acao: 'Gerou resumo pré-consulta', itens: 'Cardiologia',

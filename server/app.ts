@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import { ErroIa } from './ai/erros.js'
+import { pontosDoHistorico } from './ai/fatos.js'
 import { LIMITE_PDF } from './ai/pdf.js'
 import type { LlmProvider } from './ai/provider.js'
 import { exigirCsrf, exigirSessao, type AmbienteApp } from './auth/middleware.js'
@@ -58,6 +59,10 @@ export function criarApp(deps: Deps): Hono<AmbienteApp> {
   app.route('/', rotasConta(repo))
 
   app.get('/estado', async (c) => c.json(await c.var.repoPaciente.estado()))
+
+  /* Os pontos em aberto que o médico vê pelo código, para a folha do resumo sem IA dizer o mesmo. */
+  app.get('/pontos-em-aberto', async (c) =>
+    c.json({ pontosEmAberto: pontosDoHistorico((await c.var.repoPaciente.estado()).eventos) }))
 
   app.post('/eventos', async (c) => {
     const evento = await lerCorpo(c, esquemaEvento)
