@@ -8,9 +8,13 @@ const CLINICO = /exame|resultado|laudo|referencia|paciente|consulta|medic|hospit
 /* "receita" sozinha também é de bolo: só conta com dose ou posologia. */
 const RECEITA_MEDICA = /prescri|posologia|\d+\s*(?:mg|mcg|ui)\b|comprimido|capsula|gotas|de \d+ em \d+ horas|uso (?:oral|continuo)/
 const NUM = '(-?\\d+(?:[.,]\\d+)?)'
-const MEDIDA = new RegExp(`^\\s*([^:\\n]{2,60}?)\\s*:\\s*${NUM}\\s*([^\\s(;]*)\\s*\\(?\\s*(?:ref[^\\s:]*|VR)\\s*:?\\s*${NUM}\\s*(?:a|-|–|até)\\s*${NUM}`, 'gim')
+/* Só teto ("< 190", "≤ 190", "até 190") ou só piso ("> 40", "≥ 40", "acima de 40"): faixa de um lado. */
+const TETO = '(?:<=?|≤|até|inferior a|menor que)'
+const PISO = '(?:>=?|≥|acima de|superior a|maior que)'
+/* "Glicose: 92 mg/dL (ref: 70 a 99)", "(VR: até 190)" ou "(ref: > 40)". */
+const MEDIDA = new RegExp(`^\\s*([^:\\n]{2,60}?)\\s*:\\s*${NUM}\\s*([^\\s(;]*)\\s*\\(?\\s*(?:ref[^\\s:]*|VR)\\s*:?\\s*(?:${NUM}\\s*(?:a|-|–|até)\\s*${NUM}|${TETO}\\s*${NUM}|${PISO}\\s*${NUM})`, 'gim')
 /* Linha de tabela: "Colesterol HDL      44 mg/dL     45 a 90 mg/dL", "... < 190 mg/dL" ou "... > 40 mg/dL". */
-const MEDIDA_TABELA = new RegExp(`^[ \\t]*([^\\s:][^:\\n]{1,58}?)[ \\t]{2,}${NUM}[ \\t]*(\\S+)[ \\t]{2,}(?:[^\\d\\n<>≤≥]{0,20}?(?:<|≤|até)[ \\t]*${NUM}|[^\\d\\n<>≤≥]{0,20}?(?:>|≥|acima de)[ \\t]*${NUM}|${NUM}[ \\t]*(?:a|-|–|até)[ \\t]*${NUM})`, 'gm')
+const MEDIDA_TABELA = new RegExp(`^[ \\t]*([^\\s:][^:\\n]{1,58}?)[ \\t]{2,}${NUM}[ \\t]*(\\S+)[ \\t]{2,}(?:[^\\d\\n<>≤≥]{0,20}?${TETO}[ \\t]*${NUM}|[^\\d\\n<>≤≥]{0,20}?${PISO}[ \\t]*${NUM}|${NUM}[ \\t]*(?:a|-|–|até)[ \\t]*${NUM})`, 'gim')
 const INSTITUICAO = /laborat|hospital|clinica|ubs|instituto|centro/
 const DATA = /(\d{2})\/(\d{2})\/(\d{4})|(\d{4}-\d{2}-\d{2})/
 const DATA_ROTULADA = new RegExp(`(?:coleta|realizacao|realizado em|data do exame|data do atendimento|emissao|emitido em|solicitacao)[^\\d\\n]{0,20}(?:${DATA.source})`)
@@ -32,8 +36,9 @@ function lerData(normalizado: string): string | null {
 }
 
 function lerMedidas(texto: string): Extract<ExtracaoBruta, { clinico: true }>['medidas'] {
-  const comRotulo = [...texto.matchAll(MEDIDA)].map(([, nome, valor, unidade, refMin, refMax]) => ({
-    nome: nome.trim(), valor: numero(valor), unidade, refMin: numero(refMin), refMax: numero(refMax),
+  const comRotulo = [...texto.matchAll(MEDIDA)].map(([, nome, valor, unidade, refMin, refMax, teto, piso]) => ({
+    nome: nome.trim(), valor: numero(valor), unidade,
+    refMin: teto ? null : numero(piso ?? refMin), refMax: piso ? null : numero(teto ?? refMax),
   }))
   const tabela = [...texto.matchAll(MEDIDA_TABELA)].map(([, nome, valor, unidade, teto, piso, refMin, refMax]) => ({
     nome: nome.trim(), valor: numero(valor), unidade,
