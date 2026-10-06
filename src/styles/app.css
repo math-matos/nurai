@@ -686,3 +686,22 @@
 .chip--convidado { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-deep); }
 .convidado__texto { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
 .convidado .btn { padding: 7px 12px; font-size: 13px; }
+
+/* ---------------- meus dados e exclusão ---------------- */
+.meus-dados__grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
+.meus-dados textarea.field { resize: vertical; min-height: 96px; }
+.meus-dados__salvo { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--sig-normal); }
+.painel--perigo { border-color: #e0bdb4; }
+.excluir { max-width: 420px; }
+.excluir__acoes { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.btn--perigo { --btn-bg: var(--sig-alterado); }
+.btn--perigo:hover { --btn-bg: #7d2a16; }
+.btn--perigo-leve { --btn-fg: var(--sig-alterado); border-color: #e0bdb4; }
+@media (max-width: 720px) {
+  .meus-dados__grade { grid-template-columns: 1fr; }
+}
+.painel__nada { font-size: 13.5px; color: var(--ink-3); }
+.vazio-historico { margin-bottom: var(--sp-5); }
+.acesso__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-3); }
+.acesso__acoes .btn { padding: 7px 12px; font-size: 13px; background: var(--card); }
+.acesso__copia { font-size: 12.5px; color: var(--accent-deep); }

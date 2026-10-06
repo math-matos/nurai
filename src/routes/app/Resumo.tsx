@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { AvisoIa, Falha, Regua, SeloIa } from '../../components/ui'
-import { formatarData } from '../../lib/formato'
-import { MEDICACOES, PACIENTE } from '../../data/seed'
-import { api, mensagemDeErro, podeRepetir, type ResumoIa } from '../../lib/api'
+import { AvisoIa, Falha, Regua, SeloIa, VazioHistorico } from '../../components/ui'
+import { formatarData, ordenarRecentes } from '../../lib/formato'
+import { MEDICACOES } from '../../data/seed'
+import { api, mensagemDeErro, podeRepetir, type Compartilhamento, type ResumoIa } from '../../lib/api'
 import { navegar } from '../../lib/router'
-import { hoje, useAcoes, useEstado } from '../../lib/store'
+import { hoje, useAcoes, useEstado, usePerfil } from '../../lib/store'
+import { TID } from '../../lib/testids'
 
 type Foco = 'cardiologia' | 'endocrinologia' | 'clinica'
 
@@ -25,7 +26,24 @@ const FOCOS: { id: Foco; rotulo: string; medico: string; desde: string; ids: str
 ]
 
 export function Resumo() {
+  const { eventos } = useEstado()
+  if (eventos.length === 0) {
+    return (
+      <VazioHistorico
+        icone="resumo"
+        titulo="O resumo nasce do seu histórico"
+        texto="Quando houver documentos reunidos, esta página vira uma folha de uma página para levar à consulta — e um código de acesso temporário para o profissional."
+      />
+    )
+  }
+  return <FolhaResumo />
+}
+
+function FolhaResumo() {
   const { eventos, passos, compartilhamento } = useEstado()
+  const perfil = usePerfil()
+  /* Médicos, datas e medicamentos fixos só fazem sentido no histórico de exemplo. */
+  const exemplo = perfil.onboarding === 'exemplo'
   const { gerarCompartilhamento } = useAcoes()
   const [foco, setFoco] = useState<Foco>('cardiologia')
   const [sinteses, setSinteses] = useState<Partial<Record<Foco, ResumoIa>>>({})
@@ -34,9 +52,19 @@ export function Resumo() {
   const [compartilhando, setCompartilhando] = useState(false)
 
   const alvo = FOCOS.find((f) => f.id === foco)!
-  const destaques = alvo.ids
+  const doExemplo = alvo.ids
     .map((id) => eventos.find((e) => e.id === id))
     .filter((e): e is NonNullable<typeof e> => Boolean(e))
+  const usaExemplo = exemplo && doExemplo.length > 0
+  const destaques = usaExemplo ? doExemplo : ordenarRecentes(eventos).slice(0, 3)
+  const tituloDestaques = usaExemplo ? `O que mudou desde ${alvo.desde}` : 'Registros mais recentes'
+  const medicacoes = ordenarRecentes(eventos).filter((e) => e.tipo === 'medicacao')
+  const identificacao = [
+    perfil.idade !== undefined && `${perfil.idade} anos`,
+    perfil.dataNascimento && `nascimento ${formatarData(perfil.dataNascimento)}`,
+    perfil.cartaoSus && `cartão SUS ${perfil.cartaoSus}`,
+    perfil.plano,
+  ].filter(Boolean).join(' · ')
   const pendentes = passos.filter((p) => !p.feito)
   const fontesDistintas = new Set(eventos.map((e) => e.fonte)).size
   const sintese = sinteses[foco]
@@ -59,7 +87,7 @@ export function Resumo() {
   const compartilhar = async () => {
     if (compartilhando) return
     setCompartilhando(true)
-    await gerarCompartilhamento(alvo.medico)
+    await gerarCompartilhamento(exemplo ? alvo.medico : `Profissional de ${alvo.rotulo.toLowerCase()}`)
     setCompartilhando(false)
   }
 
@@ -86,44 +114,28 @@ export function Resumo() {
           </button>
           <button
             type="button" className="btn btn--ghost" disabled={gerandoPara !== null}
-            onClick={() => { void gerarResumo() }}
+            onClick={() => { void gerarResumo() }} data-testid={TID.iaResumo}
           >
             <Icon nome="copiloto" tamanho={16} />
             {gerandoPara === foco ? 'Gerando resumo…' : sintese ? 'Gerar de novo com IA' : 'Gerar resumo com IA'}
           </button>
           <button
             type="button" className="btn" disabled={compartilhando}
-            onClick={() => { void compartilhar() }}
+            onClick={() => { void compartilhar() }} data-testid={TID.acessoGerar}
           >
             <Icon nome="chave" tamanho={16} /> {compartilhando ? 'Gerando acesso…' : 'Gerar acesso temporário'}
           </button>
         </div>
       </div>
 
-      {compartilhamento && (
-        <div className="acesso" role="status">
-          <div>
-            <p className="acesso__titulo">
-              Acesso de 30 dias criado para {compartilhamento.para}
-            </p>
-            <p className="acesso__texto">
-              O código abre exatamente esta página — e nada além dela. Você pode revogar quando
-              quiser em Acessos e consentimento. Criado em {compartilhamento.criadoEm}.
-            </p>
-          </div>
-          <p className="acesso__codigo num">{compartilhamento.codigo}</p>
-        </div>
-      )}
+      {compartilhamento && <PainelAcesso key={compartilhamento.codigo} compartilhamento={compartilhamento} />}
 
       <article className="folha-resumo">
         <header className="folha-resumo__cabeca">
           <div>
             <p className="label">Resumo pré-consulta · {alvo.rotulo}</p>
-            <h2>{PACIENTE.nome}</h2>
-            <p className="folha-resumo__ident num">
-              {PACIENTE.idade} anos · nascimento {formatarData(PACIENTE.nascimento)} ·
-              cartão SUS {PACIENTE.cartaoSus} · {PACIENTE.plano}
-            </p>
+            <h2>{perfil.nome}</h2>
+            {identificacao && <p className="folha-resumo__ident num">{identificacao}</p>}
           </div>
           <p className="folha-resumo__origem">
             Gerado em {hoje()} a partir de <span className="num">{eventos.length}</span> registros
@@ -135,12 +147,12 @@ export function Resumo() {
           <Icon nome="alerta" tamanho={16} />
           <div>
             <p className="label">Alergias</p>
-            <p>{PACIENTE.alergias.join(' · ')}</p>
+            <p>{perfil.alergias.length > 0 ? perfil.alergias.join(' · ') : 'Nenhuma alergia registrada'}</p>
           </div>
         </section>
 
         {(sintese || gerandoPara === foco || erroIa?.foco === foco) && (
-          <section className="folha-resumo__bloco sintese-ia" aria-live="polite">
+          <section className="folha-resumo__bloco sintese-ia" aria-live="polite" data-testid={TID.resumoSintese}>
             <h3>Síntese para {alvo.rotulo.toLowerCase()}</h3>
             {gerandoPara === foco && (
               <div className="sintese-ia__carregando">
@@ -195,13 +207,17 @@ export function Resumo() {
 
         <section className="folha-resumo__bloco">
           <h3>Condições ativas</h3>
-          <ul className="lista-inline">
-            {PACIENTE.condicoes.map((c) => <li key={c} className="chip">{c}</li>)}
-          </ul>
+          {perfil.condicoes.length > 0 ? (
+            <ul className="lista-inline">
+              {perfil.condicoes.map((c) => <li key={c} className="chip">{c}</li>)}
+            </ul>
+          ) : (
+            <p className="painel__nada">Nenhuma condição registrada em Meus dados.</p>
+          )}
         </section>
 
         <section className="folha-resumo__bloco">
-          <h3>O que mudou desde {alvo.desde}</h3>
+          <h3>{tituloDestaques}</h3>
           <ul className="mudancas">
             {destaques.map((e) => (
               <li key={e.id}>
@@ -219,24 +235,34 @@ export function Resumo() {
 
         <section className="folha-resumo__bloco">
           <h3>Medicamentos em uso contínuo</h3>
-          <div className="rolagem-x">
-            <table className="tabela-med">
-              <thead>
-                <tr><th>Medicamento</th><th>Dose</th><th>Posologia</th><th>Desde</th><th>Prescrito por</th></tr>
-              </thead>
-              <tbody>
-                {MEDICACOES.map((m) => (
-                  <tr key={m.nome}>
-                    <th scope="row">{m.nome}</th>
-                    <td className="num">{m.dose}</td>
-                    <td>{m.posologia}</td>
-                    <td className="num">{m.desde}</td>
-                    <td>{m.prescritor}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {exemplo ? (
+            <div className="rolagem-x">
+              <table className="tabela-med">
+                <thead>
+                  <tr><th>Medicamento</th><th>Dose</th><th>Posologia</th><th>Desde</th><th>Prescrito por</th></tr>
+                </thead>
+                <tbody>
+                  {MEDICACOES.map((m) => (
+                    <tr key={m.nome}>
+                      <th scope="row">{m.nome}</th>
+                      <td className="num">{m.dose}</td>
+                      <td>{m.posologia}</td>
+                      <td className="num">{m.desde}</td>
+                      <td>{m.prescritor}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : medicacoes.length > 0 ? (
+            <ul className="pendencias">
+              {medicacoes.map((m) => (
+                <li key={m.id}><strong>{m.titulo}</strong><span className="num">{formatarData(m.data)} · {m.instituicao}</span></li>
+              ))}
+            </ul>
+          ) : (
+            <p className="painel__nada">Nenhuma receita ou medicação registrada no histórico.</p>
+          )}
         </section>
 
         <section className="folha-resumo__bloco">
@@ -253,11 +279,65 @@ export function Resumo() {
         </section>
 
         <footer className="folha-resumo__pe">
-          Documento gerado pela Nurai a partir do histórico da própria paciente. Dados
-          sintéticos, para demonstração acadêmica. Não é laudo, não é prescrição e não
-          substitui a avaliação do profissional que assina o atendimento.
+          Documento gerado pela Nurai a partir do histórico reunido pelo próprio titular.
+          Demonstração acadêmica. Não é laudo, não é prescrição e não substitui a avaliação
+          do profissional que assina o atendimento.
         </footer>
       </article>
+    </div>
+  )
+}
+
+/* Código de acesso do profissional: validade, onde usar, copiar e revogar. */
+function PainelAcesso({ compartilhamento }: { compartilhamento: Compartilhamento }) {
+  const { revogarCompartilhamento } = useAcoes()
+  const [copia, setCopia] = useState<'ok' | 'falhou' | null>(null)
+  const [revogando, setRevogando] = useState(false)
+  const endereco = `${window.location.origin}/#/acesso`
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(`Acesse ${endereco} e informe o código ${compartilhamento.codigo}.`)
+      setCopia('ok')
+    } catch {
+      setCopia('falhou')
+    }
+  }
+
+  const revogar = async () => {
+    if (revogando) return
+    setRevogando(true)
+    const ok = await revogarCompartilhamento(compartilhamento.codigo)
+    if (!ok) setRevogando(false)
+  }
+
+  return (
+    <div className="acesso" role="region" aria-label="Acesso temporário para o profissional" data-testid={TID.acessoPainel}>
+      <div>
+        <p className="acesso__titulo">Acesso temporário criado para {compartilhamento.para}</p>
+        <p className="acesso__texto" data-testid={TID.acessoValidade}>
+          Válido até <strong className="num">{compartilhamento.expiraEm}</strong> (criado em{' '}
+          <span className="num">{compartilhamento.criadoEm}</span>). O profissional acessa em{' '}
+          <strong>{endereco}</strong> e informa o código — vê o histórico só para leitura, e
+          cada acesso entra no seu registro.
+        </p>
+        <div className="acesso__acoes">
+          <button type="button" className="btn btn--ghost" onClick={() => { void copiar() }} data-testid={TID.acessoCopiar}>
+            <Icon nome="papel" tamanho={15} /> Copiar código e endereço
+          </button>
+          <button
+            type="button" className="btn btn--ghost" onClick={() => { void revogar() }} disabled={revogando}
+            data-testid={TID.acessoRevogar}
+          >
+            <Icon nome="cadeado" tamanho={15} /> {revogando ? 'Revogando…' : 'Revogar acesso'}
+          </button>
+          <span className="acesso__copia" aria-live="polite">
+            {copia === 'ok' && 'Copiado.'}
+            {copia === 'falhou' && 'Não foi possível copiar. Selecione o código e copie manualmente.'}
+          </span>
+        </div>
+      </div>
+      <p className="acesso__codigo num" data-testid={TID.acessoCodigo}>{compartilhamento.codigo}</p>
     </div>
   )
 }

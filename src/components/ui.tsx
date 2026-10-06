@@ -1,6 +1,7 @@
 import { FONTES } from '../data/seed'
 import { ROTULO_SINAL, formatarData } from '../lib/formato'
 import { navegar } from '../lib/router'
+import { TID } from '../lib/testids'
 import type { Evento, FonteId, Medida, Sinal } from '../data/types'
 import { Icon, type NomeIcone } from './Icon'
 
@@ -130,6 +131,25 @@ export function Vazio({
       <p className="vazio__titulo">{titulo}</p>
       <p className="vazio__texto">{texto}</p>
       {acao}
+    </div>
+  )
+}
+
+/* Histórico ainda sem nenhum registro: toda tela do app aponta para o mesmo primeiro passo. */
+export function VazioHistorico({ titulo, texto, icone = 'anexar' }: { titulo: string; texto: string; icone?: NomeIcone }) {
+  return (
+    <div className="vazio-historico" data-testid={TID.estadoVazio}>
+      <Vazio
+        icone={icone} titulo={titulo} texto={texto}
+        acao={
+          <button
+            type="button" className="btn" data-testid={TID.ctaPrimeiroDocumento}
+            onClick={() => navegar('/app/fontes')}
+          >
+            <Icon nome="anexar" tamanho={16} /> Anexar primeiro documento
+          </button>
+        }
+      />
     </div>
   )
 }
