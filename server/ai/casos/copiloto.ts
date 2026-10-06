@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { responder } from '../../../src/data/copiloto.js'
 import type { Evento, Medida } from '../../../src/data/types.js'
 import { analitoDaPergunta, analitoDe, chaveDaMedida } from '../analitos.js'
-import { derivarFatos } from '../fatos.js'
+import { type Pendencia, derivarFatos } from '../fatos.js'
 import { avisoPara } from '../guardrails.js'
 import { pedirJson } from '../json.js'
 import { SISTEMA, contextoHistorico, descreverPerfil } from '../prompts.js'
@@ -68,17 +68,37 @@ function respostaDeRepeticao(eventos: Evento[], pergunta: string, ancoras: strin
 }
 
 const PERGUNTA_PENDENCIA = /pendent|pendenc|faltou|faltando|ficou para tras|esqueci|em aberto|atrasad/
+const CONFIRME_PENDENCIAS = 'Confirme com quem acompanha você se esses itens ainda são necessários.'
+
+const VAZIAS_PENDENCIA = new Set(['nova', 'novo', 'novas', 'novos', 'exame', 'exames', 'prova', 'para', 'com'])
+const palavrasDoAlvo = (alvo: string) =>
+  normalizar(alvo).split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !VAZIAS_PENDENCIA.has(w))
+
+/* A pendência está na resposta se o modelo ancorou o registro e nomeou o alvo; retorno e pedido da mesma
+   consulta dividem a âncora, então o retorno precisa ser dito como retorno. */
+const citaPendencia = (p: Pendencia, texto: string, ancoras: string[]) => ancoras.includes(p.ancoras[0])
+  && (p.tipo !== 'retorno' || /retorn|voltar|volta a|acompanhamento/.test(texto))
+  && palavrasDoAlvo(p.alvo).some((w) => texto.includes(w))
 
 /* Visto em produção: "Ficou alguma coisa pendente?" → "Não encontrei", com retorno e espirometria
-   pedidos em 04/11/2025 e nunca registrados. Pendência é fato calculado: se o modelo não citou
-   nenhuma, a resposta vem dos fatos. */
-function respostaDePendencia(eventos: Evento[], pergunta: string, ancoras: string[]): Omit<RespostaCopiloto, 'geradoPor'> | undefined {
+   pedidos em 04/11/2025 e nunca registrados; depois, só a espirometria, sem o retorno vencido.
+   Pendência é fato calculado: se o modelo não citou nenhuma, a resposta vem dos fatos; se citou parte,
+   as que faltaram entram no fim da resposta. */
+function respostaDePendencia(eventos: Evento[], pergunta: string, texto: string[], ancoras: string[]): Omit<RespostaCopiloto, 'geradoPor'> | undefined {
   if (!PERGUNTA_PENDENCIA.test(normalizar(pergunta))) return undefined
   const { pendencias } = derivarFatos(eventos)
-  if (!pendencias.length || pendencias.some((p) => ancoras.includes(p.ancoras[0]))) return undefined
+  const dito = normalizar(texto.join(' '))
+  const faltam = pendencias.filter((p) => !citaPendencia(p, dito, ancoras))
+  if (!faltam.length) return undefined
+  if (!pendencias.some((p) => ancoras.includes(p.ancoras[0]))) {
+    return {
+      texto: [...pendencias.map((p) => p.descricao), CONFIRME_PENDENCIAS],
+      ancoras: [...new Set(pendencias.flatMap((p) => p.ancoras))],
+    }
+  }
   return {
-    texto: [...pendencias.map((p) => p.descricao), 'Confirme com quem acompanha você se esses itens ainda são necessários.'],
-    ancoras: [...new Set(pendencias.flatMap((p) => p.ancoras))],
+    texto: [...texto, ...faltam.map((p) => p.descricao)],
+    ancoras: [...new Set([...ancoras, ...faltam.flatMap((p) => p.ancoras)])],
   }
 }
 
@@ -127,7 +147,7 @@ export async function responderCopiloto({ repo, llm, perfil }: ContextoIa, entra
     /* O motor determinístico só conhece o histórico de exemplo: se nenhuma das âncoras dele existe
        aqui, a resposta falaria de registros que a paciente não tem. */
     if (resposta.ancoras.length && !ancoras.length) {
-      const deFatos = respostaDeRepeticao(eventos, entrada.pergunta, []) ?? respostaDePendencia(eventos, entrada.pergunta, [])
+      const deFatos = respostaDeRepeticao(eventos, entrada.pergunta, []) ?? respostaDePendencia(eventos, entrada.pergunta, [], [])
       if (deFatos) return { ...deFatos, geradoPor: llm.nome }
       const aviso = avisoPara(entrada.pergunta, null)
       return { texto: [SEM_BASE], ancoras: [], ...(aviso && { aviso }), geradoPor: llm.nome }
@@ -152,7 +172,7 @@ export async function responderCopiloto({ repo, llm, perfil }: ContextoIa, entra
 
   const texto = limparTextos(r.texto, eventos)
   const ancoras = filtrarAncoras(r.ancoras, validos)
-  const deFatos = respostaDeRepeticao(eventos, entrada.pergunta, ancoras) ?? respostaDePendencia(eventos, entrada.pergunta, ancoras)
+  const deFatos = respostaDeRepeticao(eventos, entrada.pergunta, ancoras) ?? respostaDePendencia(eventos, entrada.pergunta, texto, ancoras)
   if (deFatos) return { ...deFatos, geradoPor: llm.nome }
   const aviso = avisoPara(entrada.pergunta, r.aviso && limparTexto(r.aviso, eventos))
   if (!texto.length || !ancoras.length) return { texto: [SEM_BASE], ancoras: [], ...(aviso && { aviso }), geradoPor: llm.nome }

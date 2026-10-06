@@ -1,7 +1,7 @@
 import type { Evento } from '../../src/data/types.js'
 import { chaveDaMedida, nomeDaSerie } from './analitos.js'
 import { hojeIso } from '../db/datas.js'
-import { dataBR, formatarNumero, normalizar, porData } from './casos/comum.js'
+import { dataBR, formatarNumero, mesAno, normalizar, porData } from './casos/comum.js'
 
 /* Fatos calculados de forma determinística a partir dos registros. O modelo erra tendência
    ("glicada em queda" quando subiu) e não liga pedido a exame já feito; aqui isso é contado,
@@ -223,42 +223,49 @@ function reavaliacoesSemMedicao(eventos: Evento[]): Pendencia[] {
 }
 
 const PRAZO = /retorno\s+(?:em|apos|dentro de)\s+(\d+)\s+(dia|semana|mes|ano)/
-const DIAS_DA_UNIDADE: Record<string, number> = { dia: 1, semana: 7, mes: 30, ano: 365 }
-/* Retorno feito com algum atraso ainda é o retorno: só vira pendência depois do prazo + esta folga. */
+/* Retorno feito com algum atraso (ou adiantado) ainda é o retorno: só vira pendência depois do
+   previsto + esta folga, e consulta a partir do previsto − esta folga conta como o retorno. */
 const TOLERANCIA_RETORNO_DIAS = 30
 
-function prazoEmDias(resumo: string): number | undefined {
+/* "6 meses" a partir de 04/11/2025 é 04/05/2026: mês e ano no calendário, dia e semana em dias. */
+function dataPrevista(resumo: string, desde: string): string | undefined {
   const m = normalizar(resumo).match(PRAZO)
   if (!m) return undefined
-  return Number(m[1]) * DIAS_DA_UNIDADE[m[2]]
-}
-
-/* Retorno recomendado sem nenhum registro posterior da mesma especialidade (consulta, alta, receita,
-   exame do mesmo serviço). Com prazo ("retorno em 6 meses"), só depois do prazo + tolerância. */
-function retornosSemRegistro(eventos: Evento[], hoje: string): Pendencia[] {
-  const mesma = (a?: string, b?: string) => !!a && !!b && normalizar(a) === normalizar(b)
-  return eventos
-    .filter((e) => e.especialidade && /retorno/i.test(e.resumo))
-    .filter((e) => !eventos.some((d) => d.data > e.data && mesma(d.especialidade, e.especialidade)))
-    .filter((e) => {
-      const prazo = prazoEmDias(e.resumo)
-      return prazo === undefined || dias(e.data, hoje) > prazo + TOLERANCIA_RETORNO_DIAS
-    })
-    .map((e) => {
-      const frase = e.resumo.split(/(?<=\.)\s+/).find((f) => /retorno/i.test(f))?.trim().replace(/\.$/, '')
-      const prazo = prazoEmDias(e.resumo)
-      const vencido = prazo === undefined ? '' : ` O prazo venceu em ${dataBR(somarDias(e.data, prazo))}.`
-      return {
-        tipo: 'retorno' as const,
-        alvo: e.especialidade!,
-        data: e.data,
-        descricao: `Em ${dataBR(e.data)}, "${e.titulo}" registrou: "${frase}". Não há registro posterior de ${e.especialidade}.${vencido}`,
-        ancoras: [e.id],
-      }
-    })
+  const n = Number(m[1])
+  const d = new Date(`${desde}T00:00:00Z`)
+  if (m[2] === 'mes') d.setUTCMonth(d.getUTCMonth() + n)
+  else if (m[2] === 'ano') d.setUTCFullYear(d.getUTCFullYear() + n)
+  else d.setUTCDate(d.getUTCDate() + n * (m[2] === 'semana' ? 7 : 1))
+  return d.toISOString().slice(0, 10)
 }
 
 const somarDias = (iso: string, n: number) => new Date(Date.parse(iso) + n * DIA_MS).toISOString().slice(0, 10)
+const mesmaEspecialidade = (a?: string, b?: string) => !!a && !!b && normalizar(a).trim() === normalizar(b).trim()
+
+/* Retorno recomendado numa consulta sem consulta posterior da mesma especialidade. Exame, receita ou
+   vacina do mesmo serviço não são o retorno. Com prazo ("retorno em 6 meses"), conta a consulta a partir
+   do previsto − tolerância, e a pendência só aparece depois do previsto + tolerância. Receita que cita
+   o retorno ("antecipar o retorno com a pneumologia") não é quem o recomendou. */
+function retornosSemRegistro(eventos: Evento[], hoje: string): Pendencia[] {
+  return eventos
+    .filter((e) => TIPOS_PEDIDO.includes(e.tipo) && e.especialidade && /retorno/i.test(e.resumo))
+    .flatMap((e) => {
+      const prevista = dataPrevista(e.resumo, e.data)
+      const desde = prevista ? somarDias(prevista, -TOLERANCIA_RETORNO_DIAS) : e.data
+      const voltou = eventos.some((d) => d.id !== e.id && TIPOS_PEDIDO.includes(d.tipo) && d.data > e.data
+        && d.data >= desde && mesmaEspecialidade(d.especialidade, e.especialidade))
+      if (voltou || (prevista && dias(prevista, hoje) <= TOLERANCIA_RETORNO_DIAS)) return []
+      const frase = e.resumo.split(/(?<=\.)\s+/).find((f) => /retorno/i.test(f))?.trim().replace(/\.$/, '')
+      const quando = prevista ? `previsto para ${mesAno(prevista)}` : `recomendado em ${dataBR(e.data)}`
+      return [{
+        tipo: 'retorno' as const,
+        alvo: e.especialidade!,
+        data: e.data,
+        descricao: `Retorno em ${e.especialidade} ${quando} sem consulta posterior registrada. Em ${dataBR(e.data)}, "${e.titulo}" registrou: "${frase}".`,
+        ancoras: [e.id],
+      }]
+    })
+}
 
 export function derivarFatos(eventos: Evento[], hoje = hojeIso()): Fatos {
   const ordenados = [...eventos].sort(porData)

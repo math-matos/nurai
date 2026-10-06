@@ -189,12 +189,12 @@ describe('derivarFatos — pedidos e retornos de consulta (shape real)', () => {
   const pendencias = (eventos: Evento[], hoje = HOJE) => derivarFatos(eventos, hoje).pendencias
 
   it('consulta de pneumologia de 04/11/2025: nova espirometria e retorno em 6 meses ficam pendentes', () => {
-    const lista = pendencias(DEMO_MARCOS)
+    const lista = pendencias(DEMO_MARCOS).filter((p) => p.ancoras.includes('d08'))
     expect(lista.map((p) => [p.tipo, p.alvo, p.ancoras])).toEqual([
       ['pedido', 'nova espirometria com prova broncodilatadora', ['d08']],
       ['retorno', 'Pneumologia', ['d08']],
     ])
-    expect(lista[1].descricao).toMatch(/retorno em 6 meses.*O prazo venceu em 03\/05\/2026/)
+    expect(lista[1].descricao).toMatch(/^Retorno em Pneumologia previsto para 05\/2026 sem consulta posterior registrada\..*retorno em 6 meses/)
   })
 
   it('"nova espirometria" pedida no seguimento não é exame duplicado da espirometria anterior', () => {
@@ -203,7 +203,7 @@ describe('derivarFatos — pedidos e retornos de consulta (shape real)', () => {
   })
 
   it('consulta de cardiologia de 14/08/2024: MAPA, perfil lipídico, glicemia, glicada, creatinina e potássio foram feitos depois', () => {
-    expect(pendencias(DEMO_MARCOS).filter((p) => p.ancoras.includes('d01'))).toEqual([])
+    expect(pendencias(DEMO_MARCOS).filter((p) => p.ancoras.includes('d01') && p.tipo === 'pedido')).toEqual([])
     const semExames = DEMO_MARCOS.filter((e) => ['d01'].includes(e.id))
     expect(pendencias(semExames).filter((p) => p.tipo === 'pedido').map((p) => p.alvo)).toEqual([
       'MAPA de 24 horas', 'perfil lipídico completo', 'glicemia de jejum', 'hemoglobina glicada', 'creatinina', 'potássio',
@@ -215,6 +215,11 @@ describe('derivarFatos — pedidos e retornos de consulta (shape real)', () => {
     const d04 = DEMO_MARCOS.find((e) => e.id === 'd04')!
     expect(pendencias([d01, d04]).filter((p) => p.tipo === 'pedido').map((p) => p.alvo))
       .toEqual(['MAPA de 24 horas', 'perfil lipídico completo'])
+  })
+
+  it('retorno em 60 dias da cardiologia: o MAPA feito depois não é o retorno; sem consulta de cardiologia, fica pendente', () => {
+    const [cardio] = pendencias(DEMO_MARCOS).filter((p) => p.tipo === 'retorno' && p.ancoras.includes('d01'))
+    expect(cardio.descricao).toMatch(/^Retorno em Cardiologia previsto para 10\/2024 sem consulta posterior registrada/)
   })
 
   it('retorno ainda dentro do prazo + tolerância não é pendência; vencido é', () => {
@@ -229,5 +234,50 @@ describe('derivarFatos — pedidos e retornos de consulta (shape real)', () => {
     const d08 = DEMO_MARCOS.find((e) => e.id === 'd08')!
     const volta = { ...d08, id: 'x1', data: '2026-05-20', resumo: 'Consulta de retorno: asma controlada.' }
     expect(pendencias([d08, volta]).filter((p) => p.tipo === 'retorno' && p.ancoras.includes('d08'))).toEqual([])
+  })
+})
+
+/* Evento gravado em produção (conta de teste do Marcos), com o resumo exato da extração. */
+describe('derivarFatos — retorno vencido (evento real de produção)', () => {
+  const HOJE = '2026-10-06'
+  const SEGUIMENTO: Evento = {
+    id: 'p08', data: '2025-11-04', tipo: 'consulta', titulo: 'Consulta de seguimento em Pneumologia',
+    instituicao: 'Clínica Ipê-Roxo', fonte: 'paciente', especialidade: 'Pneumologia',
+    resumo: 'A paciente apresenta asma parcialmente controlada, com baixa adesão à técnica inalatória. Foi substituída a budesonida isolada por budesonida 160 mcg + formoterol 4,5 mcg, 1 inalação 12/12 h. Foi solicitada nova espirometria com prova broncodilatadora e retorno em 6 meses.',
+    sinal: 'alterado', tags: ['asma'], origem: 'OCR + IA',
+  }
+  /* Receita de clínica médica que cita o retorno com a pneumologia (resumo devolvido pela OCI). */
+  const RECEITA: Evento = {
+    id: 'p12', data: '2026-09-03', tipo: 'medicacao', titulo: 'Receita renovada', instituicao: 'Clínica Ipê-Roxo',
+    fonte: 'paciente', especialidade: 'Clínica Médica', sinal: 'info', tags: [], origem: 'OCR + IA',
+    resumo: 'Receita renovada para uso contínuo com losartana potássica 50 mg, budesonida 160 mcg + formoterol 4,5 mcg e salbutamol 100 mcg. Retorno com a pneumologia se precisar do salbutamol mais de 2 vezes por semana.',
+  }
+  const retornos = (eventos: Evento[], hoje = HOJE) =>
+    derivarFatos(eventos, hoje).pendencias.filter((p) => p.tipo === 'retorno')
+  const consulta = (id: string, data: string, especialidade = 'Pneumologia'): Evento =>
+    ({ ...SEGUIMENTO, id, data, especialidade, titulo: 'Consulta', resumo: 'Asma controlada.' })
+
+  it('retorno em 6 meses sem consulta posterior vira pendência "previsto para 05/2026"', () => {
+    const d05 = DEMO_MARCOS.find((e) => e.id === 'd05')!
+    const lista = retornos([d05, SEGUIMENTO, RECEITA])
+    expect(lista.map((p) => [p.alvo, p.ancoras])).toEqual([['Pneumologia', ['p08']]])
+    expect(lista[0].descricao).toMatch(/^Retorno em Pneumologia previsto para 05\/2026 sem consulta posterior registrada\./)
+    expect(lista[0].descricao).toMatch(/04\/11\/2025.*retorno em 6 meses/)
+  })
+
+  it('receita que só cita o retorno com outra especialidade não gera pendência de retorno', () => {
+    expect(retornos([RECEITA])).toEqual([])
+  })
+
+  it('exame posterior da mesma especialidade não é o retorno', () => {
+    const espirometria = { ...DEMO_MARCOS.find((e) => e.id === 'd05')!, id: 'x2', data: '2026-06-20' }
+    const { pendencias } = derivarFatos([SEGUIMENTO, espirometria], HOJE)
+    expect(pendencias.map((p) => p.tipo)).toEqual(['retorno'])
+  })
+
+  it('consulta da mesma especialidade (grafia normalizada) a partir de previsto − tolerância resolve', () => {
+    expect(retornos([SEGUIMENTO, consulta('x3', '2026-04-20', ' pneumologia ')])).toEqual([])
+    expect(retornos([SEGUIMENTO, consulta('x4', '2026-01-10')])).toHaveLength(1)
+    expect(retornos([SEGUIMENTO, consulta('x5', '2026-05-20', 'Cardiologia')])).toHaveLength(1)
   })
 })

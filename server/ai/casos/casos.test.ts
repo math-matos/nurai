@@ -304,19 +304,20 @@ describe('gerarPassos — histórico real do Marcos', () => {
     const { deps: d } = await deps({ texto: ['Não encontrei pendências no seu histórico.'], ancoras: [], serie: null, aviso: null }, 'vazio')
     for (const e of DEMO_MARCOS) await d.repo.adicionarEvento(e, 'Marcos')
     const r = await responderCopiloto(d, { pergunta: 'Ficou alguma coisa pendente no meu acompanhamento?' })
-    expect(r.ancoras).toEqual(['d08'])
+    expect(r.ancoras).toEqual(['d01', 'd08'])
     expect(r.texto.join(' ')).toMatch(/nova espirometria com prova broncodilatadora em 04\/11\/2025/)
-    expect(r.texto.join(' ')).toMatch(/Pneumologia.*retorno em 6 meses/)
+    expect(r.texto.join(' ')).toMatch(/Retorno em Pneumologia previsto para 05\/2026.*retorno em 6 meses/)
   })
 
   it('pendências da consulta de pneumologia viram passos; "confirmar a dosagem" é barrado; o passo concreto do modelo fica', async () => {
     const passos = await gerar()
     expect(passos.slice(2).map((p) => [p.titulo, p.ancoras])).toEqual([
+      ['Retomar o acompanhamento de cardiologia', ['d01']],
       ['Fazer o exame pedido: nova espirometria com prova broncodilatadora', ['d08']],
       ['Retomar o acompanhamento de pneumologia', ['d08']],
       ['Levar a TFG de 85 ao nefrologista', ['d10']],
     ])
-    expect(passos[3].porque).toMatch(/retorno em 6 meses.*O prazo venceu em 03\/05\/2026/)
+    expect(passos[4].porque).toMatch(/^Retorno em Pneumologia previsto para 05\/2026.*retorno em 6 meses/)
     expect(passos.map((p) => p.titulo).join(' | ')).not.toMatch(/dosagem/)
   })
 })
@@ -377,5 +378,54 @@ describe('histórico vazio responde sem chamar o LLM', () => {
     const { deps: d, chamadas } = await deps(null, 'vazio')
     expect(await explicarExame(d, 'e21')).toBeNull()
     expect(chamadas).toHaveLength(0)
+  })
+})
+
+/* Visto em produção: com o retorno em 6 meses vencido, copiloto e passos citaram só a espirometria. */
+describe('retorno vencido da consulta de pneumologia (evento real de produção)', () => {
+  const SEGUIMENTO = {
+    id: 'p08', data: '2025-11-04', tipo: 'consulta' as const, titulo: 'Consulta de seguimento em Pneumologia',
+    instituicao: 'Clínica Ipê-Roxo', fonte: 'paciente' as const, especialidade: 'Pneumologia',
+    resumo: 'A paciente apresenta asma parcialmente controlada, com baixa adesão à técnica inalatória. Foi substituída a budesonida isolada por budesonida 160 mcg + formoterol 4,5 mcg, 1 inalação 12/12 h. Foi solicitada nova espirometria com prova broncodilatadora e retorno em 6 meses.',
+    sinal: 'alterado' as const, tags: ['asma'], origem: 'OCR + IA' as const,
+  }
+  const ESPIROMETRIA = DEMO_MARCOS.find((e) => e.id === 'd05')!
+
+  async function comHistorico(resposta: unknown) {
+    const { deps: d } = await deps(resposta, 'vazio')
+    for (const e of [ESPIROMETRIA, SEGUIMENTO]) await d.repo.adicionarEvento(e, 'Marcos')
+    return d
+  }
+
+  it('copiloto: o modelo cita só a espirometria; o retorno vencido entra na resposta', async () => {
+    const d = await comHistorico({
+      texto: ['Na consulta de 04/11/2025 foi pedida uma nova espirometria com prova broncodilatadora, que não aparece depois no seu histórico.'],
+      ancoras: ['p08'], serie: null, aviso: null,
+    })
+    const r = await responderCopiloto(d, { pergunta: 'Ficou algo pendente?' })
+    const texto = r.texto.join(' ')
+    expect(texto).toMatch(/nova espirometria/)
+    expect(texto).toMatch(/Retorno em Pneumologia previsto para 05\/2026 sem consulta posterior registrada/)
+    expect(r.ancoras).toEqual(['p08'])
+  })
+
+  it('copiloto: resposta que já cita o retorno não é duplicada', async () => {
+    const d = await comHistorico({
+      texto: ['A nova espirometria e o retorno em pneumologia pedidos em 04/11/2025 não aparecem depois.'],
+      ancoras: ['p08'], serie: null, aviso: null,
+    })
+    const r = await responderCopiloto(d, { pergunta: 'Ficou algo pendente?' })
+    expect(r.texto).toEqual(['A nova espirometria e o retorno em pneumologia pedidos em 04/11/2025 não aparecem depois.'])
+  })
+
+  it('passos: o retorno vencido vira passo ao lado da espirometria', async () => {
+    const d = await comHistorico({ passos: [{
+      titulo: 'Fazer a nova espirometria', porque: 'Pedida em 04/11/2025 e sem resultado posterior.',
+      ancoras: ['p08'], prazo: 'Em até 30 dias', prioridade: 'alta',
+    }] })
+    const { passos } = await gerarPassos(d)
+    const retorno = passos.find((p) => /pneumologia/i.test(p.titulo))
+    expect(retorno?.porque).toMatch(/^Retorno em Pneumologia previsto para 05\/2026 sem consulta posterior registrada/)
+    expect(passos.some((p) => /espirometria/i.test(p.titulo))).toBe(true)
   })
 })
