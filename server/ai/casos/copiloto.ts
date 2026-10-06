@@ -91,7 +91,15 @@ export async function responderCopiloto({ repo, llm, perfil }: ContextoIa, entra
 
   if (llm.nome === 'mock') {
     const resposta = responder(entrada.pergunta)
-    return { ...resposta, ancoras: filtrarAncoras(resposta.ancoras, validos), geradoPor: llm.nome }
+    const ancoras = filtrarAncoras(resposta.ancoras, validos)
+    /* O motor determinístico só conhece o histórico de exemplo: se nenhuma das âncoras dele existe
+       aqui, a resposta falaria de registros que a paciente não tem. */
+    if (resposta.ancoras.length && !ancoras.length) {
+      const aviso = avisoPara(entrada.pergunta, null)
+      return { texto: [SEM_BASE], ancoras: [], ...(aviso && { aviso }), geradoPor: llm.nome }
+    }
+    const aviso = avisoPara(entrada.pergunta, resposta.aviso)
+    return { ...resposta, ancoras, ...(aviso && { aviso }), geradoPor: llm.nome }
   }
 
   const turnos: MensagemLlm[] = (entrada.historico ?? []).slice(-TURNOS_ANTERIORES).flatMap((t) => [

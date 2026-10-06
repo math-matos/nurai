@@ -3,6 +3,7 @@ import { EVENTOS } from '../../../src/data/seed.js'
 import { PERFIL_DEMO } from '../../db/exemplo.js'
 import { criarRepoMemoria } from '../../db/memoria.js'
 import { AVISO_MEDICO } from '../guardrails.js'
+import { criarLlmMock } from '../mock.js'
 import { descreverPerfil, serializarEvento } from '../prompts.js'
 import type { LlmProvider, MensagemLlm } from '../provider.js'
 import { HISTORICO_VAZIO, responderCopiloto } from './copiloto.js'
@@ -71,6 +72,43 @@ describe('responderCopiloto', () => {
     const { deps: d } = await deps({ texto: ['Você usa rivaroxabana desde 2023.'], ancoras: ['e10'], serie: null, aviso: null })
     const r = await responderCopiloto(d, { pergunta: 'Posso parar a rivaroxabana?' })
     expect(r.aviso).toBe(AVISO_MEDICO)
+  })
+})
+
+describe('responderCopiloto com o provider mock', () => {
+  /* O motor determinístico responde sobre o histórico de exemplo; quem tem outro histórico não pode
+     receber fatos de registros que não são dele. */
+  async function depsMock(modo: 'exemplo' | 'vazio') {
+    const raiz = criarRepoMemoria()
+    const { pacienteId } = await raiz.criarPaciente({ nome: 'Marcos', convidado: false })
+    const perfil = (await raiz.aplicarOnboarding(pacienteId, modo))!
+    const repo = raiz.paraPaciente(pacienteId)
+    if (modo === 'vazio') {
+      await repo.adicionarEvento({
+        id: 'u1', data: '2026-03-12', tipo: 'exame', titulo: 'Perfil lipídico', instituicao: 'Laboratório Quaresmeira',
+        fonte: 'paciente', resumo: 'LDL 138 mg/dL.', sinal: 'alterado', tags: [], origem: 'OCR + IA',
+      }, perfil.nome)
+    }
+    return { repo, perfil, llm: criarLlmMock() }
+  }
+
+  it('não cita registros do exemplo para quem não os tem', async () => {
+    const r = await responderCopiloto(await depsMock('vazio'), { pergunta: 'Tem algum exame que eu não preciso repetir?' })
+    expect(r.ancoras).toEqual([])
+    expect(r.texto.join(' ')).not.toMatch(/carótidas|08\/07\/2026/)
+    expect(r.texto).toEqual(['Não encontrei no seu histórico registros que sustentem uma resposta para isso.'])
+  })
+
+  it('aplica o aviso de remédio do servidor, como no provider real', async () => {
+    const r = await responderCopiloto(await depsMock('vazio'), { pergunta: 'Posso parar de tomar a losartana?' })
+    expect(r.aviso).toBe(AVISO_MEDICO)
+  })
+
+  it('no histórico de exemplo continua respondendo com as âncoras do exemplo', async () => {
+    const r = await responderCopiloto(await depsMock('exemplo'), { pergunta: 'Tem algum exame que eu não preciso repetir?' })
+    expect(r.ancoras).toEqual(['e22', 'e24'])
+    expect(r.texto[0]).toMatch(/ultrassom de carótidas/)
+    expect(r.aviso).toMatch(/Não cancele um exame/)
   })
 })
 
