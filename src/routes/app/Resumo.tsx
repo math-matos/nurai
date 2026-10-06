@@ -3,27 +3,38 @@ import { Icon } from '../../components/Icon'
 import { AvisoIa, Falha, Regua, SeloIa, VazioHistorico } from '../../components/ui'
 import { formatarData, ordenarRecentes } from '../../lib/formato'
 import { MEDICACOES } from '../../data/seed'
+import type { Evento } from '../../data/types'
 import { api, mensagemDeErro, podeRepetir, type Compartilhamento, type ResumoIa } from '../../lib/api'
 import { navegar } from '../../lib/router'
 import { hoje, useAcoes, useEstado, usePerfil } from '../../lib/store'
 import { TID } from '../../lib/testids'
 
-type Foco = 'cardiologia' | 'endocrinologia' | 'clinica'
+/* Médico, data de referência e destaques fixos só existem para a paciente de exemplo. */
+const FOCOS_EXEMPLO: Record<string, { medico: string; desde: string; ids: string[] }> = {
+  Cardiologia: { medico: 'Dra. Renata Aguiar', desde: 'a consulta de 18 fev 2026', ids: ['e23', 'e22', 'e21'] },
+  Endocrinologia: { medico: 'Dr. Paulo Sarmento', desde: 'a consulta de 10 fev 2025', ids: ['e18', 'e21', 'e14'] },
+  'Clínica médica': { medico: 'UBS Vila Mariana', desde: 'a consulta de 08 jul 2026', ids: ['e23', 'e22', 'e21'] },
+}
 
-const FOCOS: { id: Foco; rotulo: string; medico: string; desde: string; ids: string[] }[] = [
-  {
-    id: 'cardiologia', rotulo: 'Cardiologia', medico: 'Dra. Renata Aguiar',
-    desde: 'a consulta de 18 fev 2026', ids: ['e23', 'e22', 'e21'],
-  },
-  {
-    id: 'endocrinologia', rotulo: 'Endocrinologia', medico: 'Dr. Paulo Sarmento',
-    desde: 'a consulta de 10 fev 2025', ids: ['e18', 'e21', 'e14'],
-  },
-  {
-    id: 'clinica', rotulo: 'Clínica médica', medico: 'UBS Vila Mariana',
-    desde: 'a consulta de 08 jul 2026', ids: ['e23', 'e22', 'e21'],
-  },
-]
+const CLINICA = 'Clínica médica'
+const OUTRA = 'outra'
+const MAX_ESPECIALIDADE = 80
+
+/* Abas a partir do próprio histórico: mais frequentes primeiro, sem repetir grafias, e sempre clínica médica. */
+function especialidadesDe(eventos: Evento[]): string[] {
+  const contagem = new Map<string, { rotulo: string; n: number }>()
+  for (const e of eventos) {
+    const rotulo = e.especialidade?.trim()
+    if (!rotulo) continue
+    const chave = rotulo.toLocaleLowerCase('pt-BR')
+    const atual = contagem.get(chave)
+    contagem.set(chave, { rotulo: atual?.rotulo ?? rotulo, n: (atual?.n ?? 0) + 1 })
+  }
+  const rotulos = [...contagem.values()]
+    .sort((a, b) => b.n - a.n || a.rotulo.localeCompare(b.rotulo, 'pt-BR'))
+    .map((x) => x.rotulo)
+  return contagem.has(CLINICA.toLocaleLowerCase('pt-BR')) ? rotulos : [...rotulos, CLINICA]
+}
 
 export function Resumo() {
   const { eventos } = useEstado()
@@ -45,17 +56,21 @@ function FolhaResumo() {
   /* Médicos, datas e medicamentos fixos só fazem sentido no histórico de exemplo. */
   const exemplo = perfil.onboarding === 'exemplo'
   const { gerarCompartilhamento } = useAcoes()
-  const [foco, setFoco] = useState<Foco>('cardiologia')
-  const [sinteses, setSinteses] = useState<Partial<Record<Foco, ResumoIa>>>({})
-  const [gerandoPara, setGerandoPara] = useState<Foco | null>(null)
-  const [erroIa, setErroIa] = useState<{ foco: Foco; mensagem: string; repetivel: boolean } | null>(null)
+  const especialidades = especialidadesDe(eventos)
+  const [escolha, setEscolha] = useState(especialidades[0])
+  const [outra, setOutra] = useState('')
+  const [sinteses, setSinteses] = useState<Record<string, ResumoIa>>({})
+  const [gerandoPara, setGerandoPara] = useState<string | null>(null)
+  const [erroIa, setErroIa] = useState<{ foco: string; mensagem: string; repetivel: boolean } | null>(null)
   const [compartilhando, setCompartilhando] = useState(false)
 
-  const alvo = FOCOS.find((f) => f.id === foco)!
-  const doExemplo = alvo.ids
+  const foco = escolha === OUTRA ? outra.trim() : escolha
+  const rotuloFoco = foco || 'outra especialidade'
+  const alvo = exemplo ? FOCOS_EXEMPLO[foco] : undefined
+  const doExemplo = (alvo?.ids ?? [])
     .map((id) => eventos.find((e) => e.id === id))
     .filter((e): e is NonNullable<typeof e> => Boolean(e))
-  const usaExemplo = exemplo && doExemplo.length > 0
+  const usaExemplo = alvo !== undefined && doExemplo.length > 0
   const destaques = usaExemplo ? doExemplo : ordenarRecentes(eventos).slice(0, 3)
   const tituloDestaques = usaExemplo ? `O que mudou desde ${alvo.desde}` : 'Registros mais recentes'
   const medicacoes = ordenarRecentes(eventos).filter((e) => e.tipo === 'medicacao')
@@ -67,15 +82,15 @@ function FolhaResumo() {
   ].filter(Boolean).join(' · ')
   const pendentes = passos.filter((p) => !p.feito)
   const fontesDistintas = new Set(eventos.map((e) => e.fonte)).size
-  const sintese = sinteses[foco]
+  const sintese = foco ? sinteses[foco] : undefined
 
   const gerarResumo = async () => {
-    if (gerandoPara) return
+    if (gerandoPara || !foco) return
     const alvoAtual = foco
     setGerandoPara(alvoAtual)
     setErroIa(null)
     try {
-      const resumo = await api.resumo(alvo.rotulo)
+      const resumo = await api.resumo(alvoAtual)
       setSinteses((s) => ({ ...s, [alvoAtual]: resumo }))
     } catch (erro) {
       setErroIa({ foco: alvoAtual, mensagem: mensagemDeErro(erro), repetivel: podeRepetir(erro) })
@@ -87,7 +102,7 @@ function FolhaResumo() {
   const compartilhar = async () => {
     if (compartilhando) return
     setCompartilhando(true)
-    await gerarCompartilhamento(exemplo ? alvo.medico : `Profissional de ${alvo.rotulo.toLowerCase()}`)
+    await gerarCompartilhamento(alvo ? alvo.medico : foco ? `Profissional de ${foco.toLowerCase()}` : 'Profissional de saúde')
     setCompartilhando(false)
   }
 
@@ -96,24 +111,33 @@ function FolhaResumo() {
   return (
     <div className="resumo">
       <div className="resumo__controles">
-        <div className="seletor" role="group" aria-label="Especialidade de destino">
-          {FOCOS.map((f) => (
-            <button
-              key={f.id} type="button"
-              className={`seletor__opcao${foco === f.id ? ' seletor__opcao--ativa' : ''}`}
-              aria-pressed={foco === f.id}
-              onClick={() => setFoco(f.id)}
-            >
-              {f.rotulo}
-            </button>
-          ))}
+        <div className="resumo__foco">
+          <div className="seletor" role="group" aria-label="Especialidade de destino">
+            {[...especialidades, OUTRA].map((f) => (
+              <button
+                key={f} type="button"
+                className={`seletor__opcao${escolha === f ? ' seletor__opcao--ativa' : ''}`}
+                aria-pressed={escolha === f}
+                onClick={() => setEscolha(f)}
+              >
+                {f === OUTRA ? 'Outra…' : f}
+              </button>
+            ))}
+          </div>
+          {escolha === OUTRA && (
+            <input
+              className="field resumo__outra" value={outra} maxLength={MAX_ESPECIALIDADE} autoFocus
+              aria-label="Qual especialidade?" placeholder="Ex.: Pneumologia"
+              onChange={(e) => setOutra(e.target.value)}
+            />
+          )}
         </div>
         <div className="resumo__acoes">
           <button type="button" className="btn btn--ghost" onClick={() => window.print()}>
             <Icon nome="papel" tamanho={16} /> Imprimir
           </button>
           <button
-            type="button" className="btn btn--ghost" disabled={gerandoPara !== null}
+            type="button" className="btn btn--ghost" disabled={gerandoPara !== null || !foco}
             onClick={() => { void gerarResumo() }} data-testid={TID.iaResumo}
           >
             <Icon nome="copiloto" tamanho={16} />
@@ -133,7 +157,7 @@ function FolhaResumo() {
       <article className="folha-resumo">
         <header className="folha-resumo__cabeca">
           <div>
-            <p className="label">Resumo pré-consulta · {alvo.rotulo}</p>
+            <p className="label">Resumo pré-consulta · {rotuloFoco}</p>
             <h2>{perfil.nome}</h2>
             {identificacao && <p className="folha-resumo__ident num">{identificacao}</p>}
           </div>
@@ -164,7 +188,7 @@ function FolhaResumo() {
 
         {(sintese || gerandoPara === foco || erroIa?.foco === foco) && (
           <section className="folha-resumo__bloco sintese-ia" aria-live="polite" data-testid={TID.resumoSintese}>
-            <h3>Síntese para {alvo.rotulo.toLowerCase()}</h3>
+            <h3>Síntese para {rotuloFoco.toLowerCase()}</h3>
             {gerandoPara === foco && (
               <div className="sintese-ia__carregando">
                 <span className="esqueleto" style={{ width: '90%' }} />

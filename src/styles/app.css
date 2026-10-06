@@ -441,6 +441,9 @@
 .seletor__opcao:hover { color: var(--ink); }
 .seletor__opcao--ativa { background: var(--card); color: var(--ink); box-shadow: var(--shadow-1); }
 .resumo__acoes { display: flex; gap: var(--sp-2); }
+.resumo__foco { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; min-width: 0; }
+.resumo__foco .seletor { flex-wrap: wrap; max-width: 100%; }
+.resumo__outra { width: 220px; max-width: 100%; }
 
 .acesso {
   display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4);
