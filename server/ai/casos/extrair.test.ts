@@ -91,6 +91,12 @@ describe('extrairEvento — data', () => {
     await extrairEvento({ llm }, { texto: PEDIDO })
     expect(instrucoes(recebidas)).toMatch(/"data":[^\n]*solicitação/)
   })
+
+  it('o prompt prefere a data da coleta à da emissão do laudo', async () => {
+    const { llm, recebidas } = llmFixo(bruto([]))
+    await extrairEvento({ llm }, { texto: PEDIDO })
+    expect(instrucoes(recebidas)).toMatch(/"data":[^\n]*coleta[^\n]*antes da[^\n]*emissão/)
+  })
 })
 
 describe('extrairEvento — tipo', () => {
