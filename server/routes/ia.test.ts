@@ -551,6 +551,23 @@ describe('rotas de IA por paciente', () => {
     expect(conteudo).not.toContain('[e21]')
   })
 
+  it('resumo de especialidade sem registros nem resultado alterado: 200 explicando, sem chamar o LLM', async () => {
+    const { llm, chamadas } = llmFake()
+    const appReal = criarApp({ repo: criarRepoMemoria(), llm })
+    const api = logado(appReal, (await cadastrarComOnboarding(appReal, 'vazio')).cookie)
+    await api.request('/api/eventos', json({
+      id: 'c1', data: '2026-09-01', tipo: 'exame', titulo: 'Eletrocardiograma', instituicao: 'Clínica C', especialidade: 'Cardiologia',
+      fonte: 'paciente', resumo: 'Ritmo sinusal.', sinal: 'normal', tags: ['ecg'], origem: 'Registro manual',
+    }))
+
+    const res = await api.request('/api/resumo', json({ especialidade: 'Pneumologia' }))
+    expect(res.status).toBe(200)
+    const body = CONTRATO.resumo.parse(await res.json())
+    expect(body.sintese.join(' ')).toMatch(/não (há|encontrei) registros? .*Pneumologia/i)
+    expect(body.pontos).toEqual([])
+    expect(chamadas).toHaveLength(0)
+  })
+
   it('histórico vazio: copiloto, resumo e passos respondem sem chamar o LLM', async () => {
     const raiz = criarRepoMemoria()
     const { llm, chamadas } = llmFake()

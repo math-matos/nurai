@@ -210,6 +210,15 @@ function suiteAcessoMedico(nome: string, fabrica: () => Repositorio) {
         })
       })
 
+      it('especialidade livre sem registros relacionados responde 200 explicando que não há base', async () => {
+        const comp = await gerar(bruno)
+        const res = await resumir({ codigo: comp.codigo, profissional: 'Dra. Renata Aguiar', especialidade: 'Pneumologia' })
+        expect(res.status).toBe(200)
+        const body = await ler(res)
+        expect(body).toMatchObject({ especialidade: 'Pneumologia', pontos: [], geradoPor: 'mock' })
+        expect((body.sintese as string[]).join(' ')).toMatch(/Pneumologia/)
+      })
+
       it('especialidade é opcional', async () => {
         const comp = await gerar(ana)
         const res = await resumir({ codigo: comp.codigo, profissional: 'Dra. Renata Aguiar' })
