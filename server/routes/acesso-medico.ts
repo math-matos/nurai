@@ -1,6 +1,6 @@
 import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import { gerarResumo } from '../ai/casos/resumo.js'
-import { derivarFatos, pontosEmAberto } from '../ai/fatos.js'
+import { pontosDoHistorico } from '../ai/fatos.js'
 import type { LlmProvider } from '../ai/provider.js'
 import { limitarPorIp, type Limite } from '../auth/limite.js'
 import { normalizarCodigo } from '../db/codigo.js'
@@ -72,7 +72,7 @@ export function rotasAcessoMedico(repo: Repositorio, llm: LlmProvider): Hono {
       expiraEm: acesso.expiraEm,
       eventos,
       /* Calculados no acesso: valem mesmo que o paciente nunca tenha gerado os próximos passos. */
-      pontosEmAberto: pontosEmAberto(derivarFatos(eventos)),
+      pontosEmAberto: pontosDoHistorico(eventos),
       /* Mantido por compatibilidade: são os passos gravados pelo paciente, que podem não existir. */
       passos: passos.filter((p) => !p.feito),
     })

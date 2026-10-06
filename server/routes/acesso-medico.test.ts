@@ -120,6 +120,21 @@ function suiteAcessoMedico(nome: string, fabrica: () => Repositorio) {
         expect(vazio.pontosEmAberto).toEqual([])
       })
 
+      it('mesmo histórico, mesmos pontos em aberto: tela do médico, GET /api/pontos-em-aberto e resumo do paciente', async () => {
+        const comp = await gerar(ana)
+        const doMedico = (await ler(await acessar({ codigo: comp.codigo, profissional: 'Dra. Renata Aguiar' }))).pontosEmAberto
+        const api = logado(app, ana.cookie)
+        const doPaciente = await ler(await api.request('/api/pontos-em-aberto'))
+        expect(doPaciente).toEqual({ pontosEmAberto: doMedico })
+        const resumo = await ler(await api.request('/api/resumo', json({ especialidade: 'Clínica geral' })))
+        expect(resumo.pontosEmAberto).toEqual(doMedico)
+        const textos = (resumo.pontos as { texto: string }[]).map((p) => p.texto)
+        for (const p of doMedico as { texto: string }[]) expect(textos).toContain(p.texto)
+
+        expect(await ler(await logado(app, bruno.cookie).request('/api/pontos-em-aberto'))).toEqual({ pontosEmAberto: [] })
+        expect((await app.request('/api/pontos-em-aberto')).status).toBe(401)
+      })
+
       it('histórico gerenciado por um responsável: o médico vê o paciente e quem enviou as informações', async () => {
         const rafael = await cadastrar(app, { nome: 'Rafael Lima' })
         const api = logado(app, rafael.cookie)
@@ -317,7 +332,7 @@ function suiteAcessoMedico(nome: string, fabrica: () => Repositorio) {
         const res = await resumir({ codigo: comp.codigo, profissional: 'Dra. Renata Aguiar', especialidade: 'Cardiologia' })
         expect(res.status).toBe(200)
         const body = await ler(res)
-        expect(Object.keys(body).sort()).toEqual(['aviso', 'especialidade', 'geradoPor', 'perguntasSugeridas', 'pontos', 'sintese'])
+        expect(Object.keys(body).sort()).toEqual(['aviso', 'especialidade', 'geradoPor', 'perguntasSugeridas', 'pontos', 'pontosEmAberto', 'sintese'])
         expect(body).toMatchObject({ especialidade: 'Cardiologia', geradoPor: 'mock' })
 
         const doTitular = await (await logado(app, ana.cookie).request('/api/resumo', json({ especialidade: 'Cardiologia' }))).json()
