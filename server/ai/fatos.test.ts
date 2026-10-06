@@ -87,3 +87,50 @@ describe('serializarFatos', () => {
     expect(serializarFatos(derivarFatos([]))).toMatch(/nenhum/i)
   })
 })
+
+/* Shape exato que a extração real (OCI) devolveu para os PDFs 02 e 09 do Marcos. */
+const PERFIL_02 = evento({
+  id: 'r02', data: '2026-03-12', tipo: 'exame', titulo: 'Perfil lipídico', instituicao: 'Laboratório Quaresmeira',
+  resumo: 'Colesterol total, LDL e triglicerídeos acima do desejável.',
+})
+const PEDIDO_09 = evento({
+  id: 'r09', data: '2026-04-02', tipo: 'documento', titulo: 'Pedido de exame', instituicao: 'Clínica Ipê-Roxo',
+  resumo: 'Pedido de exame de perfil lipídico para controle de dislipidemia, solicitado pela Dra. Beatriz N. Sallum.',
+})
+
+describe('derivarFatos — pedido de exame já realizado', () => {
+  it('liga o "Pedido de exame" (documento) de perfil lipídico ao perfil feito 21 dias antes', () => {
+    const { repeticoes, pendencias } = derivarFatos([PERFIL_02, PEDIDO_09])
+    expect(repeticoes).toEqual([expect.objectContaining({
+      exame: 'Perfil lipídico', feito: 'r02', pedido: 'r09', dias: 21, feitoInstituicao: 'Laboratório Quaresmeira',
+    })])
+    expect(pendencias).toEqual([])
+    expect(serializarFatos(derivarFatos([PERFIL_02, PEDIDO_09])))
+      .toMatch(/pedido em 02\/04\/2026 de perfil lipídico, já realizado em 12\/03\/2026 \(Laboratório Quaresmeira\).*\(r02, r09\)/)
+  })
+
+  it('reconhece sinônimos e acentos: "Guia — lipidograma" casa com "Perfil Lipidico"', () => {
+    const { repeticoes } = derivarFatos([
+      { ...PERFIL_02, titulo: 'PERFIL LIPIDICO' },
+      { ...PEDIDO_09, titulo: 'Guia SADT', resumo: 'Solicitação de lipidograma.' },
+    ])
+    expect(repeticoes.map((r) => [r.feito, r.pedido])).toEqual([['r02', 'r09']])
+  })
+
+  it('pedido de hemograma casa com "Hemograma completo"; pedido de outro exame não', () => {
+    const hemograma = evento({ id: 'h', data: '2026-03-10', titulo: 'Hemograma completo' })
+    const pedidoHemograma = evento({ id: 'p1', data: '2026-05-01', tipo: 'documento', titulo: 'Pedido de exame', resumo: 'Requisição de hemograma.' })
+    const pedidoTsh = evento({ id: 'p2', data: '2026-05-01', tipo: 'documento', titulo: 'Pedido de exame', resumo: 'Pedido de TSH.' })
+    expect(derivarFatos([hemograma, pedidoHemograma, pedidoTsh]).repeticoes.map((r) => r.pedido)).toEqual(['p1'])
+  })
+
+  it('não liga quando o exame foi feito há mais de 6 meses, nem um pedido a outro pedido', () => {
+    expect(derivarFatos([{ ...PERFIL_02, data: '2025-09-01' }, PEDIDO_09]).repeticoes).toEqual([])
+    expect(derivarFatos([{ ...PEDIDO_09, id: 'r08', data: '2026-03-01' }, PEDIDO_09]).repeticoes).toEqual([])
+  })
+
+  it('pedido sem resultado anterior nem posterior vira pendência com o nome do exame', () => {
+    const { pendencias } = derivarFatos([PEDIDO_09])
+    expect(pendencias).toEqual([expect.objectContaining({ tipo: 'pedido', alvo: 'perfil lipídico', ancoras: ['r09'] })])
+  })
+})
