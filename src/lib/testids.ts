@@ -14,7 +14,7 @@
    Compartilhamento: acesso-gerar, acesso-painel, acesso-codigo, acesso-validade, acesso-copiar, acesso-revogar.
    Médico: medico-form, medico-codigo, medico-profissional, medico-entrar, medico-erro, medico-paciente,
    medico-aviso, medico-evento, medico-pendencias, medico-gerar-resumo, medico-resumo, medico-sair.
-   Conta: perfil-form, perfil-salvar, perfil-salvo, excluir-confirmacao, excluir-botao. */
+   Conta: perfil-form, perfil-salvar, perfil-salvo, excluir-confirmacao, excluir-botao, atalho-conta. */
 export const TID = {
   formEntrar: 'form-entrar',
   entrarEmail: 'entrar-email',
@@ -98,4 +98,5 @@ export const TID = {
   perfilSalvo: 'perfil-salvo',
   excluirConfirmacao: 'excluir-confirmacao',
   excluirBotao: 'excluir-botao',
+  atalhoConta: 'atalho-conta',
 } as const

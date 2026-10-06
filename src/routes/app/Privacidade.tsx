@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '../../components/Icon'
 import { ChipFonte, VazioHistorico } from '../../components/ui'
+import { ExcluirConta } from '../../components/ExcluirConta'
 import { formatarDataCurta } from '../../lib/formato'
 import { useAcoes, useEstado, usePerfil } from '../../lib/store'
-import { ExcluirConta, MeusDados } from './MeusDados'
+import { TID } from '../../lib/testids'
+import { MeusDados } from './MeusDados'
 
 export function Privacidade() {
   const { consentimentos, acessos, eventos } = useEstado()
@@ -21,8 +23,21 @@ export function Privacidade() {
     setAlternando(null)
   }
 
+  /* A exclusão fica no fim de uma página longa: o atalho do topo leva até ela. */
+  const irParaConta = () => {
+    const alvo = document.getElementById('excluir-conta')
+    alvo?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    alvo?.focus({ preventScroll: true })
+  }
+
   return (
     <div className="privacidade">
+      <p className="privacidade__atalho">
+        <button type="button" className="btn-link" onClick={irParaConta} data-testid={TID.atalhoConta}>
+          <Icon nome="pessoa" tamanho={15} /> Meus dados e exclusão da conta
+        </button>
+      </p>
+
       {eventos.length === 0 && (
         <VazioHistorico
           icone="escudo"
