@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { ErroIa } from './erros.js'
 import { MINIMO_RETRY_MS, ORCAMENTO_IA_MS, extrairJson, pedirJson } from './json.js'
+import { SISTEMA } from './prompts.js'
 import type { LlmProvider, MensagemLlm, OpcoesChat } from './provider.js'
 
 function llmFila(...respostas: string[]) {
@@ -24,6 +25,24 @@ const PEDIDO: MensagemLlm[] = [{ role: 'user', content: 'responda' }]
 describe('extrairJson', () => {
   it('lê JSON puro', () => {
     expect(extrairJson('{"a":1}')).toEqual({ a: 1 })
+  })
+
+  /* Resposta real do Llama 3.3 para um laudo de HbA1c: o português do documento vaza para o número. */
+  it('aceita vírgula decimal num valor numérico, sem mexer em vírgulas dentro de textos', () => {
+    const resposta = '{"resumo": "HbA1c de 5,8%, glicemia 99", "medidas": [{"nome": "HbA1c", "valor": 5,8, "unidade": "%", "refMin": 4,0, "refMax": 5,6}], "confianca": 0.9}'
+    expect(extrairJson(resposta)).toEqual({
+      resumo: 'HbA1c de 5,8%, glicemia 99',
+      medidas: [{ nome: 'HbA1c', valor: 5.8, unidade: '%', refMin: 4, refMax: 5.6 }],
+      confianca: 0.9,
+    })
+  })
+
+  it('o prompt de sistema separa a vírgula decimal do texto do ponto decimal dos campos numéricos', () => {
+    expect(SISTEMA).toMatch(/campos numéricos do JSON[^\n]*ponto decimal/)
+  })
+
+  it('JSON quebrado por outro motivo continua sendo erro', () => {
+    expect(() => extrairJson('{"a": 1,, "b": 2}')).toThrow(SyntaxError)
   })
 
   it('tolera fences ```json e texto ao redor', () => {

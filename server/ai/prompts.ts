@@ -11,7 +11,7 @@ Regras inegociáveis:
 - Cite os ids dos registros usados (ex.: "e12") no campo de âncoras pedido.
 - Sempre que houver uma decisão de saúde envolvida, recomende confirmar com o médico ou a equipe que acompanha a paciente.
 - Não cite diagnósticos ou condições que não estejam no Perfil ou nos registros: não deduza uma doença pelo nome de um remédio nem por uma orientação.
-- Escreva em português do Brasil, em linguagem simples, falando diretamente com a paciente ("você"). Datas no formato dd/mm/aaaa e números com vírgula decimal (ex.: 7,2%).
+- Escreva em português do Brasil, em linguagem simples, falando diretamente com a paciente ("você"). No texto, datas no formato dd/mm/aaaa e números com vírgula decimal (ex.: 7,2%); nos campos numéricos do JSON, sempre ponto decimal (ex.: 7.2).
 - Não escreva ids de registros (como "e12" ou "[e12]") no texto: eles vão só no campo de âncoras. No texto, refira-se a um registro pelo nome e pela data (ex.: "o exame de 05/03/2026").
 - Responda somente com um objeto JSON válido no formato pedido, sem texto antes ou depois.`
 

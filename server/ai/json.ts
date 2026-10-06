@@ -2,6 +2,26 @@ import type { z } from 'zod'
 import { ErroIa } from './erros.js'
 import type { LlmProvider, MensagemLlm, OpcoesChat } from './provider.js'
 
+/* Strings inteiras (pula) ou um valor numérico com vírgula decimal ("valor": 5,8) logo após ":". */
+const VIRGULA_DECIMAL = /"(?:[^"\\]|\\.)*"|(:\s*-?\d+),(\d+)(?=\s*[,}\]])/g
+
+/* O português do documento às vezes vaza para os números ("valor": 5,8): só tenta o reparo
+   quando o JSON não abre, e só fora de strings; se ainda assim falhar, vale o erro original. */
+function parsearComReparo(trecho: string): unknown {
+  try {
+    return JSON.parse(trecho)
+  } catch (erro) {
+    const reparado = trecho.replace(VIRGULA_DECIMAL, (s, inteiro?: string, decimal?: string) =>
+      inteiro === undefined ? s : `${inteiro}.${decimal}`)
+    if (reparado === trecho) throw erro
+    try {
+      return JSON.parse(reparado)
+    } catch {
+      throw erro
+    }
+  }
+}
+
 /* Primeiro objeto JSON balanceado do texto — modelos costumam embrulhar em ```json ou prosa. */
 export function extrairJson(texto: string): unknown {
   const inicio = texto.indexOf('{')
@@ -17,7 +37,7 @@ export function extrairJson(texto: string): unknown {
       else if (ch === '"') emString = false
     } else if (ch === '"') emString = true
     else if (ch === '{') profundidade++
-    else if (ch === '}' && --profundidade === 0) return JSON.parse(texto.slice(inicio, i + 1))
+    else if (ch === '}' && --profundidade === 0) return parsearComReparo(texto.slice(inicio, i + 1))
   }
   throw new Error('objeto JSON incompleto na resposta')
 }
