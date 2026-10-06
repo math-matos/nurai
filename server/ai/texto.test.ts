@@ -18,6 +18,21 @@ describe('limparTexto', () => {
       .toBe('Glicada de 7,8% para 7,2%; creatinina 0,98 mg/dL; 1.500 passos.')
   })
 
+  it('troca o ponto decimal antes de qualquer unidade e em decimais menores que 1', () => {
+    expect(limparTexto('Sua hemoglobina foi de 14.6 g/dL em 10/03/2026 e caiu para 12.4 g/dL.'))
+      .toBe('Sua hemoglobina foi de 14,6 g/dL em 10/03/2026 e caiu para 12,4 g/dL.')
+    expect(limparTexto('TSH 6.8 mUI/L, potássio 4.1 mmol/L, FC 72.5 bpm, nódulo de 1.5 cm, peso 82.3 kg, HbA1c 5.8%.'))
+      .toBe('TSH 6,8 mUI/L, potássio 4,1 mmol/L, FC 72,5 bpm, nódulo de 1,5 cm, peso 82,3 kg, HbA1c 5,8%.')
+    expect(limparTexto('Microalbumina 0.125 g/L e hemácias 4.85 milhões/µL.')).toBe('Microalbumina 0,125 g/L e hemácias 4,85 milhões/µL.')
+  })
+
+  it('não mexe em datas, versões, códigos, IPs nem números com milhar', () => {
+    for (const texto of [
+      'Coleta em 10.03.2026.', 'App na versão 1.2 e na v2.5.', 'CID J45.9 registrado.', 'Código 40.30.13.97.',
+      'Endereço 192.168.0.1.', 'Metformina 1.500 mg por dia.', 'Total 1,234.5 mg.',
+    ]) expect(limparTexto(texto), texto).toBe(texto)
+  })
+
   it('não altera texto já em pt-BR nem a palavra "e" ou números de ids', () => {
     const texto = 'Em 05/03/2026 a glicada foi 7,2% e a creatinina 1,1 mg/dL.'
     expect(limparTexto(texto)).toBe(texto)
