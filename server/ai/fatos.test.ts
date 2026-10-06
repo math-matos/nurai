@@ -197,6 +197,17 @@ describe('derivarFatos — pedidos e retornos de consulta (shape real)', () => {
     expect(lista[1].descricao).toMatch(/^Retorno em Pneumologia previsto para 05\/2026 sem consulta posterior registrada\..*retorno em 6 meses/)
   })
 
+  it('internação de pneumologia dentro da janela não é o retorno ambulatorial: continua pendente', () => {
+    const alta: Evento = {
+      id: 'alta', data: '2026-05-03', tipo: 'internacao', titulo: 'Resumo de alta hospitalar',
+      instituicao: 'Hospital Municipal Vale do Jacarandá', fonte: 'hospital', especialidade: 'Pneumologia',
+      resumo: 'Paciente internado de 03/05/2026 a 06/05/2026 por crise asmática moderada a grave.',
+      sinal: 'alterado', tags: [], origem: 'OCR + IA',
+    }
+    const lista = pendencias([...DEMO_MARCOS, alta]).filter((p) => p.tipo === 'retorno' && p.ancoras.includes('d08'))
+    expect(lista.map((p) => p.alvo)).toEqual(['Pneumologia'])
+  })
+
   it('"nova espirometria" pedida no seguimento não é exame duplicado da espirometria anterior', () => {
     const { repeticoes } = derivarFatos(DEMO_MARCOS, HOJE)
     expect(repeticoes.map((r) => [r.feito, r.pedido])).toEqual([['f02', 'f09'], ['d09', 'd11']])

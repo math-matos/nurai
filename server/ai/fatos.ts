@@ -252,7 +252,8 @@ function retornosSemRegistro(eventos: Evento[], hoje: string): Pendencia[] {
     .flatMap((e) => {
       const prevista = dataPrevista(e.resumo, e.data)
       const desde = prevista ? somarDias(prevista, -TOLERANCIA_RETORNO_DIAS) : e.data
-      const voltou = eventos.some((d) => d.id !== e.id && TIPOS_PEDIDO.includes(d.tipo) && d.data > e.data
+      /* Internação de urgência na mesma especialidade não substitui o retorno ambulatorial. */
+      const voltou = eventos.some((d) => d.id !== e.id && d.tipo === 'consulta' && d.data > e.data
         && d.data >= desde && mesmaEspecialidade(d.especialidade, e.especialidade))
       if (voltou || (prevista && dias(prevista, hoje) <= TOLERANCIA_RETORNO_DIAS)) return []
       const frase = e.resumo.split(/(?<=\.)\s+/).find((f) => /retorno/i.test(f))?.trim().replace(/\.$/, '')
