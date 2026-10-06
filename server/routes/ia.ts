@@ -64,11 +64,5 @@ export function rotasIa(llm: LlmProvider): Hono<AmbienteApp> {
 
   rotas.post('/passos/gerar', async (c) => c.json(await gerarPassos(contexto(c))))
 
-  /* Demais erros sobem para o onError do app. */
-  rotas.onError((err, c) => {
-    if (err instanceof ErroIa) return c.json({ erro: err.message, codigo: err.codigo }, err.status)
-    throw err
-  })
-
   return rotas
 }

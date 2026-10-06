@@ -41,7 +41,23 @@ export const esquemaEvento: z.ZodType<Evento> = z.object({
   novo: z.boolean().optional(),
 })
 
-export const esquemaCompartilhamento = z.object({ para: texto })
+/* Limites das colunas compartilhamentos.para e acessos.quem. */
+export const esquemaCompartilhamento = z.object({ para: ate(texto, 400) })
+
+/* Código com formato errado não é erro de validação: cai no mesmo 404 de código inexistente. */
+const acessoMedico = {
+  codigo: z.string({ error: 'Informe o código' }).max(64),
+  profissional: ate(z.string({ error: 'Informe seu nome' }).trim()
+    .min(3, 'Informe seu nome (pelo menos 3 caracteres)')
+    .max(120, 'O nome pode ter no máximo 120 caracteres'), 200),
+}
+
+export const esquemaAcessoMedico = z.object(acessoMedico)
+
+export const esquemaResumoMedico = z.object({
+  ...acessoMedico,
+  especialidade: texto.max(80).optional(),
+})
 
 /* ---- Conta e perfil ---- */
 

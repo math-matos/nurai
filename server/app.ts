@@ -1,13 +1,16 @@
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
+import { ErroIa } from './ai/erros.js'
 import { LIMITE_PDF } from './ai/pdf.js'
 import type { LlmProvider } from './ai/provider.js'
 import { exigirCsrf, exigirSessao, type AmbienteApp } from './auth/middleware.js'
 import { rotasAuth } from './auth/rotas.js'
+import { normalizarCodigo } from './db/codigo.js'
 import { ErroConflito, type Repositorio } from './db/repo.js'
 import { esquemaCompartilhamento, esquemaEvento } from './esquemas.js'
 import { ErroValidacao, lerCorpo } from './http.js'
+import { rotasAcessoMedico } from './routes/acesso-medico.js'
 import { rotasConta } from './routes/conta.js'
 import { rotasIa } from './routes/ia.js'
 
@@ -51,6 +54,7 @@ export function criarApp(deps: Deps): Hono<AmbienteApp> {
   app.get('/health', (c) => c.json({ ok: true, genai: llm.nome, db: repo.nome, versao: VERSAO }))
 
   app.route('/auth', rotasAuth(repo))
+  app.route('/acesso-medico', rotasAcessoMedico(repo, llm))
   app.route('/', rotasConta(repo))
 
   app.get('/estado', async (c) => c.json(await c.var.repoPaciente.estado()))
@@ -80,6 +84,12 @@ export function criarApp(deps: Deps): Hono<AmbienteApp> {
     return c.json(await c.var.repoPaciente.criarCompartilhamento(para, c.var.perfil.nome), 201)
   })
 
+  app.delete('/compartilhamentos/:codigo', async (c) => {
+    const codigo = normalizarCodigo(c.req.param('codigo'))
+    const revogado = await c.var.repoPaciente.revogarCompartilhamento(codigo, c.var.perfil.nome)
+    return revogado ? c.body(null, 204) : naoEncontrado('Compartilhamento', codigo)
+  })
+
   app.get('/acessos', async (c) => c.json(await c.var.repoPaciente.listarAcessos()))
 
   app.post('/reiniciar', async (c) => {
@@ -96,6 +106,7 @@ export function criarApp(deps: Deps): Hono<AmbienteApp> {
       return c.json({ erro: err.message, codigo: 'VALIDACAO', ...(err.campos && { campos: err.campos }) }, 400)
     }
     if (err instanceof HTTPException) return c.json({ erro: err.message }, err.status)
+    if (err instanceof ErroIa) return c.json({ erro: err.message, codigo: err.codigo }, err.status)
     if (err instanceof ErroConflito) return c.json({ erro: err.message, codigo: 'CONFLITO' }, 409)
     console.error(`[api] ${c.req.method} ${c.req.path} falhou: ${err.name}: ${err.message}`)
     return c.json({ erro: 'Erro interno' }, 500)

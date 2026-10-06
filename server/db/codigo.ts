@@ -4,6 +4,9 @@ import { randomInt } from 'node:crypto'
    então vem de um gerador criptográfico, não de Math.random. */
 const ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
+/* Quem recebe o código pode digitá-lo em minúsculas ou com espaços em volta. */
+export const normalizarCodigo = (codigo: string) => codigo.trim().toUpperCase()
+
 export function gerarCodigo(): string {
   return Array.from({ length: 6 }, () => ALFABETO[randomInt(ALFABETO.length)]).join('')
 }
