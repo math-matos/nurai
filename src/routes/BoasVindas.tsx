@@ -44,7 +44,7 @@ export function BoasVindas() {
           <span className="escolha__icone"><Icon nome="anexar" tamanho={20} /></span>
           <span className="escolha__titulo">Começar do zero</span>
           <span className="escolha__texto">
-            O histórico começa vazio e cresce com os documentos que você anexar — laudos,
+            O histórico começa vazio e cresce com os documentos que você anexar - laudos,
             resultados de exame, receitas. A IA lê cada um e espera a sua conferência antes de gravar.
           </span>
           <span className="escolha__acao">
