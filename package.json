@@ -21,7 +21,8 @@
     "e2e": "playwright test",
     "e2e:real": "node -e \"if(!process.env.E2E_BASE_URL){console.error('defina E2E_BASE_URL');process.exit(1)}\" && playwright test",
     "e2e:fixtures": "tsx e2e/fixtures/gerar.ts",
-    "e2e:verificar": "tsx e2e/fixtures/verificar.ts"
+    "e2e:verificar": "tsx e2e/fixtures/verificar.ts",
+    "e2e:typecheck": "tsc -p e2e/tsconfig.json"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",

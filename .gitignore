@@ -31,3 +31,4 @@ e2e/relatorio
 e2e/resultados
 blob-report
 playwright/.cache
+e2e/fixtures/documentos

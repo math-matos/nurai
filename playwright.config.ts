@@ -7,6 +7,7 @@ const BASE_URL = baseURLExterna ?? 'http://localhost:5173'
 
 export default defineConfig({
   testDir: 'e2e',
+  globalSetup: './e2e/global-setup.ts',
   outputDir: 'e2e/resultados',
   timeout: 120_000,
   expect: { timeout: 15_000 },
