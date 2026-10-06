@@ -27,12 +27,23 @@ export const cabecalhosDeIp = (ip = ipAleatorio()): Record<string, string> =>
   LOCAL ? { 'x-forwarded-for': ip } : {}
 
 /* No navegador o IP vai só nas chamadas à API: como extraHTTPHeaders ele iria também às fontes
-   do Google, e o cabeçalho extra dispara um preflight de CORS que elas recusam. */
+   do Google, e o cabeçalho extra dispara um preflight de CORS que elas recusam.
+   O route não pega `contexto.request`: para chamar a API direto com este IP, use cabecalhosDeIp(ip). */
 export async function rotearIp(contexto: BrowserContext, ip: string) {
   if (!LOCAL) return
   await contexto.route(
     (url) => url.pathname.startsWith('/api/'),
     (rota) => rota.continue({ headers: { ...rota.request().headers(), 'x-forwarded-for': ip } }),
+  )
+}
+
+/* Localmente a suíte roda sem internet (namespace de rede próprio, ver e2e/rede-isolada.mjs): a folha
+   do Google Fonts volta vazia e o texto usa a fonte do sistema, em vez de um erro de rede no console. */
+export async function dispensarFontesExternas(contexto: BrowserContext) {
+  if (!LOCAL) return
+  await contexto.route(
+    (url) => url.hostname === 'fonts.googleapis.com',
+    (rota) => rota.fulfill({ status: 200, contentType: 'text/css', body: '' }),
   )
 }
 

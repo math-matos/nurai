@@ -2,7 +2,8 @@ import { test as base, type APIRequestContext, type BrowserContext, type Page } 
 import { vigiarConsole } from './console.ts'
 import { excluirConta } from './conta.ts'
 import {
-  CSRF, cabecalhosDeIp, cadastrarPorApi, ipAleatorio, opcoesDoProjeto, rotearIp, type Credenciais, type Modo,
+  CSRF, cabecalhosDeIp, cadastrarPorApi, dispensarFontesExternas, ipAleatorio, opcoesDoProjeto, rotearIp, type Credenciais,
+  type Modo,
 } from './sessao.ts'
 
 export interface Contas {
@@ -17,6 +18,9 @@ export interface Contas {
 export interface OutroNavegador {
   contexto: BrowserContext
   pagina: Page
+  /* Chamadas diretas à API sem sessão, do mesmo IP do navegador. `contexto.request` não passa pelo
+     route que injeta o IP: sai sem x-forwarded-for e divide o limite por IP com o resto da suíte. */
+  api: APIRequestContext
 }
 
 interface FixturesTeste {
@@ -40,6 +44,7 @@ export const test = base.extend<FixturesTeste>({
 
   context: async ({ context, ip }, usar) => {
     await rotearIp(context, ip)
+    await dispensarFontesExternas(context)
     await usar(context)
   },
 
@@ -98,17 +103,22 @@ export const test = base.extend<FixturesTeste>({
     if (falhas.length) throw new Error(`limpeza de contas falhou:\n${falhas.join('\n')}`)
   },
 
-  novoNavegador: async ({ browser, ignorarErros }, usar, info) => {
-    const abertos: { contexto: BrowserContext; afirmar: () => void }[] = []
+  novoNavegador: async ({ browser, playwright, baseURL, ignorarErros }, usar, info) => {
+    const abertos: { contexto: BrowserContext; api: APIRequestContext; afirmar: () => void }[] = []
     await usar(async ({ ip = ipAleatorio() } = {}) => {
       const contexto = await browser.newContext(opcoesDoProjeto(info))
       await rotearIp(contexto, ip)
+      await dispensarFontesExternas(contexto)
       const pagina = await contexto.newPage()
+      const api = await playwright.request.newContext({ baseURL, extraHTTPHeaders: cabecalhosDeIp(ip) })
       const vigia = vigiarConsole(pagina, ignorarErros)
-      abertos.push({ contexto, afirmar: () => vigia.afirmarLimpo() })
-      return { contexto, pagina }
+      abertos.push({ contexto, api, afirmar: () => vigia.afirmarLimpo() })
+      return { contexto, pagina, api }
     })
-    for (const { contexto } of abertos) await contexto.close()
+    for (const { contexto, api } of abertos) {
+      await contexto.close()
+      await api.dispose()
+    }
     for (const { afirmar } of abertos) afirmar()
   },
 })

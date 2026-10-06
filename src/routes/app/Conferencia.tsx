@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Icon } from '../../components/Icon'
 import { AvisoIa, Regua, SeloIa } from '../../components/ui'
 import { sinalDaFaixa } from '../../data/referencia'
 import { TIPOS } from '../../data/seed'
 import type { Evento, Medida, Sinal, TipoId } from '../../data/types'
 import type { Extracao } from '../../lib/api'
+import { usePerfil } from '../../lib/store'
 import { TID } from '../../lib/testids'
 
 const GRAVIDADE: Record<Sinal, number> = { info: 0, normal: 1, atencao: 2, alterado: 3 }
@@ -77,6 +78,8 @@ export function Conferencia({ extracao, arquivo, salvando, aoSalvar, aoDescartar
   const [linhas, setLinhas] = useState<Linha[]>(() => (original.medidas ?? []).map(linhaDe))
   const divergencia = extracao.alertas?.find((a) => a.codigo === 'PACIENTE_DIVERGENTE')
   const [confirmouIdentidade, setConfirmouIdentidade] = useState(false)
+  const nomePerfil = usePerfil().nome
+  const caixaIdentidade = useRef<HTMLInputElement>(null)
 
   const editarLinha = (indice: number, mudanca: Partial<Linha>, numerica = false) => {
     setLinhas((atuais) => atuais.map((l, i) =>
@@ -91,9 +94,16 @@ export function Conferencia({ extracao, arquivo, salvando, aoSalvar, aoDescartar
   const removerLinha = (indice: number) => setLinhas((atuais) => atuais.filter((_, i) => i !== indice))
 
   const medidas = linhas.map(medidaDe)
-  const valido = titulo.trim() !== '' && instituicao.trim() !== ''
+  const camposValidos = titulo.trim() !== '' && instituicao.trim() !== ''
     && /^\d{4}-\d{2}-\d{2}$/.test(data) && medidas.every((m) => m !== null)
-    && (!divergencia || confirmouIdentidade)
+  const faltaIdentidade = Boolean(divergencia) && !confirmouIdentidade
+  const valido = camposValidos && !faltaIdentidade
+
+  /* A caixa do topo fica telas acima do botão quando há muitos valores: o atalho leva até ela. */
+  const irParaConfirmacao = () => {
+    caixaIdentidade.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    caixaIdentidade.current?.focus({ preventScroll: true })
+  }
 
   const salvar = () => {
     if (!valido || salvando) return
@@ -139,10 +149,10 @@ export function Conferencia({ extracao, arquivo, salvando, aoSalvar, aoDescartar
           <p><Icon nome="alerta" tamanho={16} /> <strong>{divergencia.texto}</strong></p>
           <label>
             <input
-              type="checkbox" checked={confirmouIdentidade}
+              type="checkbox" checked={confirmouIdentidade} ref={caixaIdentidade}
               onChange={(e) => setConfirmouIdentidade(e.target.checked)} data-testid={TID.conferenciaConfirmoMeu}
             />
-            Confirmo que este documento é meu
+            Confirmo que este documento é de {nomePerfil}
           </label>
         </div>
       )}
@@ -242,13 +252,36 @@ export function Conferencia({ extracao, arquivo, salvando, aoSalvar, aoDescartar
         automática pode errar — principalmente em documentos digitalizados.
       </p>
 
+      {divergencia && (
+        <label className="revisao__confirmar-rodape">
+          <input
+            type="checkbox" checked={confirmouIdentidade}
+            onChange={(e) => setConfirmouIdentidade(e.target.checked)} data-testid={TID.conferenciaConfirmoMeuRodape}
+          />
+          Confirmo que este documento é de {nomePerfil}
+        </label>
+      )}
+
       <div className="revisao__acoes">
-        <button type="button" className="btn" onClick={salvar} disabled={!valido || salvando} data-testid={TID.conferenciaSalvar}>
+        <button
+          type="button" className="btn" onClick={salvar} disabled={!valido || salvando}
+          aria-describedby={valido ? undefined : 'conferencia-motivo'} data-testid={TID.conferenciaSalvar}
+        >
           <Icon nome="check" tamanho={16} /> {salvando ? 'Salvando…' : 'Salvar no histórico'}
         </button>
         <button type="button" className="btn btn--ghost" onClick={aoDescartar} disabled={salvando} data-testid={TID.conferenciaDescartar}>
           Descartar
         </button>
+        <p id="conferencia-motivo" className="revisao__motivo" aria-live="polite" data-testid={TID.conferenciaMotivo}>
+          {faltaIdentidade ? (
+            <>
+              Para salvar, confirme acima que o documento é de {nomePerfil}.{' '}
+              <button type="button" className="btn-link" onClick={irParaConfirmacao} data-testid={TID.conferenciaIrConfirmacao}>
+                Ir para a confirmação
+              </button>
+            </>
+          ) : !camposValidos && 'Para salvar, preencha título, instituição, data e os valores marcados acima.'}
+        </p>
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Campo } from '../components/Campo'
 import { Icon } from '../components/Icon'
@@ -6,8 +6,11 @@ import { Porta } from '../components/Porta'
 import { AvisoIa, ChipSinal, Falha, Marca, Regua, SeloIa, Vazio } from '../components/ui'
 import { FONTES, TIPOS } from '../data/seed'
 import type { Evento } from '../data/types'
-import { api, ErroApi, mensagemDeErro, podeRepetir, type AcessoMedico as Acesso, type ResumoIa } from '../lib/api'
+import {
+  api, ErroApi, mensagemDeErro, podeRepetir, type AcessoMedico as Acesso, type PontoEmAberto, type ResumoIa,
+} from '../lib/api'
 import { formatarData, ordenarRecentes } from '../lib/formato'
+import { agruparPontos } from '../lib/pontos'
 import { focarPrimeiroErro } from '../lib/formulario'
 import { TID } from '../lib/testids'
 import '../styles/medico.css'
@@ -18,19 +21,46 @@ const ORDEM = [{ campo: 'codigo', id: 'medico-codigo' }, { campo: 'profissional'
 
 interface Liberado { dados: Acesso; codigo: string; profissional: string }
 
+/* /verificar não registra acesso e tem limite por IP próprio, que vários profissionais da mesma clínica
+   dividem: trocar de aba várias vezes seguidas conta uma vez só. */
+const PERIODO_REVALIDACAO_MS = 60_000
+const INTERVALO_MINIMO_MS = 10_000
+
+const codigoRecusado = (erro: unknown): erro is ErroApi => erro instanceof ErroApi && erro.codigo === 'CODIGO_INVALIDO'
+
+
 /* Porta do profissional de saúde: sem conta, só com o código que o paciente gerou. Nenhuma ação de escrita. */
 export function AcessoMedico() {
   const [liberado, setLiberado] = useState<Liberado | null>(null)
-  if (liberado) return <VisaoMedico {...liberado} aoSair={() => setLiberado(null)} />
-  return <FormularioCodigo aoLiberar={setLiberado} />
+  const [encerrado, setEncerrado] = useState(false)
+
+  const liberar = (l: Liberado) => {
+    setEncerrado(false)
+    setLiberado(l)
+  }
+  /* Código revogado ou expirado com a tela aberta: os dados do paciente saem da tela na hora. */
+  const encerrar = useCallback(() => {
+    setLiberado(null)
+    setEncerrado(true)
+  }, [])
+
+  if (liberado) {
+    return <VisaoMedico {...liberado} aoSair={() => setLiberado(null)} aoEncerrar={encerrar} />
+  }
+  return <FormularioCodigo aoLiberar={liberar} encerrado={encerrado} />
 }
 
-function FormularioCodigo({ aoLiberar }: { aoLiberar: (l: Liberado) => void }) {
+function FormularioCodigo({ aoLiberar, encerrado }: { aoLiberar: (l: Liberado) => void; encerrado: boolean }) {
   const [codigo, setCodigo] = useState('')
   const [profissional, setProfissional] = useState('')
   const [erros, setErros] = useState<Erros>({})
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
+  const avisoEncerrado = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (encerrado) avisoEncerrado.current?.focus()
+  }, [encerrado])
 
   const recusar = (novos: Erros) => {
     flushSync(() => setErros(novos))
@@ -55,7 +85,7 @@ function FormularioCodigo({ aoLiberar }: { aoLiberar: (l: Liberado) => void }) {
       aoLiberar({ dados, codigo: limpo, profissional: nome })
     } catch (erro) {
       flushSync(() => setEnviando(false))
-      if (erro instanceof ErroApi && erro.codigo === 'CODIGO_INVALIDO') return recusar({ codigo: erro.message })
+      if (codigoRecusado(erro)) return recusar({ codigo: erro.message })
       if (erro instanceof ErroApi && erro.codigo === 'VALIDACAO' && Object.keys(erro.campos).length > 0) {
         return recusar(erro.campos)
       }
@@ -65,6 +95,15 @@ function FormularioCodigo({ aoLiberar }: { aoLiberar: (l: Liberado) => void }) {
 
   return (
     <Porta nota="Todo acesso por código fica registrado no histórico do paciente, com o nome informado aqui.">
+      {encerrado && (
+        <div className="recado medico__encerrado" role="status" tabIndex={-1} ref={avisoEncerrado} data-testid={TID.medicoEncerrado}>
+          <Icon nome="cadeado" tamanho={15} />
+          <p>
+            <strong>Este acesso foi encerrado pelo paciente.</strong> Os dados do histórico foram
+            retirados desta tela. Para ver de novo, peça um novo código ao paciente.
+          </p>
+        </div>
+      )}
       <h1>Acesso do profissional de saúde</h1>
       <p className="porta__intro">
         O paciente gera um código temporário no resumo para consulta da Nurai. Com ele você vê,
@@ -97,11 +136,16 @@ function FormularioCodigo({ aoLiberar }: { aoLiberar: (l: Liberado) => void }) {
   )
 }
 
-function VisaoMedico({ dados, codigo, profissional, aoSair }: Liberado & { aoSair: () => void }) {
-  const { paciente, eventos, passos, expiraEm, para } = dados
+interface AcoesVisao {
+  aoSair: () => void
+  aoEncerrar: () => void
+}
+
+function VisaoMedico({ dados, codigo, profissional, aoSair, aoEncerrar }: Liberado & AcoesVisao) {
+  const { paciente, eventos, pontosEmAberto, expiraEm, para } = dados
+  useRevalidarCodigo(codigo, aoEncerrar)
   const [abertos, setAbertos] = useState<Set<string>>(() => new Set())
   const ordenados = ordenarRecentes(eventos)
-  const pendentes = passos.filter((p) => !p.feito)
 
   const alternar = (id: string, aberto: boolean) => setAbertos((atual) => {
     const novo = new Set(atual)
@@ -110,8 +154,24 @@ function VisaoMedico({ dados, codigo, profissional, aoSair }: Liberado & { aoSai
     return novo
   })
 
-  const irPara = (id: string) => {
+  /* Abrir um registro mostra dado clínico novo na tela: antes, confere se o paciente não revogou o código
+     (simulação R2: com a tela aberta, a médica ainda abriu um registro depois da revogação). Só a recusa
+     do código impede; limite excedido ou falha de rede seguem a regra da conferência periódica. */
+  const abrir = async (id: string) => {
+    try {
+      await api.verificarAcessoMedico(codigo)
+    } catch (erro) {
+      if (codigoRecusado(erro)) {
+        aoEncerrar()
+        return false
+      }
+    }
     alternar(id, true)
+    return true
+  }
+
+  const irPara = async (id: string) => {
+    if (!(await abrir(id))) return
     requestAnimationFrame(() => {
       const alvo = document.getElementById(`medico-evento-${id}`)
       alvo?.scrollIntoView({ block: 'center' })
@@ -140,6 +200,11 @@ function VisaoMedico({ dados, codigo, profissional, aoSair }: Liberado & { aoSai
               <p className="label">Paciente</p>
               <h1>{paciente.nome}</h1>
               {meta && <p className="medico__meta num">{meta}</p>}
+              {paciente.responsavel && (
+                <p className="medico__meta">
+                  Informações enviadas por {paciente.responsavel.nome} ({paciente.responsavel.relacao})
+                </p>
+              )}
               {paciente.condicoes.length > 0 && (
                 <ul className="medico__condicoes" aria-label="Condições">
                   {paciente.condicoes.map((c) => <li key={c} className="chip">{c}</li>)}
@@ -178,7 +243,10 @@ function VisaoMedico({ dados, codigo, profissional, aoSair }: Liberado & { aoSai
                 <ol className="compacta">
                   {ordenados.map((e) => (
                     <li key={e.id}>
-                      <ItemCompacto evento={e} aberto={abertos.has(e.id)} aoAlternar={(a) => alternar(e.id, a)} />
+                      <ItemCompacto
+                        evento={e} aberto={abertos.has(e.id)}
+                        aoAbrir={() => { void abrir(e.id) }} aoFechar={() => alternar(e.id, false)}
+                      />
                     </li>
                   ))}
                 </ol>
@@ -186,20 +254,12 @@ function VisaoMedico({ dados, codigo, profissional, aoSair }: Liberado & { aoSai
             </section>
 
             <div className="medico__lateral">
-              <section className="painel" aria-labelledby="medico-pendencias" data-testid={TID.medicoPendencias}>
-                <div className="painel__cabeca">
-                  <h2 id="medico-pendencias">Pontos em aberto apontados ao paciente</h2>
-                  <p>Gerados por IA a partir do histórico; revise antes de considerar.</p>
-                </div>
-                <ul className="pendencias">
-                  {pendentes.map((p) => (
-                    <li key={p.id}><strong>{p.titulo}</strong><span>{p.prazo}</span></li>
-                  ))}
-                  {pendentes.length === 0 && <li>Nenhum ponto em aberto.</li>}
-                </ul>
-              </section>
+              <PontosEmAberto pontos={pontosEmAberto} eventos={eventos} aoAncorar={(id) => { void irPara(id) }} />
 
-              <ResumoMedico codigo={codigo} profissional={profissional} eventos={eventos} aoAncorar={irPara} />
+              <ResumoMedico
+                codigo={codigo} profissional={profissional} eventos={eventos} aoAncorar={(id) => { void irPara(id) }}
+                aoEncerrar={aoEncerrar}
+              />
             </div>
           </div>
         </div>
@@ -208,15 +268,108 @@ function VisaoMedico({ dados, codigo, profissional, aoSair }: Liberado & { aoSai
   )
 }
 
-function ItemCompacto({ evento: e, aberto, aoAlternar }: { evento: Evento; aberto: boolean; aoAlternar: (a: boolean) => void }) {
+/* Calculados pelo servidor a partir dos registros, no acesso: não dependem de o paciente ter gerado os próximos passos. */
+function PontosEmAberto({ pontos, eventos, aoAncorar }: {
+  pontos: PontoEmAberto[]
+  eventos: Evento[]
+  aoAncorar: (id: string) => void
+}) {
+  const grupos = agruparPontos(pontos)
+
+  return (
+    <section className="painel" aria-labelledby="medico-pendencias" data-testid={TID.medicoPendencias}>
+      <div className="painel__cabeca">
+        <h2 id="medico-pendencias">Pontos em aberto nos registros</h2>
+        <p>Identificados automaticamente a partir das datas e textos dos registros, sem IA. Confira no documento de origem.</p>
+      </div>
+      {grupos.length === 0 ? (
+        <p className="medico-pontos__vazio">Nenhum ponto em aberto identificado nos registros.</p>
+      ) : (
+        <div className="medico-pontos">
+          {grupos.map((g) => (
+            <div key={g.tipo} className="medico-pontos__grupo">
+              <h3 className="label">{g.titulo}</h3>
+              <ul>
+                {g.itens.map((p, i) => (
+                  <li key={i} data-testid={TID.medicoPonto}>
+                    <p>{p.texto}</p>
+                    <Ancoras ids={p.ancoras} eventos={eventos} aoAncorar={aoAncorar} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/* Leva ao registro citado na linha do tempo; âncora para registro que não está na tela não vira chip. */
+function Ancoras({ ids, eventos, aoAncorar }: { ids: string[]; eventos: Evento[]; aoAncorar: (id: string) => void }) {
+  const citados = ids.flatMap((id) => eventos.filter((e) => e.id === id))
+  if (citados.length === 0) return null
+  return (
+    <div className="sintese-ia__ancoras">
+      {citados.map((e) => (
+        <button key={e.id} type="button" className="chip chip--botao" onClick={() => aoAncorar(e.id)}>
+          <span className="num">{formatarData(e.data)}</span> · {e.titulo}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/* Confere, ao voltar para a aba e a cada minuto, se o paciente não revogou o código com a tela aberta.
+   Só a recusa do código fecha a tela: limite excedido (429) ou falha de rede ficam para a próxima conferência. */
+function useRevalidarCodigo(codigo: string, aoEncerrar: () => void) {
+  useEffect(() => {
+    let ativo = true
+    let ultima = 0
+    const revalidar = async () => {
+      if (document.visibilityState !== 'visible' || Date.now() - ultima < INTERVALO_MINIMO_MS) return
+      ultima = Date.now()
+      try {
+        await api.verificarAcessoMedico(codigo)
+      } catch (erro) {
+        if (ativo && codigoRecusado(erro)) aoEncerrar()
+      }
+    }
+    const aoVoltar = () => { void revalidar() }
+    const relogio = window.setInterval(aoVoltar, PERIODO_REVALIDACAO_MS)
+    window.addEventListener('focus', aoVoltar)
+    document.addEventListener('visibilitychange', aoVoltar)
+    return () => {
+      ativo = false
+      window.clearInterval(relogio)
+      window.removeEventListener('focus', aoVoltar)
+      document.removeEventListener('visibilitychange', aoVoltar)
+    }
+  }, [codigo, aoEncerrar])
+}
+
+/* A abertura passa pela conferência do código: o clique no resumo não abre direto. */
+function ItemCompacto({ evento: e, aberto, aoAbrir, aoFechar }: {
+  evento: Evento
+  aberto: boolean
+  aoAbrir: () => void
+  aoFechar: () => void
+}) {
   return (
     <details
       id={`medico-evento-${e.id}`} className="compacta__item" open={aberto}
       style={{ ['--c' as string]: FONTES[e.fonte].cor }}
-      onToggle={(ev) => aoAlternar((ev.currentTarget as HTMLDetailsElement).open)}
+      onToggle={(ev) => { if (!(ev.currentTarget as HTMLDetailsElement).open) aoFechar() }}
       data-testid={TID.medicoEvento}
     >
-      <summary className="compacta__resumo">
+      <summary
+        className="compacta__resumo"
+        onClick={(ev) => {
+          if (aberto) return
+          ev.preventDefault()
+          aoAbrir()
+        }}
+      >
         <time className="compacta__data num" dateTime={e.data}>{formatarData(e.data)}</time>
         <span>
           <span className="compacta__titulo">{e.titulo}</span>
@@ -236,11 +389,12 @@ function ItemCompacto({ evento: e, aberto, aoAlternar }: { evento: Evento; abert
   )
 }
 
-function ResumoMedico({ codigo, profissional, eventos, aoAncorar }: {
+function ResumoMedico({ codigo, profissional, eventos, aoAncorar, aoEncerrar }: {
   codigo: string
   profissional: string
   eventos: Evento[]
   aoAncorar: (id: string) => void
+  aoEncerrar: () => void
 }) {
   const [especialidade, setEspecialidade] = useState('')
   const [resumo, setResumo] = useState<ResumoIa | null>(null)
@@ -254,13 +408,12 @@ function ResumoMedico({ codigo, profissional, eventos, aoAncorar }: {
     try {
       setResumo(await api.resumoMedico(codigo, profissional, especialidade.trim() || undefined))
     } catch (e) {
+      if (codigoRecusado(e)) return aoEncerrar()
       setErro({ mensagem: mensagemDeErro(e), repetivel: podeRepetir(e) })
     } finally {
       setGerando(false)
     }
   }
-
-  const evento = (id: string) => eventos.find((e) => e.id === id)
 
   return (
     <section className="painel" aria-labelledby="medico-resumo">
@@ -304,17 +457,7 @@ function ResumoMedico({ codigo, profissional, eventos, aoAncorar }: {
                 {resumo.pontos.map((p, i) => (
                   <li key={i}>
                     <p>{p.texto}</p>
-                    <div className="sintese-ia__ancoras">
-                      {p.ancoras.map((id) => {
-                        const e = evento(id)
-                        if (!e) return null
-                        return (
-                          <button key={id} type="button" className="chip chip--botao" onClick={() => aoAncorar(id)}>
-                            <span className="num">{formatarData(e.data)}</span> · {e.titulo}
-                          </button>
-                        )
-                      })}
-                    </div>
+                    <Ancoras ids={p.ancoras} eventos={eventos} aoAncorar={aoAncorar} />
                   </li>
                 ))}
               </ul>

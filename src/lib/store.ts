@@ -3,7 +3,7 @@ import type { Evento } from '../data/types'
 import {
   api, definirAoPerderSessao, ErroApi, mensagemDeErro, podeRepetir,
   type Conta, type DadosCadastro, type EstadoServidor, type ModoOnboarding, type MudancasPerfil,
-  type Perfil, type RespostaCopiloto, type Saude, type TurnoHistorico, type Usuario,
+  type PacienteCuidado, type Perfil, type RespostaCopiloto, type Saude, type TurnoHistorico, type Usuario,
 } from './api'
 import { lerRota, navegar, separarRota } from './router'
 
@@ -100,12 +100,43 @@ function definirNa(g: number, mudanca: (anterior: Estado) => Partial<Estado>) {
   if (g === geracao) definir(mudanca)
 }
 
+const ESPERA_PARA_REPETIR_MS = 800
+
+const esperar = (ms: number) => new Promise<void>((resolver) => { setTimeout(resolver, ms) })
+
+/* Uma falha passageira (instância fria, proxy sem resposta) não vira tela de erro: ler o estado é
+   idempotente, então tenta mais uma vez antes de desistir. Visto em produção ao recarregar a página. */
+async function lerEstadoComRepeticao() {
+  try {
+    return await api.estado()
+  } catch (erro) {
+    if (!(erro instanceof ErroApi) || !erro.repetivel) throw erro
+    await esperar(ESPERA_PARA_REPETIR_MS)
+    return api.estado()
+  }
+}
+
+const jaNaoExiste = (erro: unknown) => erro instanceof ErroApi && erro.codigo === 'NAO_ENCONTRADO'
+
+/* Visto em produção: o servidor apagou, mas a resposta se perdeu e o 2º toque recebeu 404.
+   404 é "já excluído"; e depois de uma falha de rede repetir é seguro, porque o 404 confirma. */
+async function excluirNoServidor(id: string) {
+  const tentar = () => api.excluirEvento(id).catch((erro: unknown) => { if (!jaNaoExiste(erro)) throw erro })
+  try {
+    await tentar()
+  } catch (erro) {
+    if (!(erro instanceof ErroApi) || !erro.repetivel) throw erro
+    await esperar(ESPERA_PARA_REPETIR_MS)
+    await tentar()
+  }
+}
+
 export function carregar(forcar = false): Promise<void> {
   if (carregamento) return carregamento
   if (carregado && !forcar) return Promise.resolve()
   const g = geracao
   definir(() => ({ carregando: true, erro: null }))
-  const promessa = Promise.all([api.estado(), api.saude().catch(() => null)])
+  const promessa = Promise.all([lerEstadoComRepeticao(), api.saude().catch(() => null)])
     .then(([servidor, saude]) => {
       if (g !== geracao) return
       carregado = true
@@ -189,9 +220,10 @@ export async function sair(destino = '/') {
   navegar(destino)
 }
 
-/* Vale para o primeiro acesso e para recomeçar depois: o servidor apaga e recria os dados no modo pedido. */
-export async function concluirOnboarding(modo: ModoOnboarding): Promise<Perfil> {
-  const { perfil } = await api.onboarding(modo)
+/* Vale para o primeiro acesso e para recomeçar depois: o servidor apaga e recria os dados no modo pedido.
+   Com paciente, o histórico passa a ser dele e o usuário vira o responsável. */
+export async function concluirOnboarding(modo: ModoOnboarding, paciente?: PacienteCuidado): Promise<Perfil> {
+  const { perfil } = await api.onboarding(modo, paciente)
   const pacienteId = pacienteAtual()
   if (pacienteId) apagarConversa(pacienteId)
   trocarSessao({ ...estado.sessao, perfil })
@@ -333,10 +365,11 @@ export function useAcoes() {
       return salvo
     }), []),
 
-    /* Espelha o servidor: o id sai das âncoras e o passo que fica sem nenhuma sai junto. */
-    excluirEvento: useCallback((id: string) => executar(async () => {
+    /* Espelha o servidor: o id sai das âncoras e o passo que fica sem nenhuma sai junto.
+       Lança ErroApi: a tela mostra a falha na própria confirmação, onde a pessoa tocou. */
+    excluirEvento: useCallback(async (id: string) => {
       const g = geracao
-      await api.excluirEvento(id)
+      await excluirNoServidor(id)
       definirNa(g, (e) => ({
         eventos: e.eventos.filter((x) => x.id !== id),
         novos: e.novos.filter((x) => x !== id),
@@ -347,8 +380,7 @@ export function useAcoes() {
         }),
       }))
       void atualizarAcessos(true)
-      return true
-    }), []),
+    }, []),
 
     alternarConsentimento: useCallback((id: string) => executar(async () => {
       const g = geracao

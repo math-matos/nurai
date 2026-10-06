@@ -7,6 +7,7 @@ import { recomendaConduta } from '../guardrails.js'
 import { pedirJson } from '../json.js'
 import { contextoHistorico, descreverPerfil, mensagens } from '../prompts.js'
 import { limparTexto } from '../texto.js'
+import { naVozDoResponsavel } from '../voz.js'
 import { dataBR, filtrarAncoras, formatarNumero, idsDe, normalizar, porData, type ContextoIa } from './comum.js'
 
 export interface RespostaPassos {
@@ -156,6 +157,7 @@ export async function gerarPassos({ repo, llm, perfil }: ContextoIa): Promise<Re
     .filter((p) => p.titulo && p.ancoras.length && !recomendaConduta(`${p.titulo} ${p.porque}`) && concreto(p, eventos, fatos))
   const passos: ProximoPasso[] = comFatos(limpos, fatos)
     .slice(0, MAX_PASSOS)
+    .map((p) => ({ ...p, titulo: naVozDoResponsavel(p.titulo, perfil), porque: naVozDoResponsavel(p.porque, perfil) }))
     .map((p, i) => ({ id: `p-ia-${i + 1}`, ...p, feito: feitos.has(normalizar(p.titulo)) }))
   /* Não apagar a lista atual da paciente por uma resposta sem nenhum passo sustentado. */
   if (!passos.length) throw new ErroIa('IA_RESPOSTA_INVALIDA', 'A IA não encontrou passos sustentados pelo histórico')

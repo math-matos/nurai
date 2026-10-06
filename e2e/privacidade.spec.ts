@@ -73,12 +73,29 @@ test('excluir a conta leva à landing e o login com ela deixa de funcionar', asy
   await page.goto('/#/app/privacidade')
   await esperarApp(page)
 
+  /* O atalho do topo leva até a exclusão, no fim de uma página longa. */
+  await page.getByTestId('atalho-conta').click()
+  await expect(page.locator('#excluir-conta')).toBeFocused()
+  await expect(page.locator('#excluir-conta')).toBeInViewport()
+
   await page.getByRole('button', { name: 'Excluir minha conta' }).click()
   const confirmacao = page.getByTestId('excluir-confirmacao')
   await expect(confirmacao).toBeFocused()
-  await confirmacao.fill('excluir')
-  await expect(page.getByTestId('excluir-botao')).toBeDisabled()
-  await confirmacao.fill('EXCLUIR')
+
+  /* Texto que não bate explica o que digitar, sem chamar a API. */
+  let chamouApi = false
+  page.on('request', (r) => { if (r.method() === 'DELETE' && r.url().endsWith('/api/conta')) chamouApi = true })
+  await confirmacao.fill('apagar')
+  await page.getByTestId('excluir-botao').click()
+  await expect(page.locator('#excluir-confirmacao-erro')).toContainText('digite a palavra “excluir”')
+  await expect(confirmacao).toBeFocused()
+  await expect(confirmacao).toHaveAttribute('aria-invalid', 'true')
+  expect(chamouApi).toBe(false)
+
+  /* Como o teclado do celular escreve: primeira letra maiúscula e espaço no fim. */
+  await confirmacao.fill('')
+  await confirmacao.pressSequentially('Excluir ')
+  await expect(page.locator('#excluir-confirmacao-erro')).toHaveCount(0)
   const exclusao = page.waitForResponse((r) => r.request().method() === 'DELETE' && r.url().endsWith('/api/conta'))
   await page.getByTestId('excluir-botao').click()
   expect((await exclusao).status()).toBe(204)

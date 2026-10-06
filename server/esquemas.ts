@@ -57,6 +57,8 @@ const acessoMedico = {
 
 export const esquemaAcessoMedico = z.object(acessoMedico)
 
+export const esquemaVerificacaoMedico = z.object({ codigo: acessoMedico.codigo })
+
 export const esquemaResumoMedico = z.object({
   ...acessoMedico,
   especialidade: texto.max(80).optional(),
@@ -89,8 +91,17 @@ export const esquemaLogin = z.object({
   senha: z.string({ error: 'Informe a senha' }).min(1, 'Informe a senha'),
 })
 
+const relacao = ate(z.string({ error: 'Informe a relação' }).trim().min(1, 'Informe a relação'), 40)
+
+/* LGPD: os dados de saúde são de outra pessoa; quem cuida declara que pode tratá-los. */
+export const MENSAGEM_AUTORIZACAO = 'Confirme que você tem autorização para organizar os dados de saúde dessa pessoa'
+const autorizacao = z.literal(true, { error: MENSAGEM_AUTORIZACAO })
+
+/* Sem paciente: o histórico é de quem criou a conta. Com paciente ("para alguém que eu cuido"), o histórico
+   passa a ser dele e quem criou a conta vira o responsável, com a relação que tem com ele. */
 export const esquemaOnboarding = z.object({
   modo: z.enum(['vazio', 'exemplo'], { error: "Use 'vazio' ou 'exemplo'" }),
+  paciente: z.object({ nome, dataNascimento: dataNascimento.optional(), relacao, autorizacao }).optional(),
 })
 
 /* '' remove um opcional. Campos fora da lista (convidado, onboarding...) são descartados. */
@@ -101,6 +112,9 @@ export const esquemaPerfil = z.object({
   alergias: lista.optional(),
   cartaoSus: ate(z.string().trim(), 40).optional(),
   plano: ate(z.string().trim(), 200).optional(),
+  /* null: o histórico volta a ser do próprio usuário. autorizacao é exigida quando a conta ainda não tem a
+     declaração (rotas/conta.ts): virar cuidador ou responder à pendência de uma conta antiga. */
+  responsavel: z.union([z.null(), z.object({ nome, relacao, autorizacao: autorizacao.optional() })]).optional(),
 })
 
 export const esquemaExclusao = z.object({

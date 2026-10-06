@@ -51,8 +51,15 @@ test('jornada no celular: cadastro, exemplo, linha do tempo, detalhe e copiloto'
   await expect(titulo).toHaveText('Ultrassom Doppler de carótidas')
   await expect(titulo).toBeInViewport()
   await semRolagemHorizontal(page, 'detalhe')
-  await page.getByRole('button', { name: 'Voltar à lista' }).click()
+  /* "Voltar à lista" fecha o detalhe e devolve o foco ao item de onde a pessoa veio (simulação R2, P7). */
+  await page.getByRole('button', { name: 'Voltar à lista' }).tap()
+  await expect(page).toHaveURL(/#\/app\/linha$/)
+  await expect(page.getByTestId('evento-detalhe')).toBeHidden()
   await expect(item).toBeInViewport()
+  await expect(item).toBeFocused()
+  await item.tap()
+  await expect(page).toHaveURL(/#\/app\/linha\/e22$/)
+  await expect(titulo).toBeInViewport()
 
   await irParaSecao(page, 'Copiloto')
   await expect(page).toHaveURL(/#\/app\/copiloto$/)

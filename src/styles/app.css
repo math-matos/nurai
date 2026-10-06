@@ -201,12 +201,24 @@
 .excluir-registro__pergunta { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
 .excluir-registro__pergunta strong { display: block; color: var(--ink); margin-bottom: 4px; }
 .excluir-registro__acoes { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.busca-pergunta {
+  display: grid; justify-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4); background: var(--accent-soft); border: 1px solid var(--accent-line);
+  border-radius: var(--r-md); color: var(--accent-deep); font-size: 14px; font-weight: 600;
+}
 .recado-app {
   display: flex; align-items: flex-start; gap: 10px;
   padding: 10px 12px; margin-bottom: var(--sp-4);
   background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--r-md);
   color: var(--accent-deep); font-size: 13.5px; line-height: 1.5;
 }
+.pedido-autorizacao {
+  display: grid; gap: var(--sp-3); margin-bottom: var(--sp-4); padding: var(--sp-4);
+  border: 1px solid var(--accent-line); border-radius: var(--r-lg); background: var(--card);
+}
+.pedido-autorizacao h2 { font-size: 16px; }
+.pedido-autorizacao p { font-size: 14px; color: var(--ink-2); }
+.pedido-autorizacao .btn { justify-self: start; }
 .recado-app > svg { flex: none; margin-top: 3px; }
 .recado-app p { flex: 1; }
 .recado-app .btn { padding: 2px 8px; font-size: 13px; }
@@ -360,14 +372,26 @@
 .lendo__passos li.ativo .lendo__ponto { background: var(--accent); animation: pulsar 1.1s var(--ease) infinite; }
 @keyframes pulsar { 50% { opacity: .25; transform: scale(.8); } }
 
-.revisao { display: grid; gap: var(--sp-4); padding: var(--sp-5); background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.revisao { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); padding: var(--sp-5); background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); }
 .revisao__cabeca { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
 .revisao__arquivo { display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; }
 .revisao__campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--sp-3); }
 .revisao__campos label { display: grid; gap: 5px; }
 .revisao__rotulo { margin-top: var(--sp-2); }
 .revisao__nota { font-size: 13px; color: var(--ink-3); border-top: 1px solid var(--line); padding-top: var(--sp-3); }
-.revisao__acoes { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.revisao__acoes { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; }
+.revisao__motivo { flex-basis: 100%; font-size: 13.5px; line-height: 1.5; color: var(--sig-alterado); }
+.revisao__motivo:empty { display: none; }
+.revisao__confirmar-rodape {
+  display: flex; gap: 8px; align-items: center; padding: var(--sp-2) var(--sp-3);
+  border: 1.5px solid var(--sig-alterado); border-radius: var(--r-md); background: #fbefec;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.btn-link {
+  padding: 0; background: none; border: 0; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--accent-deep);
+  text-decoration: underline; text-underline-offset: 3px;
+}
 
 .fontes__lista { display: grid; gap: 6px; }
 .fonte {
@@ -461,6 +485,9 @@
 .seletor__opcao:hover { color: var(--ink); }
 .seletor__opcao--ativa { background: var(--card); color: var(--ink); box-shadow: var(--shadow-1); }
 .resumo__acoes { display: flex; gap: var(--sp-2); }
+.resumo__explica { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; max-width: 72ch; margin-bottom: var(--sp-4); }
+.sintese-ia:focus { outline: none; }
+.sintese-ia:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .resumo__foco { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; min-width: 0; }
 .resumo__foco .seletor { flex-wrap: wrap; max-width: 100%; }
 .resumo__outra { width: 220px; max-width: 100%; }
@@ -532,6 +559,9 @@
 .pendencias { display: grid; gap: 6px; }
 .pendencias li { display: flex; justify-content: space-between; gap: var(--sp-4); font-size: 14px; padding: 6px 0; border-bottom: 1px dotted var(--line-2); }
 .pendencias span { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.folha-resumo__nota { font-size: 13px; color: var(--ink-3); margin-bottom: var(--sp-3); }
+.folha-resumo__grupo + .folha-resumo__grupo { margin-top: var(--sp-3); }
+.folha-resumo__grupo .pendencias span { white-space: normal; text-align: right; }
 @media (max-width: 600px) {
   .pendencias li { flex-wrap: wrap; gap: 2px var(--sp-4); }
   .pendencias span { white-space: normal; }
@@ -680,6 +710,8 @@
   .detalhe { position: static; }
   .detalhe__caixa { max-height: none; }
   .detalhe__voltar { display: inline-flex; margin: -6px 0 var(--sp-3) -8px; }
+  /* Empilhado, o detalhe só aparece com um registro escolhido: "Voltar à lista" o fecha. */
+  .linha--sem-escolha .detalhe { display: none; }
   .centro, .ensaio__cabeca { grid-template-columns: minmax(0, 1fr); }
   .ensaio__match { justify-items: start; }
 }
@@ -715,7 +747,7 @@
 
 /* ---------------- impressão ---------------- */
 @media print {
-  .lateral, .barra, .resumo__controles, .acesso, .lateral__veu, .palco__falha { display: none !important; }
+  .lateral, .barra, .resumo__controles, .resumo__explica, .acesso, .lateral__veu, .palco__falha { display: none !important; }
   .app { display: block; }
   .palco__corpo { padding: 0; }
   .folha-resumo { border: 0; padding: 0; }
@@ -734,9 +766,12 @@
 /* ---------------- meus dados e exclusão ---------------- */
 .meus-dados__grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
 .meus-dados textarea.field { resize: vertical; min-height: 96px; }
+.meus-dados__declaracao { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
 .meus-dados__salvo { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--sig-normal); }
 .painel--perigo { border-color: #e0bdb4; }
 .excluir { max-width: 420px; }
+.privacidade__atalho { font-size: 14px; }
+.privacidade__atalho .btn-link { display: inline-flex; align-items: center; gap: 6px; }
 .excluir__acoes { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .btn--perigo { --btn-bg: var(--sig-alterado); }
 .btn--perigo:hover { --btn-bg: #7d2a16; }

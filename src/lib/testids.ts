@@ -3,17 +3,18 @@
    form-cadastro, cadastro-nome, cadastro-email, cadastro-senha, cadastro-nascimento, cadastro-lgpd,
    cadastro-enviar, botao-demo, erro-formulario, aviso-sessao.
    Onboarding: onboarding-vazio, onboarding-exemplo.
-   Shell: shell-perfil, shell-perfil-nome, selo-convidado, botao-sair, botao-reiniciar, reinicio-confirmar,
+   Shell: shell-perfil, shell-perfil-nome, shell-responsavel, selo-convidado, botao-sair, botao-reiniciar, reinicio-confirmar,
    reinicio-zerar, estado-vazio, cta-primeiro-documento.
    Linha do tempo: evento-item, evento-detalhe, ia-explicar, ia-explicacao, evento-excluir,
-   evento-excluir-confirmar, evento-excluido.
+   evento-excluir-confirmar, evento-excluido, busca-pergunta, busca-perguntar-copiloto.
    Fontes/conferência: fontes-texto, fontes-ler-texto, fontes-pdf, conferencia, conferencia-titulo,
-   conferencia-salvar, conferencia-descartar, conferencia-identidade, conferencia-confirmo-meu.
+   conferencia-salvar, conferencia-descartar, conferencia-identidade, conferencia-confirmo-meu,
+   conferencia-confirmo-meu-rodape, conferencia-motivo, conferencia-ir-confirmacao.
    IA: copiloto-pergunta, copiloto-enviar, copiloto-resposta, ia-passos, ia-resumo, resumo-sintese.
-   Compartilhamento: acesso-gerar, acesso-painel, acesso-codigo, acesso-validade, acesso-copiar, acesso-revogar.
+   Compartilhamento: acesso-gerar, acesso-painel, acesso-codigo, acesso-validade, acesso-copiar, acesso-revogar, acesso-revogado.
    Médico: medico-form, medico-codigo, medico-profissional, medico-entrar, medico-erro, medico-paciente,
-   medico-aviso, medico-evento, medico-pendencias, medico-gerar-resumo, medico-resumo, medico-sair.
-   Conta: perfil-form, perfil-salvar, perfil-salvo, excluir-confirmacao, excluir-botao. */
+   medico-aviso, medico-evento, medico-pendencias, medico-ponto, medico-gerar-resumo, medico-resumo, medico-sair, medico-encerrado.
+   Conta: perfil-form, perfil-salvar, perfil-salvo, excluir-confirmacao, excluir-botao, atalho-conta. */
 export const TID = {
   formEntrar: 'form-entrar',
   entrarEmail: 'entrar-email',
@@ -33,9 +34,14 @@ export const TID = {
 
   onboardingVazio: 'onboarding-vazio',
   onboardingExemplo: 'onboarding-exemplo',
+  onboardingAutorizacao: 'onboarding-autorizacao',
+  perfilAutorizacao: 'perfil-autorizacao',
+  pedidoAutorizacao: 'pedido-autorizacao',
 
   shellPerfil: 'shell-perfil',
   shellPerfilNome: 'shell-perfil-nome',
+  shellIniciais: 'shell-iniciais',
+  shellResponsavel: 'shell-responsavel',
   seloConvidado: 'selo-convidado',
   botaoSair: 'botao-sair',
   botaoReiniciar: 'botao-reiniciar',
@@ -49,6 +55,8 @@ export const TID = {
   eventoExcluir: 'evento-excluir',
   eventoExcluirConfirmar: 'evento-excluir-confirmar',
   eventoExcluido: 'evento-excluido',
+  buscaPergunta: 'busca-pergunta',
+  buscaPerguntarCopiloto: 'busca-perguntar-copiloto',
   iaExplicar: 'ia-explicar',
   iaExplicacao: 'ia-explicacao',
 
@@ -61,6 +69,9 @@ export const TID = {
   conferenciaDescartar: 'conferencia-descartar',
   conferenciaIdentidade: 'conferencia-identidade',
   conferenciaConfirmoMeu: 'conferencia-confirmo-meu',
+  conferenciaConfirmoMeuRodape: 'conferencia-confirmo-meu-rodape',
+  conferenciaMotivo: 'conferencia-motivo',
+  conferenciaIrConfirmacao: 'conferencia-ir-confirmacao',
 
   copilotoPergunta: 'copiloto-pergunta',
   copilotoEnviar: 'copiloto-enviar',
@@ -68,6 +79,8 @@ export const TID = {
   iaPassos: 'ia-passos',
   iaResumo: 'ia-resumo',
   resumoSintese: 'resumo-sintese',
+  resumoPontos: 'resumo-pontos',
+  resumoPonto: 'resumo-ponto',
 
   acessoGerar: 'acesso-gerar',
   acessoPainel: 'acesso-painel',
@@ -75,6 +88,7 @@ export const TID = {
   acessoValidade: 'acesso-validade',
   acessoCopiar: 'acesso-copiar',
   acessoRevogar: 'acesso-revogar',
+  acessoRevogado: 'acesso-revogado',
 
   medicoForm: 'medico-form',
   medicoCodigo: 'medico-codigo',
@@ -85,13 +99,16 @@ export const TID = {
   medicoAviso: 'medico-aviso',
   medicoEvento: 'medico-evento',
   medicoPendencias: 'medico-pendencias',
+  medicoPonto: 'medico-ponto',
   medicoGerarResumo: 'medico-gerar-resumo',
   medicoResumo: 'medico-resumo',
   medicoSair: 'medico-sair',
+  medicoEncerrado: 'medico-encerrado',
 
   perfilForm: 'perfil-form',
   perfilSalvar: 'perfil-salvar',
   perfilSalvo: 'perfil-salvo',
   excluirConfirmacao: 'excluir-confirmacao',
   excluirBotao: 'excluir-botao',
+  atalhoConta: 'atalho-conta',
 } as const

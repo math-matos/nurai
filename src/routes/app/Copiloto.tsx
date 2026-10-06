@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../../components/Icon'
 import { Ancoras, AvisoIa, Falha, Marca, SeloIa, Serie, VazioHistorico } from '../../components/ui'
-import { SUGESTOES } from '../../data/sugestoes'
+import { sugestoesPara } from '../../data/sugestoes'
+import { useTom } from '../../lib/tom'
 import { perguntar, tentarTurnoDeNovo, useEstado } from '../../lib/store'
 import { TID } from '../../lib/testids'
 
 export function Copiloto() {
   const { eventos, conversa } = useEstado()
+  const tom = useTom()
   const [texto, setTexto] = useState('')
   const fim = useRef<HTMLDivElement>(null)
   const pensando = conversa.some((t) => t.carregando)
@@ -35,7 +37,7 @@ export function Copiloto() {
             <p className="copiloto__regra">
               Toda resposta vem com os registros que a sustentam. Quando a informação não
               existe no histórico, a resposta é dizer que não existe. Nada aqui é conduta
-              médica: o copiloto organiza o contexto, quem decide é o profissional.
+              médica: o Copiloto organiza o contexto, quem decide é o profissional.
             </p>
           </div>
         </div>
@@ -44,7 +46,7 @@ export function Copiloto() {
           <VazioHistorico
             icone="copiloto"
             titulo="Anexe um documento para começar a conversa"
-            texto="O copiloto só responde com base no que está no seu histórico. Envie um laudo ou resultado de exame e volte para perguntar sobre ele."
+            texto={`O Copiloto só responde com base no que está no ${tom.dono('histórico')}. Envie um laudo ou resultado de exame e volte para perguntar sobre ele.`}
           />
         )}
 
@@ -52,7 +54,7 @@ export function Copiloto() {
           <div className="sugestoes">
             <p className="label">Perguntas para começar</p>
             <div className="sugestoes__lista">
-              {SUGESTOES.map((s) => (
+              {sugestoesPara(tom.nome).map((s) => (
                 <button key={s} type="button" className="sugestao" onClick={() => enviar(s)}>
                   {s}
                   <Icon nome="seta" tamanho={15} />

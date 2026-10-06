@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Icon } from '../../components/Icon'
 import { Ancoras, AvisoIa, ChipFonte, ChipSinal, Falha, Regua, SeloIa, Vazio, VazioHistorico } from '../../components/ui'
 import { ICONE_TIPO, ano, formatarData, ordenarRecentes } from '../../lib/formato'
 import { FONTES, TIPOS } from '../../data/seed'
 import type { Evento, FonteId, TipoId } from '../../data/types'
-import { api, type Explicacao } from '../../lib/api'
+import { api, mensagemDeErro, type Explicacao } from '../../lib/api'
 import { navegar } from '../../lib/router'
 import { perguntar, useAcoes, useEstado } from '../../lib/store'
 import { useRequisicao } from '../../lib/useRequisicao'
 import { TID } from '../../lib/testids'
+import { maiuscula, useTom } from '../../lib/tom'
 
 const TIPOS_FILTRO: TipoId[] = ['exame', 'consulta', 'imagem', 'internacao', 'cirurgia', 'vacina', 'documento']
 const FONTES_FILTRO: FonteId[] = ['sus', 'laboratorio', 'hospital', 'clinica', 'operadora', 'paciente']
@@ -17,6 +19,13 @@ const FONTES_FILTRO: FonteId[] = ['sus', 'laboratorio', 'hospital', 'clinica', '
 const EMPILHADO = '(max-width: 1180px)'
 
 const empilhado = () => window.matchMedia(EMPILHADO).matches
+
+/* Quem digita uma pergunta na busca quer uma resposta, não um filtro. */
+const INICIO_DE_PERGUNTA = /^(como|quando|qual|quais|posso|tem|devo|o que)\b/i
+const pareceAPergunta = (texto: string) => {
+  const limpo = texto.trim()
+  return limpo.endsWith('?') || INICIO_DE_PERGUNTA.test(limpo)
+}
 const idDoItem = (id: string) => `evento-${id}`
 
 /* Desconta a barra superior grudenta, que no celular pode passar de 100px. */
@@ -29,6 +38,7 @@ function rolarAte(alvo: HTMLElement | null) {
 
 export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
   const { eventos, novos } = useEstado()
+  const tom = useTom()
   const [busca, setBusca] = useState('')
   const [tipos, setTipos] = useState<TipoId[]>([])
   const [fontes, setFontes] = useState<FonteId[]>([])
@@ -69,29 +79,29 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
   const coluna = useRef<HTMLDivElement>(null)
   const aviso = useRef<HTMLDivElement>(null)
 
-  /* Depois de excluir, volta ao topo da lista: no celular o detalhe ficava abaixo dela. */
+  /* Depois de excluir, volta à lista com o aviso no topo visível: no celular o detalhe ficava abaixo dela. */
   const aposExcluir = (titulo: string) => {
-    setExcluido(titulo)
+    flushSync(() => setExcluido(titulo))
     navegar('/app/linha')
-    requestAnimationFrame(() => {
-      if (empilhado()) rolarAte(coluna.current)
-      aviso.current?.focus({ preventScroll: true })
-    })
+    rolarAte(coluna.current)
+    aviso.current?.focus({ preventScroll: true })
   }
 
   const avisoExcluido = excluido && (
     <div className="recado-app" role="status" tabIndex={-1} ref={aviso} data-testid={TID.eventoExcluido}>
       <Icon nome="papel" tamanho={16} />
-      <p>“{excluido}” foi excluído do seu histórico. Resumos e próximos passos gerados antes podem citá-lo até serem refeitos.</p>
+      <p>“{excluido}” foi excluído do {tom.dono('histórico')}. Resumos e próximos passos gerados antes podem citá-lo até serem refeitos.</p>
       <button type="button" className="btn btn--quiet" onClick={() => setExcluido(null)}>Fechar</button>
     </div>
   )
 
+  /* Fecha o detalhe (no celular ele some sem registro escolhido) e devolve a pessoa ao item de onde veio. */
   const voltarALista = () => {
-    const item = atual && document.getElementById(idDoItem(atual.id))
-    if (!item) return
+    if (!atual) return
+    const item = document.getElementById(idDoItem(atual.id))
+    navegar('/app/linha')
     rolarAte(item)
-    item.focus({ preventScroll: true })
+    item?.focus({ preventScroll: true })
   }
 
   const alterna = <T,>(valor: T, atuais: T[], set: (v: T[]) => void) =>
@@ -105,7 +115,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
         {avisoExcluido}
         <VazioHistorico
         icone="linha"
-        titulo="Seu histórico ainda está vazio"
+        titulo={`${maiuscula(tom.dono('histórico'))} ainda está vazio`}
         texto="Anexe um laudo, resultado de exame ou receita. A IA lê o documento, você confere, e ele vira o primeiro ponto desta linha do tempo."
         />
       </>
@@ -113,7 +123,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
   }
 
   return (
-    <div className="linha">
+    <div className={`linha${selecionado === undefined ? ' linha--sem-escolha' : ''}`}>
       <div className="linha__coluna" ref={coluna}>
         {avisoExcluido}
         <div className="filtros">
@@ -173,10 +183,24 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
             titulo="Nenhum registro com esses filtros"
             texto={`O histórico tem ${eventos.length} registros. Tente afrouxar a busca ou desmarcar um filtro.`}
             acao={
-              <button type="button" className="btn btn--ghost"
-                onClick={() => { setBusca(''); setTipos([]); setFontes([]) }}>
-                Limpar filtros
-              </button>
+              <>
+                {pareceAPergunta(busca) && (
+                  <div className="busca-pergunta" data-testid={TID.buscaPergunta}>
+                    <p>Quer perguntar isso ao Copiloto?</p>
+                    <button
+                      type="button" className="btn"
+                      onClick={() => { perguntar(busca); navegar('/app/copiloto') }}
+                      data-testid={TID.buscaPerguntarCopiloto}
+                    >
+                      <Icon nome="copiloto" tamanho={16} /> Perguntar ao Copiloto
+                    </button>
+                  </div>
+                )}
+                <button type="button" className="btn btn--ghost"
+                  onClick={() => { setBusca(''); setTipos([]); setFontes([]) }}>
+                  Limpar filtros
+                </button>
+              </>
             }
           />
         ) : (
@@ -292,7 +316,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
                   navegar('/app/copiloto')
                 }}
               >
-                <Icon nome="copiloto" tamanho={16} /> Perguntar ao copiloto
+                <Icon nome="copiloto" tamanho={16} /> Perguntar ao Copiloto
               </button>
               <button type="button" className="btn btn--ghost" onClick={() => navegar('/app/privacidade')}>
                 <Icon nome="escudo" tamanho={16} /> Quem acessou
@@ -300,7 +324,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
             </div>
 
             <ExplicarEvento key={atual.id} evento={atual} eventos={eventos} />
-            <ExcluirEvento key={`excluir-${atual.id}`} evento={atual} aoExcluir={aposExcluir} />
+            <ExcluirEvento key={`excluir-${atual.id}`} evento={atual} historico={tom.dono('histórico')} aoExcluir={aposExcluir} />
           </div>
         )}
       </aside>
@@ -309,23 +333,54 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
 }
 
 /* Só existe no app do paciente: a visão do médico (acesso por código) não monta a linha do tempo. */
-function ExcluirEvento({ evento, aoExcluir }: { evento: Evento; aoExcluir: (titulo: string) => void }) {
+function ExcluirEvento({ evento, historico, aoExcluir }: {
+  evento: Evento
+  /* "seu histórico" | "histórico de Marcos" */
+  historico: string
+  aoExcluir: (titulo: string) => void
+}) {
   const { excluirEvento } = useAcoes()
   const [confirmando, setConfirmando] = useState(false)
   const [excluindo, setExcluindo] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+  /* Barra o 2º toque antes de o botão ter tempo de renderizar desabilitado. */
+  const emCurso = useRef(false)
+  const caixa = useRef<HTMLDivElement>(null)
+  const pergunta = useRef<HTMLParagraphElement>(null)
+
+  /* No celular a confirmação nasce no fim de um detalhe longo: leva a pessoa até ela. */
+  const mostrarCaixa = () => caixa.current?.scrollIntoView({ block: 'center' })
+
+  const abrir = () => {
+    flushSync(() => setConfirmando(true))
+    mostrarCaixa()
+    pergunta.current?.focus({ preventScroll: true })
+  }
 
   const excluir = async () => {
+    if (emCurso.current) return
+    emCurso.current = true
     setExcluindo(true)
-    const ok = await excluirEvento(evento.id)
-    setExcluindo(false)
-    if (ok) aoExcluir(evento.titulo)
+    setErro(null)
+    try {
+      await excluirEvento(evento.id)
+      aoExcluir(evento.titulo)
+    } catch (e) {
+      flushSync(() => {
+        setExcluindo(false)
+        setErro(mensagemDeErro(e))
+      })
+      mostrarCaixa()
+    } finally {
+      emCurso.current = false
+    }
   }
 
   if (!confirmando) {
     return (
       <div className="excluir-registro">
         <button
-          type="button" className="btn btn--quiet btn--perigo-leve" onClick={() => setConfirmando(true)}
+          type="button" className="btn btn--quiet btn--perigo-leve" onClick={abrir}
           data-testid={TID.eventoExcluir}
         >
           Excluir este registro
@@ -335,18 +390,22 @@ function ExcluirEvento({ evento, aoExcluir }: { evento: Evento; aoExcluir: (titu
   }
 
   return (
-    <div className="excluir-registro excluir-registro--confirmando" role="group" aria-labelledby="excluir-registro-pergunta">
-      <p id="excluir-registro-pergunta" className="excluir-registro__pergunta">
-        <strong>Excluir “{evento.titulo}” do seu histórico?</strong> A exclusão é definitiva: o registro some da linha
+    <div
+      className="excluir-registro excluir-registro--confirmando" role="group" aria-labelledby="excluir-registro-pergunta"
+      aria-busy={excluindo} ref={caixa}
+    >
+      <p id="excluir-registro-pergunta" className="excluir-registro__pergunta" tabIndex={-1} ref={pergunta}>
+        <strong>Excluir “{evento.titulo}” do {historico}?</strong> A exclusão é definitiva: o registro some da linha
         do tempo e não pode ser recuperado. Resumos e próximos passos gerados antes podem continuar citando este
         registro até serem refeitos.
       </p>
+      {erro && <Falha mensagem={erro} />}
       <div className="excluir-registro__acoes">
         <button
           type="button" className="btn btn--perigo" disabled={excluindo} onClick={() => { void excluir() }}
           data-testid={TID.eventoExcluirConfirmar}
         >
-          {excluindo ? 'Excluindo…' : 'Excluir definitivamente'}
+          {excluindo ? 'Excluindo…' : erro ? 'Tentar excluir de novo' : 'Excluir definitivamente'}
         </button>
         <button type="button" className="btn btn--ghost" disabled={excluindo} onClick={() => setConfirmando(false)}>
           Cancelar

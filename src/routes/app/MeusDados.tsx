@@ -3,12 +3,15 @@ import { flushSync } from 'react-dom'
 import { Campo } from '../../components/Campo'
 import { Icon } from '../../components/Icon'
 import { Falha } from '../../components/ui'
-import { ErroApi, mensagemDeErro, type MudancasPerfil, type Perfil } from '../../lib/api'
+import { ErroApi, mensagemDeErro, RELACOES, type MudancasPerfil, type Perfil } from '../../lib/api'
+import { ERRO_AUTORIZACAO, textoDeclaracao } from '../../lib/autorizacao'
+import { formatarDataCurta } from '../../lib/formato'
 import { focarPrimeiroErro } from '../../lib/formulario'
-import { atualizarPerfil, excluirConta, isoHoje } from '../../lib/store'
+import { atualizarPerfil, isoHoje } from '../../lib/store'
 import { TID } from '../../lib/testids'
 
-type CampoPerfil = 'nome' | 'dataNascimento' | 'condicoes' | 'alergias' | 'cartaoSus' | 'plano'
+type CampoPerfil =
+  | 'nome' | 'dataNascimento' | 'condicoes' | 'alergias' | 'cartaoSus' | 'plano' | 'responsavelNome' | 'relacao' | 'autorizacao'
 type Erros = Partial<Record<CampoPerfil, string>>
 
 const ORDEM: { campo: CampoPerfil; id: string }[] = [
@@ -18,13 +21,23 @@ const ORDEM: { campo: CampoPerfil; id: string }[] = [
   { campo: 'alergias', id: 'perfil-alergias' },
   { campo: 'cartaoSus', id: 'perfil-sus' },
   { campo: 'plano', id: 'perfil-plano' },
+  { campo: 'responsavelNome', id: 'perfil-responsavel' },
+  { campo: 'relacao', id: 'perfil-relacao' },
+  { campo: 'autorizacao', id: 'perfil-autorizacao' },
 ]
+
+const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 const linhas = (texto: string) => texto.split('\n').map((l) => l.trim()).filter(Boolean)
 
+const CAMPO_DO_RESPONSAVEL: Record<string, CampoPerfil> = {
+  'responsavel.nome': 'responsavelNome', 'responsavel.relacao': 'relacao', 'responsavel.autorizacao': 'autorizacao',
+}
+
 /* O servidor aponta erro de item de lista como "condicoes.2": a mensagem vai para o campo da lista. */
 function errosDoServidor(campos: Record<string, string>): Erros {
-  return Object.fromEntries(Object.entries(campos).map(([chave, msg]) => [chave.split('.')[0], msg])) as Erros
+  return Object.fromEntries(Object.entries(campos)
+    .map(([chave, msg]) => [CAMPO_DO_RESPONSAVEL[chave] ?? chave.split('.')[0], msg])) as Erros
 }
 
 function formularioDe(p: Perfil) {
@@ -35,6 +48,10 @@ function formularioDe(p: Perfil) {
     alergias: p.alergias.join('\n'),
     cartaoSus: p.cartaoSus ?? '',
     plano: p.plano ?? '',
+    cuidador: Boolean(p.responsavel),
+    responsavelNome: p.responsavel?.nome ?? '',
+    relacao: p.responsavel?.relacao ?? '',
+    autorizacao: false,
   }
 }
 
@@ -44,11 +61,21 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
+  /* O servidor só pede a declaração enquanto a conta não tem uma: virar cuidador ou conta antiga. */
+  const autorizadoEm = perfil.responsavel?.autorizadoEm
+  const precisaDeclarar = form.cuidador && !autorizadoEm
 
   const mudar = (campo: CampoPerfil, valor: string) => {
     setForm((f) => ({ ...f, [campo]: valor }))
     setSalvo(false)
     if (erros[campo]) setErros((e) => ({ ...e, [campo]: undefined }))
+  }
+
+  /* Virar responsável: o nome de quem usa a conta sai do campo Nome, que passa a ser o do paciente. */
+  const alternarCuidador = (cuidador: boolean) => {
+    setForm((f) => ({ ...f, cuidador, responsavelNome: f.responsavelNome || (cuidador ? f.nome : '') }))
+    setSalvo(false)
+    setErros((e) => ({ ...e, responsavelNome: undefined, relacao: undefined }))
   }
 
   const recusar = (novos: Erros) => {
@@ -64,6 +91,9 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
     const locais: Erros = {
       ...(form.nome.trim() === '' && { nome: 'Informe o nome' }),
       ...(form.dataNascimento > isoHoje() && { dataNascimento: 'A data de nascimento não pode estar no futuro' }),
+      ...(form.cuidador && form.responsavelNome.trim() === '' && { responsavelNome: 'Informe o seu nome' }),
+      ...(form.cuidador && form.relacao === '' && { relacao: 'Escolha o que você é dessa pessoa' }),
+      ...(precisaDeclarar && !form.autorizacao && { autorizacao: ERRO_AUTORIZACAO }),
     }
     if (Object.keys(locais).length > 0) return recusar(locais)
 
@@ -75,6 +105,9 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
       alergias: linhas(form.alergias),
       cartaoSus: form.cartaoSus.trim(),
       plano: form.plano.trim(),
+      responsavel: form.cuidador
+        ? { nome: form.responsavelNome.trim(), relacao: form.relacao, ...(precisaDeclarar && { autorizacao: true as const }) }
+        : null,
     }
     setSalvando(true)
     try {
@@ -104,7 +137,8 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
       <form className="formulario meus-dados" noValidate onSubmit={(e) => { void salvar(e) }}
         aria-busy={salvando} data-testid={TID.perfilForm}>
         <div className="meus-dados__grade">
-          <Campo id="perfil-nome" rotulo="Nome" value={form.nome} erro={erros.nome} autoComplete="name"
+          <Campo id="perfil-nome" rotulo={form.cuidador ? 'Nome do paciente' : 'Nome'} value={form.nome} erro={erros.nome}
+            autoComplete={form.cuidador ? 'off' : 'name'}
             onChange={(e) => mudar('nome', e.target.value)} disabled={salvando} />
           <Campo id="perfil-nascimento" rotulo="Data de nascimento" type="date" opcional max={isoHoje()}
             value={form.dataNascimento} erro={erros.dataNascimento}
@@ -120,6 +154,63 @@ export function MeusDados({ perfil }: { perfil: Perfil }) {
           <AreaLista id="perfil-alergias" rotulo="Alergias" valor={form.alergias} erro={erros.alergias}
             exemplo="Ex.: Dipirona — urticária" aoMudar={(v) => mudar('alergias', v)} desabilitado={salvando} />
         </div>
+        <label className="consentimento" htmlFor="perfil-cuidador">
+          <input
+            id="perfil-cuidador" type="checkbox" checked={form.cuidador} disabled={salvando}
+            onChange={(e) => alternarCuidador(e.target.checked)}
+          />
+          <span className="consentimento__texto">
+            <strong>Este histórico é de alguém que eu cuido.</strong> Os dados acima são do paciente, e o que
+            você fizer fica registrado como ação sua, de responsável. Desmarque se o histórico for seu.
+          </span>
+        </label>
+        {form.cuidador && (
+          <div className="meus-dados__grade">
+            <Campo id="perfil-responsavel" rotulo="Seu nome (responsável)" value={form.responsavelNome}
+              erro={erros.responsavelNome} autoComplete="name" disabled={salvando}
+              onChange={(e) => mudar('responsavelNome', e.target.value)} />
+            <div className={`campo${erros.relacao ? ' campo--erro' : ''}`}>
+              <label htmlFor="perfil-relacao" className="campo__rotulo">O que você é do paciente?</label>
+              <select
+                id="perfil-relacao" className="field" value={form.relacao} disabled={salvando}
+                aria-invalid={erros.relacao ? true : undefined}
+                aria-describedby={erros.relacao ? 'perfil-relacao-erro' : undefined}
+                onChange={(e) => mudar('relacao', e.target.value)}
+              >
+                <option value="">Escolha…</option>
+                {RELACOES.map((r) => <option key={r} value={r}>{maiuscula(r)}</option>)}
+              </select>
+              {erros.relacao && <p id="perfil-relacao-erro" className="campo__erro">{erros.relacao}</p>}
+            </div>
+          </div>
+        )}
+        {precisaDeclarar && (
+          <div className={`campo${erros.autorizacao ? ' campo--erro' : ''}`}>
+            <label className="consentimento" htmlFor="perfil-autorizacao">
+              <input
+                id="perfil-autorizacao" type="checkbox" checked={form.autorizacao} disabled={salvando}
+                aria-invalid={erros.autorizacao ? true : undefined}
+                aria-describedby={erros.autorizacao ? 'perfil-autorizacao-erro' : undefined}
+                onChange={(e) => {
+                  const marcado = e.target.checked
+                  setForm((f) => ({ ...f, autorizacao: marcado }))
+                  setSalvo(false)
+                  if (erros.autorizacao) setErros((er) => ({ ...er, autorizacao: undefined }))
+                }}
+                data-testid={TID.perfilAutorizacao}
+              />
+              <span className="consentimento__texto">{textoDeclaracao(form.nome)}</span>
+            </label>
+            {erros.autorizacao && <p id="perfil-autorizacao-erro" className="campo__erro">{erros.autorizacao}</p>}
+          </div>
+        )}
+        {form.cuidador && autorizadoEm && (
+          <p className="meus-dados__declaracao">
+            <Icon nome="check" tamanho={14} /> Você declarou em{' '}
+            <span className="num">{formatarDataCurta(autorizadoEm.slice(0, 10))}</span> ter autorização para organizar
+            os dados de saúde de {perfil.nome}.
+          </p>
+        )}
         <div aria-live="polite">
           {erroGeral && <Falha mensagem={erroGeral} />}
           {salvo && (
@@ -156,68 +247,5 @@ function AreaLista({ id, rotulo, valor, erro, exemplo, aoMudar, desabilitado }: 
       <p id={`${id}-dica`} className="campo__dica">Uma por linha.</p>
       {erro && <p id={`${id}-erro`} className="campo__erro">{erro}</p>}
     </div>
-  )
-}
-
-const PALAVRA = 'EXCLUIR'
-
-export function ExcluirConta({ convidado }: { convidado: boolean }) {
-  const [confirmando, setConfirmando] = useState(false)
-  const [digitado, setDigitado] = useState('')
-  const [excluindo, setExcluindo] = useState(false)
-  const [erro, setErro] = useState<string | null>(null)
-
-  const excluir = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (excluindo || digitado.trim() !== PALAVRA) return
-    setExcluindo(true)
-    setErro(null)
-    try {
-      await excluirConta()
-    } catch (falha) {
-      setErro(mensagemDeErro(falha))
-      setExcluindo(false)
-    }
-  }
-
-  const cancelar = () => {
-    setConfirmando(false)
-    setDigitado('')
-    setErro(null)
-  }
-
-  return (
-    <section className="painel painel--perigo" aria-labelledby="excluir-conta">
-      <div className="painel__cabeca">
-        <h2 id="excluir-conta">Excluir minha conta</h2>
-        <p>
-          Apaga {convidado ? 'esta conta de demonstração' : 'a sua conta'}, todo o histórico,
-          as permissões, os acessos compartilhados e o registro de acessos. Não dá para desfazer.
-        </p>
-      </div>
-      {confirmando ? (
-        <form className="formulario excluir" noValidate onSubmit={(e) => { void excluir(e) }} aria-busy={excluindo}>
-          <Campo
-            id="excluir-confirmacao" rotulo={`Para confirmar, digite ${PALAVRA}`} value={digitado}
-            autoComplete="off" spellCheck={false} autoFocus disabled={excluindo}
-            onChange={(e) => setDigitado(e.target.value)} data-testid={TID.excluirConfirmacao}
-          />
-          <div aria-live="assertive">{erro && <Falha mensagem={erro} />}</div>
-          <div className="excluir__acoes">
-            <button
-              type="submit" className="btn btn--perigo" data-testid={TID.excluirBotao}
-              disabled={excluindo || digitado.trim() !== PALAVRA}
-            >
-              {excluindo ? 'Excluindo…' : 'Excluir definitivamente'}
-            </button>
-            <button type="button" className="btn btn--ghost" onClick={cancelar} disabled={excluindo}>Cancelar</button>
-          </div>
-        </form>
-      ) : (
-        <button type="button" className="btn btn--ghost btn--perigo-leve" onClick={() => setConfirmando(true)}>
-          Excluir minha conta
-        </button>
-      )}
-    </section>
   )
 }

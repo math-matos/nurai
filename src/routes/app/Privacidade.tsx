@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '../../components/Icon'
 import { ChipFonte, VazioHistorico } from '../../components/ui'
+import { ExcluirConta } from '../../components/ExcluirConta'
 import { formatarDataCurta } from '../../lib/formato'
 import { useAcoes, useEstado, usePerfil } from '../../lib/store'
-import { ExcluirConta, MeusDados } from './MeusDados'
+import { TID } from '../../lib/testids'
+import { tomDe } from '../../lib/tom'
+import { MeusDados } from './MeusDados'
 
 export function Privacidade() {
   const { consentimentos, acessos, eventos } = useEstado()
   const perfil = usePerfil()
+  const tom = tomDe(perfil)
   const { alternarConsentimento, atualizarAcessos } = useAcoes()
   const [alternando, setAlternando] = useState<string | null>(null)
   const ativos = consentimentos.filter((c) => c.ativo).length
@@ -21,8 +25,21 @@ export function Privacidade() {
     setAlternando(null)
   }
 
+  /* A exclusão fica no fim de uma página longa: o atalho do topo leva até ela. */
+  const irParaConta = () => {
+    const alvo = document.getElementById('excluir-conta')
+    alvo?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    alvo?.focus({ preventScroll: true })
+  }
+
   return (
     <div className="privacidade">
+      <p className="privacidade__atalho">
+        <button type="button" className="btn-link" onClick={irParaConta} data-testid={TID.atalhoConta}>
+          <Icon nome="pessoa" tamanho={15} /> Meus dados e exclusão da conta
+        </button>
+      </p>
+
       {eventos.length === 0 && (
         <VazioHistorico
           icone="escudo"
@@ -43,7 +60,7 @@ export function Privacidade() {
           <p>
             Cada instituição vê apenas o escopo que você concedeu, pelo tempo que você
             concedeu. Desligar uma fonte interrompe a entrada de novos registros e o acesso
-            dela ao que já está aqui — o que já foi trazido continua sendo seu.
+            dela ao que já está aqui — o que já foi trazido {tom.nome ? `continua no histórico de ${tom.nome}` : 'continua sendo seu'}.
           </p>
         </div>
 
@@ -110,7 +127,12 @@ export function Privacidade() {
           </div>
           <div>
             <dt>Titularidade</dt>
-            <dd>O histórico pertence ao titular da conta. Instituições recebem acesso, nunca posse — e todo acesso é temporário por padrão.</dd>
+            <dd>
+              {perfil.responsavel
+                ? `O histórico e os dados de saúde são de ${perfil.nome}, titular dos dados. A conta é gerenciada por ${perfil.responsavel.nome} (${perfil.responsavel.relacao}), como responsável, e cada ação fica registrada no nome de quem a fez.`
+                : 'O histórico pertence ao titular da conta.'}
+              {' '}Instituições recebem acesso, nunca posse — e todo acesso é temporário por padrão.
+            </dd>
           </div>
           <div>
             <dt>Revogação</dt>

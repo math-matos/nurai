@@ -6,7 +6,7 @@ import { ErroIa } from '../erros.js'
 import { pedirJson } from '../json.js'
 import { mensagens } from '../prompts.js'
 import { limparTexto } from '../texto.js'
-import { hojeISO, type ContextoIa } from './comum.js'
+import { hojeISO, normalizar, type ContextoIa } from './comum.js'
 import { extrairPorHeuristica, lerDataDoTexto } from './extrair-mock.js'
 import { alertaDeIdentidade, type AlertaExtracao } from './identidade.js'
 
@@ -79,7 +79,7 @@ Formato da resposta (JSON):
 - Copie nomes, títulos e termos com a grafia do documento, com acentos e cedilha, mesmo que o documento esteja em maiúsculas (ex.: "MONITORIZAÇÃO AMBULATORIAL DA PRESSÃO ARTERIAL" vira "Monitorização Ambulatorial da Pressão Arterial", nunca "Monitorizacao").
 - "titulo": o que o documento é, com o nome do exame. Em pedido, guia ou requisição, nomeie o(s) exame(s) pedido(s), ex.: "Pedido de perfil lipídico", "Guia de ultrassom de abdome" — nunca só "Pedido de exame".
 - "medidas": só valores numéricos presentes no texto, com ponto decimal; refMin/refMax da faixa de referência impressa. Não invente faixas.
-- Faixa "X a Y": refMin X e refMax Y. Faixa só com teto ("< X", "≤ X", "até X", "inferior a X"): refMin null e refMax X. Faixa só com piso ("> X", "≥ X", "acima de X", "superior a X", limite inferior da normalidade "LIN X"): refMin X e refMax null; se o documento trouxer o LIN, use o LIN. Use null nos dois só quando o documento não trouxer referência para a medida. Nunca preencha 0 como limite que o documento não imprime: em espirometria com só o LIN, o teto fica null e o piso é o LIN.
+- Faixa "X a Y" ou "X até Y": refMin X e refMax Y. Faixa só com teto ("< X", "≤ X", "<= X", "até X", "inferior a X", "menor que X", "desejável: até X"): refMin null e refMax X. Faixa só com piso ("> X", "≥ X", ">= X", "acima de X", "superior a X", "maior que X", limite inferior da normalidade "LIN X"): refMin X e refMax null; se o documento trouxer o LIN, use o LIN. Faixa de um lado só nunca ganha o outro limite: "≤ 190" não vira "0 a 190", e "≥ 40" não vira "40 a 40". Use null nos dois só quando o documento não trouxer referência para a medida. Nunca preencha 0 como limite que o documento não imprime: em espirometria com só o LIN, o teto fica null e o piso é o LIN.
 - Valor duplo como pressão arterial "152/96 mmHg" (referência "< 140/90") vira duas medidas com nomes distintos: "Pressão arterial sistólica" (152, refMax 140) e "Pressão arterial diastólica" (96, refMax 90).
 - Referência em "% do previsto" (espirometria, por exemplo): registre a medida pelo valor em % do previsto, com unidade "% do previsto", para a faixa e o valor ficarem na mesma unidade.
 - "resumo": descreva o que o documento registra, sem interpretar nem diagnosticar. Em pedido ou guia, cite os exames pedidos pelo nome (ex.: "Pedido de perfil lipídico e hemograma.").
@@ -102,6 +102,40 @@ function semZeroInventado(m: MedidaBruta, texto?: string): MedidaBruta {
   return { ...m, refMin: m.refMin === 0 ? null : m.refMin, refMax: m.refMax === 0 ? null : m.refMax }
 }
 
+const NUMERO = '(\\d+(?:[.,]\\d+)?)'
+/* Marcador colado a um número antes ("70 até 99") é faixa dos dois lados, não teto. */
+const SEM_NUMERO_ANTES = '(?<![\\d.,]\\s*)'
+const TETO = new RegExp(`${SEM_NUMERO_ANTES}(?:<=?|≤|\\bate\\b|\\binferior a\\b|\\bmenor (?:que|ou igual a)\\b)\\s*${NUMERO}`, 'g')
+const PISO = new RegExp(`${SEM_NUMERO_ANTES}(?:>=?|≥|\\bacima de\\b|\\bsuperior a\\b|\\bmaior (?:que|ou igual a)\\b|\\blin\\b)\\s*${NUMERO}`, 'g')
+const valoresDe = (re: RegExp, linhas: string[]) =>
+  new Set(linhas.flatMap((l) => [...l.matchAll(re)].map((m) => Number(m[1].replace(',', '.')))))
+
+/* Linhas do documento que citam a medida: todas as palavras do nome, sem acento ("Colesterol LDL" casa
+   "LDL-COLESTEROL"). Nome que o documento não traz (ex.: "sistólica" de "152/96") não acha linha. */
+function linhasDaMedida(nome: string, texto: string): string[] {
+  const palavras = normalizar(nome).split(/[^a-z0-9]+/).filter((p) => p.length >= 3)
+  if (!palavras.length) return []
+  return normalizar(texto).split('\n').filter((l) => palavras.every((p) => l.includes(p)))
+}
+
+/* Visto na extração: "< 190" impresso virou faixa "0 a 190" (havia um 0 em outra linha do hemograma) e
+   "até 190" foi para o piso. Se a linha da medida imprime só um lado com aquele número, a faixa fica só
+   com ele, no lado certo. Sem linha ou com os dois lados impressos, fica como o modelo leu. */
+function faixaUnilateral(m: MedidaBruta, texto?: string): MedidaBruta {
+  if (texto === undefined) return m
+  const linhas = linhasDaMedida(m.nome, texto)
+  if (!linhas.length) return m
+  const tetos = valoresDe(TETO, linhas)
+  const pisos = valoresDe(PISO, linhas)
+  const soTeto = (x: number | null | undefined) => x != null && tetos.has(x) && !pisos.has(x)
+  const soPiso = (x: number | null | undefined) => x != null && pisos.has(x) && !tetos.has(x)
+  if (soTeto(m.refMax) && !(m.refMin != null && pisos.has(m.refMin))) return { ...m, refMin: null }
+  if (soPiso(m.refMin) && !(m.refMax != null && tetos.has(m.refMax))) return { ...m, refMax: null }
+  if (m.refMax == null && soTeto(m.refMin)) return { ...m, refMin: null, refMax: m.refMin }
+  if (m.refMin == null && soPiso(m.refMax)) return { ...m, refMin: m.refMax, refMax: null }
+  return m
+}
+
 /* Faixa unilateral ("< X", "> X", LIN) guarda só o lado impresso: nada de teto ou piso inventado.
    Sem referência alguma não há com o que comparar, e a medida é omitida com aviso. */
 function lerMedida(m: MedidaBruta): Medida | string {
@@ -120,7 +154,7 @@ const semGenero = (resumo: string) => resumo.replace(ARTIGO_NO_INICIO, (_, antes
    Com o texto do documento, limite 0 que não aparece impresso é descartado. */
 export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string, texto?: string): Montado {
   const avisos = bruto.avisos.map((a) => maiuscula(limparTexto(a))).filter(Boolean)
-  const lidas = bruto.medidas.map((m) => lerMedida(semZeroInventado(m, texto)))
+  const lidas = bruto.medidas.map((m) => lerMedida(faixaUnilateral(semZeroInventado(m, texto), texto)))
   const medidas = lidas.filter((m): m is Medida => typeof m !== 'string')
   const omitidas = lidas.filter((m): m is string => typeof m === 'string')
   const dataValida = bruto.data != null && dataIsoValida(bruto.data)
