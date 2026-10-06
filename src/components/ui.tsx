@@ -88,7 +88,8 @@ export function Serie({
   const min = Math.min(...valores)
   const max = Math.max(...valores)
   const span = max - min || 1
-  const L = 44, R = 14, T = 16, B = 26, W = 420, H = 132
+  /* R cobre meia largura do rótulo "MM/AAAA" centrado no último ponto; com 14 ele era cortado. */
+  const L = 44, R = 28, T = 16, B = 26, W = 420, H = 132
   const x = (i: number) => L + (i / Math.max(pontos.length - 1, 1)) * (W - L - R)
   const y = (v: number) => T + (1 - (v - min) / span) * (H - T - B)
   const linha = pontos.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(p.valor)}`).join(' ')
