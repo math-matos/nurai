@@ -38,14 +38,25 @@ export default defineConfig({
       },
     },
   ],
+  /* API e web separados para o Playwright esperar os dois (o /api/health sobe depois do Vite). */
   webServer: baseURLExterna
     ? undefined
-    : {
-        command: 'pnpm dev:all',
-        url: 'http://localhost:5173',
-        reuseExistingServer: true,
-        timeout: 120_000,
-        stdout: 'ignore',
-        stderr: 'pipe',
-      },
+    : [
+        {
+          command: 'pnpm dev:api',
+          url: 'http://localhost:3001/api/health',
+          reuseExistingServer: true,
+          timeout: 120_000,
+          stdout: 'ignore',
+          stderr: 'pipe',
+        },
+        {
+          command: 'pnpm dev:web',
+          url: 'http://localhost:5173',
+          reuseExistingServer: true,
+          timeout: 120_000,
+          stdout: 'ignore',
+          stderr: 'pipe',
+        },
+      ],
 })
