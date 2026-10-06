@@ -21,6 +21,7 @@
     "e2e": "playwright test",
     "e2e:real": "node -e \"if(!process.env.E2E_BASE_URL){console.error('defina E2E_BASE_URL');process.exit(1)}\" && playwright test",
     "e2e:real:local": "E2E_REAL=1 playwright test --project=desktop",
+    "e2e:contas": "tsx server/scripts/contas-e2e.ts",
     "e2e:fixtures": "tsx e2e/fixtures/gerar.ts",
     "e2e:verificar": "tsx e2e/fixtures/verificar.ts",
     "e2e:typecheck": "tsc -p e2e/tsconfig.json"
