@@ -135,6 +135,38 @@ test('tela aberta do profissional se fecha quando ele volta à aba depois da rev
   await expect(aviso).toHaveCount(0)
 })
 
+/* Simulação R2 (P3): depois da revogação, com a tela aberta, a médica ainda abriu um registro. Abrir confere o código antes. */
+test('abrir um registro confere o código: revogado, a tela se fecha sem mostrar o registro @mobile', async ({
+  page, contas, novoNavegador,
+}) => {
+  const conta = await contas.criar({ request: page.request, nome: 'Helena Duarte Nogueira', modo: 'exemplo' })
+  const criado = await page.request.post('/api/compartilhamentos', { headers: CSRF, data: { para: 'Dra. Teste' } })
+  const { codigo } = await criado.json()
+
+  const { pagina } = await novoNavegador()
+  await pagina.goto('/#/acesso')
+  expect((await informarCodigo(pagina, codigo)).status()).toBe(200)
+  const itens = pagina.getByTestId('medico-evento')
+  await expect(pagina.getByTestId('medico-paciente')).toContainText(conta.nome)
+
+  /* Com o código valendo, o registro abre depois da conferência. */
+  const valida = respostaDe(pagina, 'POST', '/api/acesso-medico/verificar')
+  await itens.first().locator('summary').click()
+  expect((await valida).status()).toBe(204)
+  await expect(itens.first()).toHaveAttribute('open', '')
+  await itens.first().locator('summary').click()
+  await expect(itens.first()).not.toHaveAttribute('open', '')
+
+  expect((await page.request.delete(`/api/compartilhamentos/${codigo}`, { headers: CSRF })).status()).toBeLessThan(300)
+
+  const recusada = respostaDe(pagina, 'POST', '/api/acesso-medico/verificar')
+  await itens.nth(1).locator('summary').click()
+  expect((await recusada).status()).toBe(404)
+  await expect(pagina.getByTestId('medico-encerrado')).toContainText('Este acesso foi encerrado pelo paciente')
+  await expect(itens).toHaveCount(0)
+  await expect(pagina.locator('body')).not.toContainText(conta.nome)
+})
+
 test.describe('conferência da tela aberta', () => {
   /* O Chromium loga a requisição abortada de propósito como erro de console. */
   test.use({ ignorarErros: [/net::ERR_FAILED/] })
