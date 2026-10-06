@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { APIRequestContext, Page, Response } from '@playwright/test'
@@ -244,12 +245,13 @@ test('faixa só com piso ("> 40") vira medida com régua aberta e é salva', asy
   const resposta = page.waitForResponse(ehExtrair)
   await page.getByTestId('fontes-ler-texto').click()
   const { evento, avisos } = await (await resposta).json()
-  const hdl = evento.medidas.find((m: { nome: string }) => /hdl/i.test(m.nome))
+  const indice = evento.medidas.findIndex((m: { nome: string }) => /hdl/i.test(m.nome))
+  const hdl = evento.medidas[indice]
   expect(hdl).toMatchObject({ valor: 38, refMin: 40, sinal: 'alterado' })
   expect(hdl).not.toHaveProperty('refMax')
   expect(avisos.join(' ')).not.toMatch(/omitida/)
 
-  const linha = page.getByTestId('conferencia').locator('.medida-edicao').filter({ has: page.locator('input[value="HDL-colesterol"]') })
+  const linha = page.getByTestId('conferencia').locator('.medida-edicao').nth(indice)
   await expect(linha.getByLabel('Ref. mín.')).toHaveValue('40')
   await expect(linha.getByLabel('Ref. máx.')).toHaveValue('')
   await expect(linha.locator('.regua')).toContainText('≥ 40')
@@ -261,4 +263,23 @@ test('faixa só com piso ("> 40") vira medida com régua aberta e é salva', asy
   expect(salvo.medidas!.find((m) => /hdl/i.test(m.nome))).toMatchObject({ refMin: 40 })
   await expect(page.getByTestId('evento-detalhe').locator('.regua').filter({ hasText: 'HDL' })).toContainText('≥ 40')
   await expect(page.getByTestId('evento-detalhe').locator('.regua').filter({ hasText: 'LDL' })).toContainText('≤ 130')
+})
+
+/* Achado do teste em produção: a espirometria do pacote demo (referências "≥ 80% do previsto" e
+   LIN) tinha todas as medidas omitidas e confiança 0%. Só com IA real; o PDF fica em entrega/. */
+const ESPIROMETRIA = join(process.cwd(), 'entrega/documentos-demo/05-espirometria-2025-03-11.pdf')
+
+test('espirometria do demo: medidas com faixa só de piso entram, sem aviso de omissão', async ({ page }) => {
+  test.skip(!REAL, 'a heurística do modo demonstração não lê a tabela da espirometria')
+  test.skip(!existsSync(ESPIROMETRIA), 'pacote demo ausente')
+  const resposta = page.waitForResponse(ehExtrair)
+  await page.getByTestId('fontes-pdf').setInputFiles(ESPIROMETRIA)
+  const { evento, avisos } = await (await resposta).json()
+  test.info().annotations.push({ type: 'espirometria', description: `${evento.medidas?.length ?? 0} medidas, confiança ${evento.confianca}` })
+  expect(evento.medidas?.length ?? 0).toBeGreaterThanOrEqual(6)
+  expect(evento.medidas.some((m: { refMin?: number; refMax?: number }) => m.refMin !== undefined && m.refMax === undefined)).toBe(true)
+  expect(avisos.join(' ')).not.toMatch(/limite inferior/)
+  expect(evento.confianca).toBeGreaterThanOrEqual(0.7)
+  await expect(page.getByTestId('conferencia').locator('.regua__faixa--sem-teto').first()).toBeVisible()
+  await page.getByTestId('conferencia-descartar').click()
 })
