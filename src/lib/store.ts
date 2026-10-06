@@ -32,6 +32,8 @@ export interface Estado extends EstadoServidor {
   saude: Saude | null
   falhaAcao: string | null
   conversa: Turno[]
+  /* Eventos anexados desde que esta sessão começou: o selo "novo" não sobrevive a sair e entrar. */
+  novos: string[]
   sessao: Sessao
 }
 
@@ -73,7 +75,7 @@ function apagarConversa(pacienteId: string) {
 const SESSAO_INICIAL: Sessao = { status: 'carregando', usuario: null, perfil: null, aviso: null }
 
 function dadosZerados() {
-  return { ...vazio(), carregando: true, erro: null, saude: null, falhaAcao: null, conversa: [] as Turno[] }
+  return { ...vazio(), carregando: true, erro: null, saude: null, falhaAcao: null, conversa: [] as Turno[], novos: [] as string[] }
 }
 
 let estado: Estado = { ...dadosZerados(), sessao: SESSAO_INICIAL }
@@ -326,7 +328,7 @@ export function useAcoes() {
     adicionarEvento: useCallback((evento: Evento) => executar(async () => {
       const g = geracao
       const salvo = await api.adicionarEvento(evento)
-      definirNa(g, (e) => ({ eventos: [...e.eventos, salvo] }))
+      definirNa(g, (e) => ({ eventos: [...e.eventos, salvo], novos: [...e.novos, salvo.id] }))
       void atualizarAcessos(true)
       return salvo
     }), []),

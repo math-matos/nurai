@@ -28,7 +28,7 @@ function rolarAte(alvo: HTMLElement | null) {
 }
 
 export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
-  const { eventos } = useEstado()
+  const { eventos, novos } = useEstado()
   const [busca, setBusca] = useState('')
   const [tipos, setTipos] = useState<TipoId[]>([])
   const [fontes, setFontes] = useState<FonteId[]>([])
@@ -177,7 +177,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
                     </span>
                     <span className="evento__marcas">
                       {e.sinal === 'alterado' && <span className="evento__sinal sinal-alterado" aria-label="Fora da faixa" />}
-                      {e.novo && <span className="chip chip--novo">novo</span>}
+                      {novos.includes(e.id) && <span className="chip chip--novo">novo</span>}
                     </span>
                   </button>
                 </li>

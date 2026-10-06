@@ -33,7 +33,7 @@ export interface Evento {
   origem: Origem
   confianca?: number     // 0–1, quando extraído por IA
   documento?: string     // nome do arquivo de origem
-  novo?: boolean         // adicionado pelo usuário nesta sessão
+  novo?: boolean         // gravado ao anexar; o selo da linha do tempo usa os ids da sessão (store.novos)
 }
 
 export interface Consentimento {
