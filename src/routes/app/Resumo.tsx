@@ -11,6 +11,7 @@ import { agruparPontos } from '../../lib/pontos'
 import { navegar } from '../../lib/router'
 import { hoje, useAcoes, useEstado, usePerfil } from '../../lib/store'
 import { TID } from '../../lib/testids'
+import { useTom } from '../../lib/tom'
 
 /* Médico, data de referência e destaques fixos só existem para a paciente de exemplo. */
 const FOCOS_EXEMPLO: Record<string, { medico: string; desde: string; ids: string[] }> = {
@@ -34,11 +35,12 @@ function especialidadesDe(eventos: Evento[]): string[] {
 
 export function Resumo() {
   const { eventos } = useEstado()
+  const tom = useTom()
   if (eventos.length === 0) {
     return (
       <VazioHistorico
         icone="resumo"
-        titulo="O resumo nasce do seu histórico"
+        titulo={`O resumo nasce do ${tom.dono('histórico')}`}
         texto="Quando houver documentos reunidos, esta página vira uma folha de uma página para levar à consulta — e um código de acesso temporário para o profissional."
       />
     )
@@ -363,6 +365,7 @@ function PainelAcesso({ compartilhamento, aoRevogar }: {
   aoRevogar: (codigo: string) => void
 }) {
   const { revogarCompartilhamento } = useAcoes()
+  const tom = useTom()
   const [copia, setCopia] = useState<'ok' | 'falhou' | null>(null)
   const [revogando, setRevogando] = useState(false)
   const endereco = `${window.location.origin}/#/acesso`
@@ -392,7 +395,7 @@ function PainelAcesso({ compartilhamento, aoRevogar }: {
           Válido até <strong className="num">{compartilhamento.expiraEm}</strong> (criado em{' '}
           <span className="num">{compartilhamento.criadoEm}</span>). O profissional acessa em{' '}
           <strong>{endereco}</strong> e informa o código — vê o histórico só para leitura, e
-          cada acesso entra no seu registro.
+          cada acesso entra no {tom.dono('registro')}.
         </p>
         <div className="acesso__acoes">
           <button type="button" className="btn btn--ghost" onClick={() => { void copiar() }} data-testid={TID.acessoCopiar}>

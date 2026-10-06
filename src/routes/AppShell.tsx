@@ -7,6 +7,7 @@ import { navegar } from '../lib/router'
 import { concluirOnboarding, definir, sair, useAcoes, useEstado, usePerfil } from '../lib/store'
 import { mensagemDeErro } from '../lib/api'
 import { iniciaisDe } from '../lib/formato'
+import { tomDe, type Tom } from '../lib/tom'
 import { TID } from '../lib/testids'
 import { LinhaDoTempo } from './app/LinhaDoTempo'
 import { Fontes } from './app/Fontes'
@@ -16,10 +17,13 @@ import { Resumo } from './app/Resumo'
 import { Privacidade } from './app/Privacidade'
 import '../styles/app.css'
 
-const NAV: { para: string; rotulo: string; icone: NomeIcone; nota: string }[] = [
+const NAV: { para: string; rotulo: string; icone: NomeIcone; nota: string | ((t: Tom) => string) }[] = [
   { para: '/app/linha', rotulo: 'Linha do tempo', icone: 'linha', nota: 'Todo o histórico reunido' },
   { para: '/app/fontes', rotulo: 'Fontes e anexos', icone: 'anexar', nota: 'Conectar e enviar documentos' },
-  { para: '/app/copiloto', rotulo: 'Perguntar ao Copiloto', icone: 'copiloto', nota: 'Tire dúvidas sobre o seu histórico — as respostas citam os registros' },
+  {
+    para: '/app/copiloto', rotulo: 'Perguntar ao Copiloto', icone: 'copiloto',
+    nota: (t) => `Tire dúvidas sobre o ${t.dono('histórico')} — as respostas citam os registros`,
+  },
   { para: '/app/cuidado', rotulo: 'Próximos passos', icone: 'bussola', nota: 'O que fazer com esse contexto' },
   { para: '/app/resumo', rotulo: 'Resumo para consulta', icone: 'resumo', nota: 'Uma página para o médico' },
   { para: '/app/privacidade', rotulo: 'Acessos e consentimento', icone: 'escudo', nota: 'Quem vê o quê, e desde quando' },
@@ -32,6 +36,7 @@ export function AppShell({ rota }: { rota: string }) {
   const [saindo, setSaindo] = useState(false)
   const estado = useEstado()
   const perfil = usePerfil()
+  const tom = tomDe(perfil)
   const { carregar, descartarFalha, reiniciar } = useAcoes()
   const exemplo = perfil.onboarding === 'exemplo'
   const meta = [
@@ -191,7 +196,7 @@ export function AppShell({ rota }: { rota: string }) {
               type="button" className="btn btn--quiet" data-testid={TID.botaoReiniciar}
               onClick={() => setConfirmandoReinicio(true)}
             >
-              <Icon nome="recomecar" tamanho={16} /> {exemplo ? 'Reiniciar o exemplo' : 'Reiniciar meu histórico'}
+              <Icon nome="recomecar" tamanho={16} /> {exemplo ? 'Reiniciar o exemplo' : tom.nome ? `Reiniciar o histórico de ${tom.nome}` : 'Reiniciar meu histórico'}
             </button>
           )}
           <button
@@ -221,7 +226,7 @@ export function AppShell({ rota }: { rota: string }) {
           </button>
           <div className="barra__titulo">
             <h1>{titulo}</h1>
-            {atual && <p>{atual.nota}</p>}
+            {atual && <p>{typeof atual.nota === 'string' ? atual.nota : atual.nota(tom)}</p>}
           </div>
           {estado.saude && (
             <div className="selos" aria-label="Infraestrutura em uso">

@@ -7,6 +7,7 @@ import type { PassosGerados } from '../../lib/api'
 import { navegar } from '../../lib/router'
 import { useAcoes, useEstado, usePerfil } from '../../lib/store'
 import { TID } from '../../lib/testids'
+import { useTom } from '../../lib/tom'
 import { useRequisicao } from '../../lib/useRequisicao'
 
 const ROTULO_PRIORIDADE = { alta: 'Prioridade alta', media: 'Prioridade média', baixa: 'Prioridade baixa' }
@@ -16,6 +17,7 @@ export function Cuidado() {
   /* Centros e ensaios são do caso de exemplo: não valem para um histórico que começou do zero. */
   const exemplo = usePerfil().onboarding === 'exemplo'
   const { alternarPasso, gerarPassos } = useAcoes()
+  const tom = useTom()
   const analise = useRequisicao<PassosGerados>()
   const [marcando, setMarcando] = useState<string | null>(null)
   const abertos = passos.filter((p) => !p.feito)
@@ -35,7 +37,7 @@ export function Cuidado() {
         <VazioHistorico
           icone="bussola"
           titulo="Ainda não há o que cruzar"
-          texto="Os próximos passos nascem do cruzamento entre registros: exame repetido, retorno atrasado, reavaliação esquecida. Comece reunindo os seus documentos."
+          texto={`Os próximos passos nascem do cruzamento entre registros: exame repetido, retorno atrasado, reavaliação esquecida. Comece reunindo os ${tom.dono('documentos', 'mp')}.`}
         />
       </div>
     )
@@ -47,13 +49,13 @@ export function Cuidado() {
         <div className="painel__cabeca">
           <h2>
             {abertos.length > 0
-              ? <>Encontramos <span className="num">{abertos.length}</span> pontas soltas no seu acompanhamento</>
+              ? <>Encontramos <span className="num">{abertos.length}</span> pontas soltas no {tom.dono('acompanhamento')}</>
               : 'Nenhuma ponta solta no momento'}
           </h2>
           <p>
             Cada item nasceu do cruzamento de registros de instituições diferentes — nenhum
             médico isolado tinha esse conjunto na tela. Marcar como resolvido é seu; conduta,
-            do profissional que atende você.
+            do profissional que atende {tom.paciente}.
           </p>
           <div className="cuidado__analise">
             <button
@@ -61,7 +63,7 @@ export function Cuidado() {
               data-testid={TID.iaPassos}
             >
               <Icon nome="recomecar" tamanho={16} />
-              {analise.carregando ? 'Reanalisando o histórico…' : 'Reanalisar meu histórico'}
+              {analise.carregando ? 'Reanalisando o histórico…' : tom.nome ? `Reanalisar o histórico de ${tom.nome}` : 'Reanalisar meu histórico'}
             </button>
             {analise.dados && !analise.carregando && <SeloIa geradoPor={analise.dados.geradoPor} />}
           </div>
@@ -113,8 +115,8 @@ export function Cuidado() {
             <div className="painel__cabeca">
               <h2>Onde tratar isso</h2>
               <p>
-                Centros públicos e credenciados com foco no que o seu histórico mostra, ordenados
-                pela aderência ao seu caso — não por convênio nem por publicidade.
+                Centros públicos e credenciados com foco no que o {tom.dono('histórico')} mostra, ordenados
+                pela aderência ao {tom.dono('caso')} — não por convênio nem por publicidade.
               </p>
             </div>
             <ul className="centros">
