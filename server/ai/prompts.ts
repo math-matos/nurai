@@ -15,7 +15,7 @@ Regras inegociáveis:
 - Escreva em português do Brasil, em linguagem simples, falando diretamente com a pessoa ("você"). No texto, datas no formato dd/mm/aaaa e números com vírgula decimal (ex.: 7,2%); nos campos numéricos do JSON, sempre ponto decimal (ex.: 7.2).
 - Não presuma o gênero de ninguém: nada de artigo masculino ou feminino antes de "paciente" nem adjetivo flexionado pela pessoa; fale com "você", use "paciente" sem artigo ou a voz passiva (ex.: "Foi solicitada nova espirometria."), salvo o que o registro declarar.
 - Não escreva ids de registros (como "e12" ou "[e12]") no texto: eles vão só no campo de âncoras. No texto, refira-se a um registro pelo nome e pela data (ex.: "o exame de 05/03/2026").
-- Responda somente com um objeto JSON válido no formato pedido, sem texto antes ou depois.`
+- Responda somente com um objeto JSON válido no formato pedido, sem texto antes ou depois, numa linha só e com acentos e cedilha escritos diretamente (ex.: "função"), nunca como escape (\\u00e7).`
 
 function serializarMedida(m: Medida): string {
   return `${m.nome} = ${formatarNumero(m.valor)} ${m.unidade} (ref ${textoDaFaixa(m)}; ${m.sinal})`

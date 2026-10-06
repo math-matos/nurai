@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { MensagemLlm } from '../provider.js'
-import { type ExtracaoBruta, extrairEvento, montarEvento } from './extrair.js'
+import { type ExtracaoBruta, esquemaExtracao, extrairEvento, montarEvento } from './extrair.js'
 
 type Clinica = Extract<ExtracaoBruta, { clinico: true }>
 type MedidaBruta = Clinica['medidas'][number]
@@ -298,5 +298,32 @@ describe('extrairEvento — sem presumir gênero', () => {
     const resumo = 'A paciente apresenta asma parcialmente controlada, com baixa adesão à técnica inalatória. O paciente refere tosse. Foi solicitada nova espirometria.'
     const { evento } = montarEvento(bruto([], { tipo: 'consulta', resumo }))
     expect(evento.resumo).toBe('Paciente apresenta asma parcialmente controlada, com baixa adesão à técnica inalatória. Paciente refere tosse. Foi solicitada nova espirometria.')
+  })
+})
+
+/* Latência: em produção a espirometria levou ~26 s. Medido local: a 1ª resposta às vezes caía no
+   esquema e ia para o retry (2 chamadas), e cada acento saía como "ç" (6 caracteres). */
+describe('extrairEvento — uma chamada, saída curta', () => {
+  it('medida sem unidade (VEF1/CVF) com "unidade": null não derruba a resposta', () => {
+    const r = esquemaExtracao.safeParse({ ...bruto([]), medidas: [{ nome: 'VEF1/CVF', valor: 0.72, unidade: null, refMin: 0.7, refMax: null }] })
+    expect(r.success && r.data.clinico && r.data.medidas).toEqual([{ nome: 'VEF1/CVF', valor: 0.72, unidade: '', refMin: 0.7, refMax: null }])
+  })
+
+  it('medida sem valor numérico ("—" no pós-BD) é descartada em vez de invalidar a resposta', () => {
+    const r = esquemaExtracao.safeParse({ ...bruto([]), medidas: [
+      { nome: 'VEF1/CVF pós-BD', valor: null, unidade: '', refMin: null, refMax: null },
+      { nome: 'CVF', valor: 4.12, unidade: 'L', refMin: null, refMax: null },
+    ] })
+    expect(r.success && r.data.clinico && r.data.medidas.map((x) => x.nome)).toEqual(['CVF'])
+  })
+
+  it('pede temperatura 0, acentos sem escape e só os campos do formato', async () => {
+    const opcoes: unknown[] = []
+    const { llm, recebidas } = llmFixo(bruto([]))
+    await extrairEvento({ llm: { ...llm, chat: (ms, o) => { opcoes.push(o); return llm.chat(ms) } }, perfil: MARCOS }, { texto: PEDIDO })
+    expect(opcoes[0]).toMatchObject({ temperatura: 0 })
+    const prompt = instrucoes(recebidas)
+    expect(prompt).toMatch(/acentos[^\n]*diretamente[^\n]*nunca[^\n]*\\u00e7/)
+    expect(prompt).toMatch(/só os campos do formato/)
   })
 })

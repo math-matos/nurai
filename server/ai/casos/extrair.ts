@@ -43,13 +43,15 @@ export const esquemaExtracao = z.discriminatedUnion('clinico', [
     instituicao: z.string().nullish(),
     especialidade: z.string().nullish(),
     resumo: z.string(),
-    medidas: z.array(z.object({
+    /* Medida sem número ("—" no pós-BD) sai da lista em vez de mandar a resposta inteira para o retry. */
+    medidas: z.preprocess((v) => (Array.isArray(v) ? v.filter((m) => typeof m?.valor === 'number') : v), z.array(z.object({
       nome: z.string().trim().min(1),
       valor: z.number(),
-      unidade: z.string(),
+      /* VEF1/CVF não tem unidade: o modelo manda null tanto quanto "". */
+      unidade: z.string().nullish().transform((u) => u ?? ''),
       refMin: z.number().nullish(),
       refMax: z.number().nullish(),
-    })).default([]),
+    })).default([])),
     tags: z.array(z.string()).default([]),
     confianca: z.number().min(0).max(1),
     avisos: z.array(z.string()).default([]),
@@ -83,6 +85,7 @@ Formato da resposta (JSON):
 - "resumo": descreva o que o documento registra, sem interpretar nem diagnosticar. Em pedido ou guia, cite os exames pedidos pelo nome (ex.: "Pedido de perfil lipídico e hemograma.").
 - Em consulta, relatório ou alta, o "resumo" (até 4 frases) precisa trazer o que o documento registra de conduta, com os nomes como estão no texto: remédio iniciado, trocado ou suspenso, com a dose (ex.: "Iniciada losartana 50 mg."); cada exame solicitado pelo nome (ex.: "Solicitados MAPA de 24 horas, perfil lipídico e nova espirometria."); e o retorno com o prazo (ex.: "Retorno em 6 meses."). Esses itens são fatos do registro, não recomendações.
 - No "resumo", não presuma o gênero de quem é paciente, nem pelo nome: nada de artigo masculino ou feminino antes de "paciente". Comece por "Paciente" sem artigo ou use a voz passiva (ex.: "Paciente com asma parcialmente controlada.", "Foi solicitada nova espirometria."), salvo o que o documento declarar.
+- Use só os campos do formato, sem campos a mais (a extração não tem "ancoras").
 - "avisos": frases completas, começando com letra maiúscula.
 - "confianca": de 0 a 1, o quanto o texto estava legível e completo.`
 
@@ -165,7 +168,7 @@ export async function extrairEvento(
   const texto = entrada.texto.slice(0, LIMITE_TEXTO)
   const bruto = llm.nome === 'mock'
     ? extrairPorHeuristica(texto)
-    : await pedirJson(llm, mensagens(TAREFA, `Documento:\n"""\n${texto}\n"""`), esquemaExtracao)
+    : await pedirJson(llm, mensagens(TAREFA, `Documento:\n"""\n${texto}\n"""`), esquemaExtracao, { temperatura: 0 })
   if (!bruto.clinico) throw new ErroIa('NAO_CLINICO', 'O texto enviado não parece ser um documento de saúde')
   const resultado = montarEvento(completarData(bruto, texto), entrada.nomeArquivo, texto)
   if (entrada.texto.length > LIMITE_TEXTO) {
