@@ -6,7 +6,7 @@
    Shell: shell-perfil, shell-perfil-nome, selo-convidado, botao-sair, botao-reiniciar, reinicio-confirmar,
    reinicio-zerar, estado-vazio, cta-primeiro-documento.
    Linha do tempo: evento-item, evento-detalhe, ia-explicar, ia-explicacao, evento-excluir,
-   evento-excluir-confirmar, evento-excluido.
+   evento-excluir-confirmar, evento-excluido, busca-pergunta, busca-perguntar-copiloto.
    Fontes/conferência: fontes-texto, fontes-ler-texto, fontes-pdf, conferencia, conferencia-titulo,
    conferencia-salvar, conferencia-descartar, conferencia-identidade, conferencia-confirmo-meu,
    conferencia-confirmo-meu-rodape, conferencia-motivo, conferencia-ir-confirmacao.
@@ -50,6 +50,8 @@ export const TID = {
   eventoExcluir: 'evento-excluir',
   eventoExcluirConfirmar: 'evento-excluir-confirmar',
   eventoExcluido: 'evento-excluido',
+  buscaPergunta: 'busca-pergunta',
+  buscaPerguntarCopiloto: 'busca-perguntar-copiloto',
   iaExplicar: 'ia-explicar',
   iaExplicacao: 'ia-explicacao',
 

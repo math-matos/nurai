@@ -17,6 +17,13 @@ const FONTES_FILTRO: FonteId[] = ['sus', 'laboratorio', 'hospital', 'clinica', '
 const EMPILHADO = '(max-width: 1180px)'
 
 const empilhado = () => window.matchMedia(EMPILHADO).matches
+
+/* Quem digita uma pergunta na busca quer uma resposta, não um filtro. */
+const INICIO_DE_PERGUNTA = /^(como|quando|qual|quais|posso|tem|devo|o que)\b/i
+const pareceAPergunta = (texto: string) => {
+  const limpo = texto.trim()
+  return limpo.endsWith('?') || INICIO_DE_PERGUNTA.test(limpo)
+}
 const idDoItem = (id: string) => `evento-${id}`
 
 /* Desconta a barra superior grudenta, que no celular pode passar de 100px. */
@@ -173,10 +180,24 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
             titulo="Nenhum registro com esses filtros"
             texto={`O histórico tem ${eventos.length} registros. Tente afrouxar a busca ou desmarcar um filtro.`}
             acao={
-              <button type="button" className="btn btn--ghost"
-                onClick={() => { setBusca(''); setTipos([]); setFontes([]) }}>
-                Limpar filtros
-              </button>
+              <>
+                {pareceAPergunta(busca) && (
+                  <div className="busca-pergunta" data-testid={TID.buscaPergunta}>
+                    <p>Quer perguntar isso ao Copiloto?</p>
+                    <button
+                      type="button" className="btn"
+                      onClick={() => { perguntar(busca); navegar('/app/copiloto') }}
+                      data-testid={TID.buscaPerguntarCopiloto}
+                    >
+                      <Icon nome="copiloto" tamanho={16} /> Perguntar ao Copiloto
+                    </button>
+                  </div>
+                )}
+                <button type="button" className="btn btn--ghost"
+                  onClick={() => { setBusca(''); setTipos([]); setFontes([]) }}>
+                  Limpar filtros
+                </button>
+              </>
             }
           />
         ) : (
@@ -292,7 +313,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
                   navegar('/app/copiloto')
                 }}
               >
-                <Icon nome="copiloto" tamanho={16} /> Perguntar ao copiloto
+                <Icon nome="copiloto" tamanho={16} /> Perguntar ao Copiloto
               </button>
               <button type="button" className="btn btn--ghost" onClick={() => navegar('/app/privacidade')}>
                 <Icon nome="escudo" tamanho={16} /> Quem acessou
