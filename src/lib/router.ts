@@ -29,3 +29,21 @@ export function navegar(para: string) {
 export function useNavegar() {
   return useCallback((para: string) => navegar(para), [])
 }
+
+/* Troca a rota sem deixar a anterior no histórico: guarda de acesso não pode
+   prender o botão Voltar num redirecionamento em laço. */
+export function redirecionar(para: string) {
+  if (lerRota() === para) return
+  window.location.replace(`#${para}`)
+}
+
+/* '/entrar?volta=/app/fontes' → caminho '/entrar' + parâmetros. */
+export function separarRota(rota: string) {
+  const [caminho, busca = ''] = rota.split('?')
+  return { caminho: caminho || '/', parametros: new URLSearchParams(busca) }
+}
+
+/* Só aceita voltar para dentro do app: o parâmetro vem da URL e não merece confiança. */
+export function destinoSeguro(volta: string | null, padrao = '/app/linha') {
+  return volta && /^\/app(\/[\w-]*)*$/.test(volta) ? volta : padrao
+}

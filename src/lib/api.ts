@@ -4,7 +4,53 @@ import type { AcessoLog, Consentimento, Evento, ProximoPasso } from '../data/typ
 export type FonteConectada = (typeof FONTES_CONECTADAS)[number]
 export type GeradoPor = 'oci' | 'mock'
 
-export interface Compartilhamento { codigo: string; criadoEm: string; para: string }
+export interface Compartilhamento { codigo: string; criadoEm: string; para: string; expiraEm?: string }
+
+export type Onboarding = 'pendente' | 'vazio' | 'exemplo'
+export type ModoOnboarding = Exclude<Onboarding, 'pendente'>
+
+export interface Perfil {
+  pacienteId: string
+  nome: string
+  iniciais: string
+  dataNascimento?: string
+  idade?: number
+  condicoes: string[]
+  alergias: string[]
+  cartaoSus?: string
+  plano?: string
+  onboarding: Onboarding
+  convidado: boolean
+}
+
+export interface Usuario { id: string; email: string }
+export interface Conta { usuario: Usuario; perfil: Perfil }
+
+export interface DadosCadastro {
+  nome: string
+  email: string
+  senha: string
+  dataNascimento?: string
+  aceiteLgpd: true
+}
+
+/* '' remove um campo opcional. */
+export interface MudancasPerfil {
+  nome?: string
+  dataNascimento?: string
+  condicoes?: string[]
+  alergias?: string[]
+  cartaoSus?: string
+  plano?: string
+}
+
+export interface AcessoMedico {
+  paciente: { nome: string; idade?: number; condicoes: string[]; alergias: string[] }
+  para: string
+  expiraEm: string
+  eventos: Evento[]
+  passos: ProximoPasso[]
+}
 
 export interface EstadoServidor {
   eventos: Evento[]
@@ -62,6 +108,7 @@ export interface PassosGerados { passos: ProximoPasso[]; geradoPor: GeradoPor }
 export type CodigoErro =
   | 'IA_INDISPONIVEL' | 'IA_RESPOSTA_INVALIDA' | 'PDF_SEM_TEXTO' | 'PDF_INVALIDO' | 'ARQUIVO_GRANDE'
   | 'NAO_CLINICO' | 'CORPO_GRANDE' | 'REDE' | 'TEMPO_ESGOTADO' | 'VALIDACAO' | 'NAO_ENCONTRADO' | 'RECUSADO' | 'SERVIDOR'
+  | 'EMAIL_EM_USO' | 'CREDENCIAIS_INVALIDAS' | 'MUITAS_TENTATIVAS' | 'NAO_AUTENTICADO' | 'CODIGO_INVALIDO' | 'CSRF'
 
 const MENSAGENS: Record<CodigoErro, string> = {
   IA_INDISPONIVEL: 'A IA está indisponível agora. Tente de novo em alguns instantes.',
@@ -77,6 +124,12 @@ const MENSAGENS: Record<CodigoErro, string> = {
   NAO_ENCONTRADO: 'Este item não foi encontrado no servidor.',
   RECUSADO: 'O servidor não aceitou este pedido. Confira os dados enviados antes de tentar outra vez.',
   SERVIDOR: 'O servidor encontrou um erro inesperado. Tente de novo.',
+  EMAIL_EM_USO: 'Este e-mail já tem uma conta. Entre com ele ou use outro e-mail.',
+  CREDENCIAIS_INVALIDAS: 'E-mail ou senha incorretos.',
+  MUITAS_TENTATIVAS: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.',
+  NAO_AUTENTICADO: 'Sua sessão terminou. Entre de novo para continuar.',
+  CODIGO_INVALIDO: 'Código inválido, expirado ou revogado. Confira com o paciente se o acesso ainda está ativo.',
+  CSRF: 'O pedido foi bloqueado pela proteção de segurança. Recarregue a página e tente de novo.',
 }
 
 /* Só vale oferecer "Tentar de novo" quando repetir o mesmo pedido pode dar certo:
@@ -87,12 +140,15 @@ const REPETIVEIS = new Set<CodigoErro>(['REDE', 'TEMPO_ESGOTADO', 'SERVIDOR', 'I
 export class ErroApi extends Error {
   readonly codigo: CodigoErro
   readonly status: number
+  /* Mensagem por campo do formulário, quando o servidor recusou o corpo (VALIDACAO). */
+  readonly campos: Record<string, string>
 
-  constructor(codigo: CodigoErro, status: number, mensagem = MENSAGENS[codigo]) {
+  constructor(codigo: CodigoErro, status: number, mensagem = MENSAGENS[codigo], campos: Record<string, string> = {}) {
     super(mensagem)
     this.name = 'ErroApi'
     this.codigo = codigo
     this.status = status
+    this.campos = campos
   }
 
   get repetivel(): boolean {
@@ -111,10 +167,25 @@ export function podeRepetir(erro: unknown): boolean {
 
 const CODIGOS_DO_SERVIDOR = new Set<string>([
   'IA_INDISPONIVEL', 'IA_RESPOSTA_INVALIDA', 'PDF_SEM_TEXTO', 'PDF_INVALIDO', 'ARQUIVO_GRANDE', 'NAO_CLINICO', 'CORPO_GRANDE',
+  'EMAIL_EM_USO', 'CREDENCIAIS_INVALIDAS', 'NAO_AUTENTICADO', 'CODIGO_INVALIDO', 'CSRF',
 ])
 
-function erroDaResposta(status: number, corpo: unknown): ErroApi {
-  const { erro, codigo } = (corpo ?? {}) as { erro?: string; codigo?: string }
+function minutosDeEspera(retryAfter: string | null): number | null {
+  const segundos = Number(retryAfter)
+  return Number.isFinite(segundos) && segundos > 0 ? Math.ceil(segundos / 60) : null
+}
+
+function erroDaResposta(resposta: Response, corpo: unknown): ErroApi {
+  const { status } = resposta
+  const { erro, codigo, campos } = (corpo ?? {}) as { erro?: string; codigo?: string; campos?: Record<string, string> }
+  if (codigo === 'MUITAS_TENTATIVAS' || status === 429) {
+    const minutos = minutosDeEspera(resposta.headers.get('Retry-After'))
+    const mensagem = minutos
+      ? `Muitas tentativas seguidas. Tente de novo em ${minutos} min.`
+      : MENSAGENS.MUITAS_TENTATIVAS
+    return new ErroApi('MUITAS_TENTATIVAS', status, mensagem)
+  }
+  if (codigo === 'VALIDACAO' && campos) return new ErroApi('VALIDACAO', status, MENSAGENS.VALIDACAO, campos)
   if (codigo && CODIGOS_DO_SERVIDOR.has(codigo)) return new ErroApi(codigo as CodigoErro, status)
   // 413 sem corpo JSON: a plataforma barrou o upload antes de chegar à API.
   if (status === 413) return new ErroApi('ARQUIVO_GRANDE', status)
@@ -128,15 +199,37 @@ function erroDaResposta(status: number, corpo: unknown): ErroApi {
 
 const TEMPO_LIMITE_MS = 60_000
 
+/* Quem cuida da sessão (o store) é avisado quando uma rota protegida responde 401. */
+let aoPerderSessao: (() => void) | null = null
+export function definirAoPerderSessao(acao: () => void) { aoPerderSessao = acao }
+
+/* Rotas que respondem sem sessão: um 401 delas é resposta, não sessão perdida. */
+const ROTA_PUBLICA = /^\/(health|auth|acesso-medico)(\/|$)/
+
 async function requisitar<T>(caminho: string, init: RequestInit = {}): Promise<T> {
+  const metodo = (init.method ?? 'GET').toUpperCase()
+  const cabecalhos = new Headers(init.headers)
+  /* O servidor recusa (403 CSRF) qualquer escrita sem este cabeçalho. */
+  if (metodo !== 'GET') cabecalhos.set('x-nurai', '1')
+
   let resposta: Response
   try {
-    resposta = await fetch(`/api${caminho}`, { ...init, signal: AbortSignal.timeout(TEMPO_LIMITE_MS) })
+    resposta = await fetch(`/api${caminho}`, {
+      ...init,
+      headers: cabecalhos,
+      credentials: 'same-origin',
+      signal: AbortSignal.timeout(TEMPO_LIMITE_MS),
+    })
   } catch (erro) {
     throw new ErroApi(erro instanceof DOMException && erro.name === 'TimeoutError' ? 'TEMPO_ESGOTADO' : 'REDE', 0)
   }
+  if (resposta.status === 204) return undefined as T
   const corpo: unknown = await resposta.json().catch(() => null)
-  if (!resposta.ok) throw erroDaResposta(resposta.status, corpo)
+  if (!resposta.ok) {
+    const erro = erroDaResposta(resposta, corpo)
+    if (erro.codigo === 'NAO_AUTENTICADO' && !ROTA_PUBLICA.test(caminho)) aoPerderSessao?.()
+    throw erro
+  }
   if (corpo === null) throw new ErroApi('REDE', resposta.status)
   return corpo as T
 }
@@ -150,6 +243,20 @@ const json = (metodo: string, corpo?: unknown): RequestInit => ({
 const enc = encodeURIComponent
 
 export const api = {
+  sessao: () => requisitar<Conta>('/auth/sessao'),
+  entrar: (email: string, senha: string) => requisitar<Conta>('/auth/login', json('POST', { email, senha })),
+  cadastrar: (dados: DadosCadastro) => requisitar<Conta>('/auth/cadastro', json('POST', dados)),
+  entrarDemo: () => requisitar<Conta>('/auth/demo', json('POST')),
+  sair: () => requisitar<void>('/auth/logout', json('POST')),
+  onboarding: (modo: ModoOnboarding) => requisitar<{ perfil: Perfil }>('/onboarding', json('POST', { modo })),
+  atualizarPerfil: (mudancas: MudancasPerfil) => requisitar<{ perfil: Perfil }>('/perfil', json('PATCH', mudancas)),
+  excluirConta: () => requisitar<void>('/conta', json('DELETE', { confirmacao: 'EXCLUIR' })),
+
+  acessoMedico: (codigo: string, profissional: string) =>
+    requisitar<AcessoMedico>('/acesso-medico', json('POST', { codigo, profissional })),
+  resumoMedico: (codigo: string, profissional: string, especialidade?: string) =>
+    requisitar<ResumoIa>('/acesso-medico/resumo', json('POST', { codigo, profissional, especialidade })),
+
   saude: () => requisitar<Saude>('/health'),
   estado: () => requisitar<EstadoServidor>('/estado'),
   acessos: () => requisitar<AcessoLog[]>('/acessos'),
@@ -160,6 +267,7 @@ export const api = {
   alternarPasso: (id: string) => requisitar<ProximoPasso>(`/passos/${enc(id)}`, json('PATCH')),
   conectarFonte: (id: string) => requisitar<FonteConectada>(`/fontes/${enc(id)}/conectar`, json('POST')),
   compartilhar: (para: string) => requisitar<Compartilhamento>('/compartilhamentos', json('POST', { para })),
+  revogarCompartilhamento: (codigo: string) => requisitar<void>(`/compartilhamentos/${enc(codigo)}`, json('DELETE')),
 
   copiloto: (pergunta: string, historico: TurnoHistorico[]) =>
     requisitar<RespostaCopiloto>('/copiloto', json('POST', { pergunta, historico })),

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Evento } from '../data/types'
 import {
-  api, mensagemDeErro, podeRepetir, type EstadoServidor, type RespostaCopiloto, type Saude, type TurnoHistorico,
+  api, definirAoPerderSessao, ErroApi, mensagemDeErro, podeRepetir,
+  type Conta, type DadosCadastro, type EstadoServidor, type ModoOnboarding, type MudancasPerfil,
+  type Perfil, type RespostaCopiloto, type Saude, type TurnoHistorico, type Usuario,
 } from './api'
+import { lerRota, navegar, separarRota } from './router'
 
 export interface Turno {
   id: number
@@ -13,85 +16,214 @@ export interface Turno {
   repetivel?: boolean
 }
 
+export type StatusSessao = 'carregando' | 'anonimo' | 'autenticado'
+
+export interface Sessao {
+  status: StatusSessao
+  usuario: Usuario | null
+  perfil: Perfil | null
+  /* Recado para a próxima tela pública (sessão expirada, conta excluída). */
+  aviso: string | null
+}
+
 export interface Estado extends EstadoServidor {
   carregando: boolean
   erro: string | null
   saude: Saude | null
   falhaAcao: string | null
   conversa: Turno[]
+  sessao: Sessao
 }
 
-/* Só a conversa com o copiloto fica no navegador; o histórico clínico vem do servidor. */
-const CHAVE_CONVERSA = 'nurai.conversa.v1'
-const CHAVE_LEGADA = 'nurai.mvp.v1'
+/* Só a conversa com o copiloto fica no navegador, uma chave por paciente; o histórico clínico vem do servidor. */
+const PREFIXO_CONVERSA = 'nurai.conversa.v2.'
+const CHAVES_LEGADAS = ['nurai.mvp.v1', 'nurai.conversa.v1']
 const TURNOS_DE_CONTEXTO = 4
 
 function vazio(): EstadoServidor {
   return { eventos: [], consentimentos: [], acessos: [], passos: [], fontes: [], compartilhamento: null }
 }
 
-function lerConversa(): Turno[] {
+function lerConversa(pacienteId: string): Turno[] {
   try {
-    localStorage.removeItem(CHAVE_LEGADA)
-    const bruto = localStorage.getItem(CHAVE_CONVERSA)
+    CHAVES_LEGADAS.forEach((c) => localStorage.removeItem(c))
+    const bruto = localStorage.getItem(PREFIXO_CONVERSA + pacienteId)
     return bruto ? (JSON.parse(bruto) as Turno[]) : []
   } catch {
     return []
   }
 }
 
-function salvarConversa(conversa: Turno[]) {
+function salvarConversa(pacienteId: string, conversa: Turno[]) {
   try {
-    localStorage.setItem(CHAVE_CONVERSA, JSON.stringify(conversa.filter((t) => t.resposta)))
+    localStorage.setItem(PREFIXO_CONVERSA + pacienteId, JSON.stringify(conversa.filter((t) => t.resposta)))
   } catch {
     /* modo privado ou armazenamento cheio: a conversa segue só em memória */
   }
 }
 
-let estado: Estado = {
-  ...vazio(),
-  carregando: true,
-  erro: null,
-  saude: null,
-  falhaAcao: null,
-  conversa: typeof window === 'undefined' ? [] : lerConversa(),
+function apagarConversa(pacienteId: string) {
+  try {
+    localStorage.removeItem(PREFIXO_CONVERSA + pacienteId)
+  } catch {
+    /* sem armazenamento: nada a apagar */
+  }
 }
+
+const SESSAO_INICIAL: Sessao = { status: 'carregando', usuario: null, perfil: null, aviso: null }
+
+function dadosZerados() {
+  return { ...vazio(), carregando: true, erro: null, saude: null, falhaAcao: null, conversa: [] as Turno[] }
+}
+
+let estado: Estado = { ...dadosZerados(), sessao: SESSAO_INICIAL }
 let carregado = false
 let carregamento: Promise<void> | null = null
+/* Muda a cada troca de usuário: resposta de uma requisição feita pela sessão anterior é descartada. */
+let geracao = 0
 const ouvintes = new Set<() => void>()
+
+const pacienteAtual = () => estado.sessao.perfil?.pacienteId ?? null
 
 export function definir(mudanca: (anterior: Estado) => Partial<Estado>) {
   const anterior = estado
   estado = { ...estado, ...mudanca(estado) }
-  if (estado.conversa !== anterior.conversa) salvarConversa(estado.conversa)
+  const pacienteId = pacienteAtual()
+  if (pacienteId && estado.conversa !== anterior.conversa) salvarConversa(pacienteId, estado.conversa)
   ouvintes.forEach((o) => o())
+}
+
+/* Aplica só se ninguém trocou de sessão enquanto a requisição estava no ar. */
+function definirNa(g: number, mudanca: (anterior: Estado) => Partial<Estado>) {
+  if (g === geracao) definir(mudanca)
 }
 
 export function carregar(forcar = false): Promise<void> {
   if (carregamento) return carregamento
   if (carregado && !forcar) return Promise.resolve()
+  const g = geracao
   definir(() => ({ carregando: true, erro: null }))
-  carregamento = Promise.all([api.estado(), api.saude().catch(() => null)])
+  const promessa = Promise.all([api.estado(), api.saude().catch(() => null)])
     .then(([servidor, saude]) => {
+      if (g !== geracao) return
       carregado = true
       definir(() => ({ ...servidor, saude, carregando: false, erro: null }))
     })
     .catch((erro: unknown) => {
-      definir(() => ({ carregando: false, erro: mensagemDeErro(erro) }))
+      definirNa(g, () => ({ carregando: false, erro: mensagemDeErro(erro) }))
     })
-    .finally(() => { carregamento = null })
-  return carregamento
+    .finally(() => { if (carregamento === promessa) carregamento = null })
+  carregamento = promessa
+  return promessa
 }
+
+/* ---------------- sessão ---------------- */
+
+/* Troca de usuário (ou saída): nada da sessão anterior pode sobrar na tela. */
+function trocarSessao(sessao: Sessao) {
+  geracao += 1
+  carregado = false
+  carregamento = null
+  acessosEmCurso = null
+  const conversa = sessao.perfil ? lerConversa(sessao.perfil.pacienteId) : []
+  estado = { ...dadosZerados(), conversa, sessao }
+  ouvintes.forEach((o) => o())
+}
+
+function aplicarConta(conta: Conta) {
+  trocarSessao({ status: 'autenticado', usuario: conta.usuario, perfil: conta.perfil, aviso: null })
+}
+
+function encerrarLocal(aviso: string | null) {
+  const pacienteId = pacienteAtual()
+  if (pacienteId) apagarConversa(pacienteId)
+  trocarSessao({ status: 'anonimo', usuario: null, perfil: null, aviso })
+}
+
+let verificacao: Promise<void> | null = null
+
+/* Chamado no boot: a sessão vive num cookie httpOnly, então só o servidor sabe se ela existe. */
+export function verificarSessao(): Promise<void> {
+  if (verificacao) return verificacao
+  verificacao = api.sessao()
+    .then(aplicarConta)
+    .catch((erro: unknown) => {
+      const aviso = erro instanceof ErroApi && erro.codigo === 'NAO_AUTENTICADO' ? null : mensagemDeErro(erro)
+      trocarSessao({ status: 'anonimo', usuario: null, perfil: null, aviso })
+    })
+  return verificacao
+}
+
+/* Uma rota protegida respondeu 401: a sessão expirou ou foi encerrada em outra aba. */
+definirAoPerderSessao(() => {
+  if (estado.sessao.status !== 'autenticado') return
+  const { caminho } = separarRota(lerRota())
+  encerrarLocal('Sua sessão terminou. Entre de novo para continuar de onde parou.')
+  navegar(caminho.startsWith('/app') ? `/entrar?volta=${encodeURIComponent(caminho)}` : '/entrar')
+})
+
+export async function entrar(email: string, senha: string): Promise<Perfil> {
+  const conta = await api.entrar(email, senha)
+  aplicarConta(conta)
+  return conta.perfil
+}
+
+export async function cadastrar(dados: DadosCadastro): Promise<Perfil> {
+  const conta = await api.cadastrar(dados)
+  aplicarConta(conta)
+  return conta.perfil
+}
+
+export async function entrarDemo(): Promise<Perfil> {
+  const conta = await api.entrarDemo()
+  aplicarConta(conta)
+  return conta.perfil
+}
+
+export async function sair(destino = '/') {
+  /* Mesmo se o servidor não responder, a tela não pode continuar mostrando os dados. */
+  await api.sair().catch(() => undefined)
+  encerrarLocal(null)
+  navegar(destino)
+}
+
+/* Vale para o primeiro acesso e para recomeçar depois: o servidor apaga e recria os dados no modo pedido. */
+export async function concluirOnboarding(modo: ModoOnboarding): Promise<Perfil> {
+  const { perfil } = await api.onboarding(modo)
+  const pacienteId = pacienteAtual()
+  if (pacienteId) apagarConversa(pacienteId)
+  trocarSessao({ ...estado.sessao, perfil })
+  return perfil
+}
+
+export async function atualizarPerfil(mudancas: MudancasPerfil): Promise<Perfil> {
+  const { perfil } = await api.atualizarPerfil(mudancas)
+  definir((e) => ({ sessao: { ...e.sessao, perfil } }))
+  return perfil
+}
+
+export async function excluirConta() {
+  await api.excluirConta()
+  encerrarLocal('Sua conta e todo o histórico guardado nela foram excluídos.')
+  navegar('/')
+}
+
+export function descartarAviso() {
+  if (estado.sessao.aviso) definir((e) => ({ sessao: { ...e.sessao, aviso: null } }))
+}
+
+/* ---------------- dados do paciente ---------------- */
 
 /* Ações de dados: o servidor é a fonte da verdade. Em falha devolvem null e
    publicam a mensagem em `falhaAcao`, exibida pelo AppShell. */
 async function executar<T>(acao: () => Promise<T>): Promise<T | null> {
+  const g = geracao
   try {
     const resultado = await acao()
-    if (estado.falhaAcao) definir(() => ({ falhaAcao: null }))
+    if (estado.falhaAcao) definirNa(g, () => ({ falhaAcao: null }))
     return resultado
   } catch (erro) {
-    definir(() => ({ falhaAcao: mensagemDeErro(erro) }))
+    definirNa(g, () => ({ falhaAcao: mensagemDeErro(erro) }))
     return null
   }
 }
@@ -105,8 +237,9 @@ let ultimaLeituraDeAcessos = 0
 function atualizarAcessos(aposMudanca = false): Promise<void> {
   if (acessosEmCurso && !aposMudanca) return acessosEmCurso
   const leitura = ++ultimaLeituraDeAcessos
+  const g = geracao
   const promessa = api.acessos()
-    .then((acessos) => { if (leitura === ultimaLeituraDeAcessos) definir(() => ({ acessos })) })
+    .then((acessos) => { if (leitura === ultimaLeituraDeAcessos) definirNa(g, () => ({ acessos })) })
     .catch(() => { /* o registro antigo continua na tela */ })
     .finally(() => { if (acessosEmCurso === promessa) acessosEmCurso = null })
   acessosEmCurso = promessa
@@ -123,19 +256,20 @@ function historicoAntesDe(id: number): TurnoHistorico[] {
     }))
 }
 
-function atualizarTurno(id: number, mudanca: Partial<Turno>) {
-  definir((e) => ({ conversa: e.conversa.map((t) => (t.id === id ? { ...t, ...mudanca } : t)) }))
+function atualizarTurno(g: number, id: number, mudanca: Partial<Turno>) {
+  definirNa(g, (e) => ({ conversa: e.conversa.map((t) => (t.id === id ? { ...t, ...mudanca } : t)) }))
 }
 
 async function responderTurno(id: number) {
   const turno = estado.conversa.find((t) => t.id === id)
   if (!turno) return
-  atualizarTurno(id, { carregando: true, erro: undefined })
+  const g = geracao
+  atualizarTurno(g, id, { carregando: true, erro: undefined })
   try {
     const resposta = await api.copiloto(turno.pergunta, historicoAntesDe(id))
-    atualizarTurno(id, { resposta, carregando: false })
+    atualizarTurno(g, id, { resposta, carregando: false })
   } catch (erro) {
-    atualizarTurno(id, { erro: mensagemDeErro(erro), repetivel: podeRepetir(erro), carregando: false })
+    atualizarTurno(g, id, { erro: mensagemDeErro(erro), repetivel: podeRepetir(erro), carregando: false })
   }
 }
 
@@ -154,10 +288,13 @@ export function tentarTurnoDeNovo(id: number) {
   void responderTurno(id)
 }
 
+/* Volta ao ponto de partida escolhido no onboarding (exemplo ou vazio). */
 export function reiniciar() {
   definir(() => ({ conversa: [], falhaAcao: null }))
+  const g = geracao
   void executar(async () => {
     const servidor = await api.reiniciar()
+    if (g !== geracao) return
     carregado = true
     definir(() => ({ ...servidor, erro: null }))
   })
@@ -173,45 +310,70 @@ export function useEstado(): Estado {
   return estado
 }
 
+export function useSessao(): Sessao {
+  return useEstado().sessao
+}
+
+/* O perfil só é lido dentro do app, que já passou pela guarda de sessão. */
+export function usePerfil(): Perfil {
+  const { perfil } = useSessao()
+  if (!perfil) throw new Error('usePerfil fora de uma sessão autenticada')
+  return perfil
+}
+
 export function useAcoes() {
   return {
     adicionarEvento: useCallback((evento: Evento) => executar(async () => {
+      const g = geracao
       const salvo = await api.adicionarEvento(evento)
-      definir((e) => ({ eventos: [...e.eventos, salvo] }))
+      definirNa(g, (e) => ({ eventos: [...e.eventos, salvo] }))
       void atualizarAcessos(true)
       return salvo
     }), []),
 
     alternarConsentimento: useCallback((id: string) => executar(async () => {
+      const g = geracao
       const atualizado = await api.alternarConsentimento(id)
-      definir((e) => ({ consentimentos: e.consentimentos.map((c) => (c.id === id ? atualizado : c)) }))
+      definirNa(g, (e) => ({ consentimentos: e.consentimentos.map((c) => (c.id === id ? atualizado : c)) }))
       void atualizarAcessos(true)
       return atualizado
     }), []),
 
     alternarPasso: useCallback((id: string) => executar(async () => {
+      const g = geracao
       const atualizado = await api.alternarPasso(id)
-      definir((e) => ({ passos: e.passos.map((p) => (p.id === id ? atualizado : p)) }))
+      definirNa(g, (e) => ({ passos: e.passos.map((p) => (p.id === id ? atualizado : p)) }))
       return atualizado
     }), []),
 
     conectarFonte: useCallback((id: string) => executar(async () => {
+      const g = geracao
       const atualizada = await api.conectarFonte(id)
-      definir((e) => ({ fontes: e.fontes.map((f) => (f.id === id ? atualizada : f)) }))
+      definirNa(g, (e) => ({ fontes: e.fontes.map((f) => (f.id === id ? atualizada : f)) }))
       return atualizada
     }), []),
 
     gerarCompartilhamento: useCallback((para: string) => executar(async () => {
+      const g = geracao
       const compartilhamento = await api.compartilhar(para)
-      definir(() => ({ compartilhamento }))
+      definirNa(g, () => ({ compartilhamento }))
       void atualizarAcessos(true)
       return compartilhamento
     }), []),
 
+    revogarCompartilhamento: useCallback((codigo: string) => executar(async () => {
+      const g = geracao
+      await api.revogarCompartilhamento(codigo)
+      definirNa(g, () => ({ compartilhamento: null }))
+      void atualizarAcessos(true)
+      return true
+    }), []),
+
     /* Ação de IA: lança ErroApi para a tela mostrar o erro no próprio contexto. */
     gerarPassos: useCallback(async () => {
+      const g = geracao
       const gerados = await api.gerarPassos()
-      definir(() => ({ passos: gerados.passos }))
+      definirNa(g, () => ({ passos: gerados.passos }))
       return gerados
     }, []),
 
