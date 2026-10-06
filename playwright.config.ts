@@ -1,9 +1,11 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /* Sem E2E_BASE_URL: roda contra o dev local (sobe `pnpm dev:all` se preciso).
-   Com E2E_BASE_URL: roda contra um ambiente real (IA real é lenta e instável → 1 retry). */
+   Com E2E_BASE_URL: roda contra um ambiente real (IA real é lenta e instável → 1 retry).
+   E2E_REAL=1 sem E2E_BASE_URL: a API local carrega o .env.local (OCI GenAI + Oracle ADB reais). */
 const baseURLExterna = process.env.E2E_BASE_URL
 const BASE_URL = baseURLExterna ?? 'http://localhost:5173'
+const REAL = process.env.E2E_REAL === '1'
 
 export default defineConfig({
   testDir: 'e2e',
@@ -13,7 +15,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: baseURLExterna ? 1 : 0,
+  retries: baseURLExterna || REAL ? 1 : 0,
   reporter: [['list'], ['html', { outputFolder: 'e2e/relatorio', open: 'never' }]],
   use: {
     baseURL: BASE_URL,
@@ -45,7 +47,7 @@ export default defineConfig({
         {
           command: 'pnpm dev:api',
           url: 'http://localhost:3001/api/health',
-          env: { NURAI_SEM_ENV_LOCAL: '1' },
+          env: REAL ? {} : { NURAI_SEM_ENV_LOCAL: '1' },
           reuseExistingServer: false,
           timeout: 120_000,
           stdout: 'ignore',
