@@ -61,7 +61,7 @@ type ExtracaoClinica = Extract<ExtracaoBruta, { clinico: true }>
 
 const TAREFA = `Tarefa: ler o texto de um documento de saúde enviado pela paciente (laudo, resultado de exame, receita, relatório) e estruturá-lo como um registro do histórico.
 Formato da resposta (JSON):
-{"clinico": true, "pacienteNoDocumento": "nome do paciente" ou null, "data": "AAAA-MM-DD" ou null, "tipo": "${TIPOS.join('" | "')}", "titulo": "título curto", "instituicao": "nome" ou null, "especialidade": "nome" ou null, "resumo": "1 a 2 frases fiéis ao documento", "medidas": [{"nome": "Colesterol LDL", "valor": 162, "unidade": "mg/dL", "refMin": 0, "refMax": 130}], "tags": ["colesterol"], "confianca": 0.9, "avisos": ["o que ficou ilegível ou ambíguo"]}
+{"clinico": true, "pacienteNoDocumento": "nome do paciente" ou null, "data": "AAAA-MM-DD" ou null, "tipo": "${TIPOS.join('" | "')}", "titulo": "título curto", "instituicao": "nome" ou null, "especialidade": "nome" ou null, "resumo": "1 a 2 frases fiéis ao documento", "medidas": [{"nome": "Colesterol LDL", "valor": 162, "unidade": "mg/dL", "refMin": null, "refMax": 130}], "tags": ["colesterol"], "confianca": 0.9, "avisos": ["o que ficou ilegível ou ambíguo"]}
 - Se o texto não for um documento de saúde, responda apenas {"clinico": false}.
 - "pacienteNoDocumento": o nome do paciente como está impresso (campo "Paciente", "Nome", destinatário da receita), com a grafia original. Nunca o nome do médico, do solicitante ou do responsável técnico. null se o documento não identificar o paciente.
 - "data": a data do exame/atendimento: em exame, a da coleta ou realização, antes da data de emissão do laudo (use a emissão só se for a única); em receita, pedido ou guia, a data da emissão ou da solicitação. Nunca a de impressão nem a de nascimento. Use null só se o documento não trouxer nenhuma dessas datas.
@@ -77,7 +77,7 @@ Formato da resposta (JSON):
 - Copie nomes, títulos e termos com a grafia do documento, com acentos e cedilha, mesmo que o documento esteja em maiúsculas (ex.: "MONITORIZAÇÃO AMBULATORIAL DA PRESSÃO ARTERIAL" vira "Monitorização Ambulatorial da Pressão Arterial", nunca "Monitorizacao").
 - "titulo": o que o documento é, com o nome do exame. Em pedido, guia ou requisição, nomeie o(s) exame(s) pedido(s), ex.: "Pedido de perfil lipídico", "Guia de ultrassom de abdome" — nunca só "Pedido de exame".
 - "medidas": só valores numéricos presentes no texto, com ponto decimal; refMin/refMax da faixa de referência impressa. Não invente faixas.
-- Faixa "X a Y": refMin X e refMax Y. Faixa só com teto ("< X", "≤ X", "até X", "inferior a X"): refMin null e refMax X. Faixa só com piso ("> X", "≥ X", "acima de X", "superior a X", limite inferior da normalidade "LIN X"): refMin X e refMax null; se o documento trouxer o LIN, use o LIN. Use null nos dois só quando o documento não trouxer referência para a medida.
+- Faixa "X a Y": refMin X e refMax Y. Faixa só com teto ("< X", "≤ X", "até X", "inferior a X"): refMin null e refMax X. Faixa só com piso ("> X", "≥ X", "acima de X", "superior a X", limite inferior da normalidade "LIN X"): refMin X e refMax null; se o documento trouxer o LIN, use o LIN. Use null nos dois só quando o documento não trouxer referência para a medida. Nunca preencha 0 como limite que o documento não imprime: em espirometria com só o LIN, o teto fica null e o piso é o LIN.
 - Valor duplo como pressão arterial "152/96 mmHg" (referência "< 140/90") vira duas medidas com nomes distintos: "Pressão arterial sistólica" (152, refMax 140) e "Pressão arterial diastólica" (96, refMax 90).
 - Referência em "% do previsto" (espirometria, por exemplo): registre a medida pelo valor em % do previsto, com unidade "% do previsto", para a faixa e o valor ficarem na mesma unidade.
 - "resumo": descreva o que o documento registra, sem interpretar nem diagnosticar. Em pedido ou guia, cite os exames pedidos pelo nome (ex.: "Pedido de perfil lipídico e hemograma.").
@@ -89,6 +89,15 @@ type MedidaBruta = ExtracaoClinica['medidas'][number]
 const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 type Montado = Omit<ResultadoExtracao, 'geradoPor' | 'alertas' | 'pacienteNoDocumento'>
 
+/* Zero solto no texto ("0", "0,0", "0.00"), não o de "0,70" nem o de "10". */
+const ZERO_IMPRESSO = /(?<![\d.,])0(?:[.,]0+)?(?![.,]?\d)/
+
+/* O modelo às vezes completa a faixa com 0 (ex.: espirometria só com LIN): sem um 0 impresso, esse limite é inventado. */
+function semZeroInventado(m: MedidaBruta, texto?: string): MedidaBruta {
+  if (texto === undefined || ZERO_IMPRESSO.test(texto)) return m
+  return { ...m, refMin: m.refMin === 0 ? null : m.refMin, refMax: m.refMax === 0 ? null : m.refMax }
+}
+
 /* Faixa unilateral ("< X", "> X", LIN) guarda só o lado impresso: nada de teto ou piso inventado.
    Sem referência alguma não há com o que comparar, e a medida é omitida com aviso. */
 function lerMedida(m: MedidaBruta): Medida | string {
@@ -99,10 +108,11 @@ function lerMedida(m: MedidaBruta): Medida | string {
   return { nome: m.nome, valor: m.valor, unidade: m.unidade, ...faixa, sinal: sinalDaFaixa(m.valor, faixa) }
 }
 
-/* Pós-processamento comum ao modelo e à heurística: sinal e validações ficam no servidor. */
-export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string): Montado {
+/* Pós-processamento comum ao modelo e à heurística: sinal e validações ficam no servidor.
+   Com o texto do documento, limite 0 que não aparece impresso é descartado. */
+export function montarEvento(bruto: ExtracaoClinica, nomeArquivo?: string, texto?: string): Montado {
   const avisos = bruto.avisos.map((a) => maiuscula(limparTexto(a))).filter(Boolean)
-  const lidas = bruto.medidas.map(lerMedida)
+  const lidas = bruto.medidas.map((m) => lerMedida(semZeroInventado(m, texto)))
   const medidas = lidas.filter((m): m is Medida => typeof m !== 'string')
   const omitidas = lidas.filter((m): m is string => typeof m === 'string')
   const dataValida = bruto.data != null && dataIsoValida(bruto.data)
@@ -152,7 +162,7 @@ export async function extrairEvento(
     ? extrairPorHeuristica(texto)
     : await pedirJson(llm, mensagens(TAREFA, `Documento:\n"""\n${texto}\n"""`), esquemaExtracao)
   if (!bruto.clinico) throw new ErroIa('NAO_CLINICO', 'O texto enviado não parece ser um documento de saúde')
-  const resultado = montarEvento(completarData(bruto, texto), entrada.nomeArquivo)
+  const resultado = montarEvento(completarData(bruto, texto), entrada.nomeArquivo, texto)
   if (entrada.texto.length > LIMITE_TEXTO) {
     resultado.avisos.push('O documento é longo e só o início foi lido. Confira se faltou alguma informação.')
   }

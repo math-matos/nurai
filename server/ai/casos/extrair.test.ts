@@ -158,6 +158,47 @@ describe('extrairEvento — faixas unilaterais no prompt', () => {
   })
 })
 
+const ESPIROMETRIA = `Laboratório de Função Pulmonar Aroeira
+Paciente: Marcos Vinícius Teixeira
+Data do exame: 12/03/2026
+ESPIROMETRIA — pré-broncodilatador
+CVF 3,42 L LIN 3,10 L 86% do previsto (LIN 80%)
+VEF1 2,61 L LIN 2,55 L 78% do previsto (LIN 80%)
+VEF1/CVF 0,76 LIN 0,70`
+
+describe('extrairEvento — limite 0 que o documento não traz', () => {
+  const litros = (nome: string, valor: number, refMin: number | null, refMax: number | null): MedidaBruta =>
+    ({ nome, valor, unidade: 'L', refMin, refMax })
+
+  it('descarta refMin 0 quando o texto só traz o LIN, sem inventar a faixa', async () => {
+    const { llm } = llmFixo(bruto([
+      litros('CVF', 3.42, 0, null),
+      { nome: 'VEF1/CVF', valor: 0.76, unidade: '', refMin: 0.7, refMax: null },
+    ], { titulo: 'Espirometria' }))
+    const { evento, avisos } = await extrairEvento({ llm, perfil: MARCOS }, { texto: ESPIROMETRIA })
+    expect(evento.medidas).toEqual([
+      { nome: 'VEF1/CVF', valor: 0.76, unidade: '', refMin: 0.7, sinal: 'normal' },
+    ])
+    expect(evento.medidas!.some((x) => x.refMin === 0)).toBe(false)
+    expect(avisos).toContain('A medida "CVF" foi omitida porque o documento não traz faixa de referência.')
+  })
+
+  it('mantém o 0 quando o documento imprime a faixa a partir de 0', async () => {
+    const texto = `${PEDIDO}\nProteína C reativa 0,4 mg/dL (referência: 0,0 a 0,5)`
+    const { llm } = llmFixo(bruto([{ nome: 'PCR', valor: 0.4, unidade: 'mg/dL', refMin: 0, refMax: 0.5 }]))
+    const { evento } = await extrairEvento({ llm, perfil: MARCOS }, { texto })
+    expect(evento.medidas).toEqual([{ nome: 'PCR', valor: 0.4, unidade: 'mg/dL', refMin: 0, refMax: 0.5, sinal: 'normal' }])
+  })
+
+  it('o exemplo do prompt não ensina piso 0 e o prompt proíbe limite 0 não impresso', async () => {
+    const { llm, recebidas } = llmFixo(bruto([]))
+    await extrairEvento({ llm, perfil: MARCOS }, { texto: PEDIDO })
+    const prompt = instrucoes(recebidas)
+    expect(prompt).not.toMatch(/"refMin": 0\b/)
+    expect(prompt).toMatch(/Nunca preencha 0 como limite/)
+  })
+})
+
 describe('extrairEvento — paciente do documento', () => {
   it('o prompt pede o nome do paciente impresso, nunca o do médico', async () => {
     const { llm, recebidas } = llmFixo(bruto([]))
