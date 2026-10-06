@@ -168,3 +168,44 @@ test('conta cuidador antiga vê o pedido de declaração e o confirma @mobile', 
   await expect(pedido).toContainText('Declaração registrada')
   await expect(page.getByRole('button', { name: 'Confirmar declaração' })).toHaveCount(0)
 })
+
+/* Simulação R2 (N1): com responsável, os textos fixos falavam com o cuidador como se ele fosse o paciente. */
+test('com responsável, os textos fixos falam do histórico do paciente, não de "seu histórico"', async ({ page, contas }) => {
+  await contas.criar({ request: page.request, nome: RAFAEL })
+  const cuidado = await page.request.post('/api/onboarding', {
+    headers: CSRF, data: { modo: 'vazio', paciente: { nome: MARCOS, relacao: 'filho', autorizacao: true } },
+  })
+  expect(cuidado.status()).toBe(200)
+
+  await page.goto('/#/app/linha')
+  await esperarApp(page)
+  const vazio = page.getByTestId('estado-vazio')
+  await expect(vazio).toContainText('Histórico de Marcos ainda está vazio')
+  await expect(page.getByTestId('botao-reiniciar')).toContainText('Reiniciar o histórico de Marcos')
+  for (const [secao, texto] of [
+    ['copiloto', 'no que está no histórico de Marcos'],
+    ['cuidado', 'Comece reunindo os documentos de Marcos'],
+    ['resumo', 'O resumo nasce do histórico de Marcos'],
+  ]) {
+    await page.goto(`/#/app/${secao}`)
+    await expect(vazio, secao).toContainText(texto)
+    await expect(page.locator('main'), secao).not.toContainText(/\b[Ss]eu histórico\b/)
+  }
+
+  /* Com registros (exemplo), as sugestões do copiloto e os passos falam do paciente. */
+  expect((await page.request.post('/api/onboarding', { headers: CSRF, data: { modo: 'exemplo' } })).status()).toBe(200)
+  await page.goto('/#/app/copiloto')
+  await page.reload()
+  await esperarApp(page)
+  await expect(page.locator('.barra__titulo')).toContainText('Tire dúvidas sobre o histórico de Marcos')
+  await expect(page.getByRole('button', { name: 'Como a glicada de Marcos evoluiu desde o diagnóstico?' })).toBeVisible()
+  await expect(page.locator('main')).not.toContainText(/\b(minha|meu)\b/)
+
+  await page.goto('/#/app/cuidado')
+  await expect(page.locator('main')).toContainText('do profissional que atende Marcos')
+  await expect(page.getByRole('button', { name: 'Reanalisar o histórico de Marcos' })).toBeVisible()
+
+  await page.goto('/#/app/privacidade')
+  await expect(page.locator('.lgpd')).toContainText(`O histórico e os dados de saúde são de ${MARCOS}, titular dos dados`)
+  await expect(page.locator('.lgpd')).toContainText(`gerenciada por ${RAFAEL} (filho)`)
+})

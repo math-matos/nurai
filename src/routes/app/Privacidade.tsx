@@ -5,11 +5,13 @@ import { ExcluirConta } from '../../components/ExcluirConta'
 import { formatarDataCurta } from '../../lib/formato'
 import { useAcoes, useEstado, usePerfil } from '../../lib/store'
 import { TID } from '../../lib/testids'
+import { tomDe } from '../../lib/tom'
 import { MeusDados } from './MeusDados'
 
 export function Privacidade() {
   const { consentimentos, acessos, eventos } = useEstado()
   const perfil = usePerfil()
+  const tom = tomDe(perfil)
   const { alternarConsentimento, atualizarAcessos } = useAcoes()
   const [alternando, setAlternando] = useState<string | null>(null)
   const ativos = consentimentos.filter((c) => c.ativo).length
@@ -58,7 +60,7 @@ export function Privacidade() {
           <p>
             Cada instituição vê apenas o escopo que você concedeu, pelo tempo que você
             concedeu. Desligar uma fonte interrompe a entrada de novos registros e o acesso
-            dela ao que já está aqui — o que já foi trazido continua sendo seu.
+            dela ao que já está aqui — o que já foi trazido {tom.nome ? `continua no histórico de ${tom.nome}` : 'continua sendo seu'}.
           </p>
         </div>
 
@@ -125,7 +127,12 @@ export function Privacidade() {
           </div>
           <div>
             <dt>Titularidade</dt>
-            <dd>O histórico pertence ao titular da conta. Instituições recebem acesso, nunca posse — e todo acesso é temporário por padrão.</dd>
+            <dd>
+              {perfil.responsavel
+                ? `O histórico e os dados de saúde são de ${perfil.nome}, titular dos dados. A conta é gerenciada por ${perfil.responsavel.nome} (${perfil.responsavel.relacao}), como responsável, e cada ação fica registrada no nome de quem a fez.`
+                : 'O histórico pertence ao titular da conta.'}
+              {' '}Instituições recebem acesso, nunca posse — e todo acesso é temporário por padrão.
+            </dd>
           </div>
           <div>
             <dt>Revogação</dt>

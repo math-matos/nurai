@@ -10,6 +10,7 @@ import { navegar } from '../../lib/router'
 import { perguntar, useAcoes, useEstado } from '../../lib/store'
 import { useRequisicao } from '../../lib/useRequisicao'
 import { TID } from '../../lib/testids'
+import { maiuscula, useTom } from '../../lib/tom'
 
 const TIPOS_FILTRO: TipoId[] = ['exame', 'consulta', 'imagem', 'internacao', 'cirurgia', 'vacina', 'documento']
 const FONTES_FILTRO: FonteId[] = ['sus', 'laboratorio', 'hospital', 'clinica', 'operadora', 'paciente']
@@ -37,6 +38,7 @@ function rolarAte(alvo: HTMLElement | null) {
 
 export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
   const { eventos, novos } = useEstado()
+  const tom = useTom()
   const [busca, setBusca] = useState('')
   const [tipos, setTipos] = useState<TipoId[]>([])
   const [fontes, setFontes] = useState<FonteId[]>([])
@@ -88,7 +90,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
   const avisoExcluido = excluido && (
     <div className="recado-app" role="status" tabIndex={-1} ref={aviso} data-testid={TID.eventoExcluido}>
       <Icon nome="papel" tamanho={16} />
-      <p>“{excluido}” foi excluído do seu histórico. Resumos e próximos passos gerados antes podem citá-lo até serem refeitos.</p>
+      <p>“{excluido}” foi excluído do {tom.dono('histórico')}. Resumos e próximos passos gerados antes podem citá-lo até serem refeitos.</p>
       <button type="button" className="btn btn--quiet" onClick={() => setExcluido(null)}>Fechar</button>
     </div>
   )
@@ -113,7 +115,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
         {avisoExcluido}
         <VazioHistorico
         icone="linha"
-        titulo="Seu histórico ainda está vazio"
+        titulo={`${maiuscula(tom.dono('histórico'))} ainda está vazio`}
         texto="Anexe um laudo, resultado de exame ou receita. A IA lê o documento, você confere, e ele vira o primeiro ponto desta linha do tempo."
         />
       </>
@@ -322,7 +324,7 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
             </div>
 
             <ExplicarEvento key={atual.id} evento={atual} eventos={eventos} />
-            <ExcluirEvento key={`excluir-${atual.id}`} evento={atual} aoExcluir={aposExcluir} />
+            <ExcluirEvento key={`excluir-${atual.id}`} evento={atual} historico={tom.dono('histórico')} aoExcluir={aposExcluir} />
           </div>
         )}
       </aside>
@@ -331,7 +333,12 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
 }
 
 /* Só existe no app do paciente: a visão do médico (acesso por código) não monta a linha do tempo. */
-function ExcluirEvento({ evento, aoExcluir }: { evento: Evento; aoExcluir: (titulo: string) => void }) {
+function ExcluirEvento({ evento, historico, aoExcluir }: {
+  evento: Evento
+  /* "seu histórico" | "histórico de Marcos" */
+  historico: string
+  aoExcluir: (titulo: string) => void
+}) {
   const { excluirEvento } = useAcoes()
   const [confirmando, setConfirmando] = useState(false)
   const [excluindo, setExcluindo] = useState(false)
@@ -388,7 +395,7 @@ function ExcluirEvento({ evento, aoExcluir }: { evento: Evento; aoExcluir: (titu
       aria-busy={excluindo} ref={caixa}
     >
       <p id="excluir-registro-pergunta" className="excluir-registro__pergunta" tabIndex={-1} ref={pergunta}>
-        <strong>Excluir “{evento.titulo}” do seu histórico?</strong> A exclusão é definitiva: o registro some da linha
+        <strong>Excluir “{evento.titulo}” do {historico}?</strong> A exclusão é definitiva: o registro some da linha
         do tempo e não pode ser recuperado. Resumos e próximos passos gerados antes podem continuar citando este
         registro até serem refeitos.
       </p>
