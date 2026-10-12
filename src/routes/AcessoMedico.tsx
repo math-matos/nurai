@@ -155,7 +155,7 @@ function VisaoMedico({ dados, codigo, profissional, aoSair, aoEncerrar }: Libera
   })
 
   /* Abrir um registro mostra dado clínico novo na tela: antes, confere se o paciente não revogou o código
-     (simulação R2: com a tela aberta, a médica ainda abriu um registro depois da revogação). Só a recusa
+     (teste de usabilidade R2: com a tela aberta, a médica ainda abriu um registro depois da revogação). Só a recusa
      do código impede; limite excedido ou falha de rede seguem a regra da conferência periódica. */
   const abrir = async (id: string) => {
     try {

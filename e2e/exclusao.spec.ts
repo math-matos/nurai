@@ -89,7 +89,7 @@ test('logo após o F5 no detalhe, um clique em "Excluir este registro" abre a co
   await expect(detalhe.getByTestId('evento-excluir')).toHaveCount(0)
 })
 
-/* Visto em produção (simulação R2, P12): o DELETE apagou no servidor, mas a resposta não chegou ao celular.
+/* Visto em produção (teste de usabilidade R2, P12): o DELETE apagou no servidor, mas a resposta não chegou ao celular.
    A tela não mudou, o erro foi para o topo da página (fora da vista) e o 2º toque recebeu 404. */
 test.describe('exclusão com resposta perdida ou repetida', () => {
   test.use({ ignorarErros: [/net::ERR_FAILED/] })
