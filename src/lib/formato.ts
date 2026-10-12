@@ -37,7 +37,7 @@ export function ordenarRecentes(eventos: Evento[]) {
   return [...eventos].sort((a, b) => (a.data < b.data ? 1 : -1))
 }
 
-/* "Aparecida Souza (simulação)" → "AS": o que está entre parênteses e o que não é letra não vira inicial. */
+/* "Aparecida Souza (mãe)" → "AS": o que está entre parênteses e o que não é letra não vira inicial. */
 export function iniciaisDe(nome: string): string {
   const palavras = nome
     .replace(/\([^)]*\)?/g, ' ')

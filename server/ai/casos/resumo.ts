@@ -76,7 +76,7 @@ const repeteFato = (p: Ponto, { repeticoes, pendencias }: Fatos) => {
     || pendencias.some((f) => p.ancoras.includes(f.ancoras[0]) && palavrasDoAlvo(f.alvo).some((w) => texto.includes(w)))
 }
 
-/* Visto na simulação: a síntese com IA não citava o exame repetido que a tela do médico mostrava.
+/* Visto no teste de usabilidade: a síntese com IA não citava o exame repetido que a tela do médico mostrava.
    Os pontos em aberto entram sempre, primeiro; o modelo completa com o resto. */
 const comPontosEmAberto = (pontos: Ponto[], abertos: PontoEmAberto[], fatos: Fatos): Ponto[] => [
   ...abertos.map(({ texto, ancoras }) => ({ texto, ancoras })),

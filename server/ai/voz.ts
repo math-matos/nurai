@@ -1,6 +1,6 @@
 import type { Perfil } from '../db/repo.js'
 
-/* Modo cuidador: quem lê é o responsável, e o histórico é do paciente. Visto na simulação: "você já
+/* Modo cuidador: quem lê é o responsável, e o histórico é do paciente. Visto no teste de usabilidade: "você já
    realizou", "Seu histórico ainda está vazio" e "minha glicada" para os exames do pai de quem usava o app.
    O prompt pede o paciente na 3ª pessoa pelo primeiro nome; a reescrita abaixo cobre os textos fixos e
    os deslizes óbvios do modelo. Sem responsável, nada muda: fala-se com o próprio paciente ("você"). */

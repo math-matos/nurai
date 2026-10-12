@@ -135,7 +135,7 @@ test('tela aberta do profissional se fecha quando ele volta à aba depois da rev
   await expect(aviso).toHaveCount(0)
 })
 
-/* Simulação R2 (P3): depois da revogação, com a tela aberta, a médica ainda abriu um registro. Abrir confere o código antes. */
+/* Teste de usabilidade R2 (P3): depois da revogação, com a tela aberta, a médica ainda abriu um registro. Abrir confere o código antes. */
 test('abrir um registro confere o código: revogado, a tela se fecha sem mostrar o registro @mobile', async ({
   page, contas, novoNavegador,
 }) => {
@@ -251,7 +251,7 @@ test('a 11ª tentativa de código no mesmo minuto responde 429', async ({ novoNa
   await expect(pagina.getByTestId('medico-erro')).toHaveText('Muitas tentativas seguidas. Tente de novo em 1 min.')
 })
 
-/* Simulação de usabilidade: a visão do médico dizia "Nenhum ponto em aberto" com um exame repetido no
+/* Teste de usabilidade: a visão do médico dizia "Nenhum ponto em aberto" com um exame repetido no
    histórico, porque lia os passos gravados — que só existem depois de o paciente clicar em "Reanalisar". */
 test('pontos em aberto vêm do histórico mesmo sem "Reanalisar"; tentativa com código revogado fica no log', async ({
   page, contas, novoNavegador,
@@ -288,7 +288,7 @@ test('pontos em aberto vêm do histórico mesmo sem "Reanalisar"; tentativa com 
   const verificar = () => api.post('/api/acesso-medico/verificar', { headers: CSRF, data: { codigo } })
   expect((await verificar()).status()).toBe(204)
 
-  /* Simulação R2 (P13): a folha do paciente dizia "Nenhuma pendência" enquanto o médico via o exame repetido. */
+  /* Teste de usabilidade R2 (P13): a folha do paciente dizia "Nenhuma pendência" enquanto o médico via o exame repetido. */
   const pontosDoPaciente = respostaDe(page, 'GET', '/api/pontos-em-aberto')
   await page.goto('/#/app/resumo')
   await esperarApp(page)

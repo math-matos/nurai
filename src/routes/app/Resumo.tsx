@@ -418,7 +418,7 @@ function PainelAcesso({ compartilhamento, aoRevogar }: {
   )
 }
 
-/* Simulação R2 (P13): a folha dizia "Nenhuma pendência" enquanto a tela do médico listava o exame repetido.
+/* Teste de usabilidade R2 (P13): a folha dizia "Nenhuma pendência" enquanto a tela do médico listava o exame repetido.
    Os pontos vêm do mesmo cálculo do servidor; os próximos passos marcados pelo paciente vêm depois. */
 function PontosEmAberto({ eventos, pendentes }: { eventos: Evento[]; pendentes: ProximoPasso[] }) {
   const [tentativa, setTentativa] = useState(0)

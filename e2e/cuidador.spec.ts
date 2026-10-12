@@ -169,7 +169,7 @@ test('conta cuidador antiga vê o pedido de declaração e o confirma @mobile', 
   await expect(page.getByRole('button', { name: 'Confirmar declaração' })).toHaveCount(0)
 })
 
-/* Simulação R2 (N1): com responsável, os textos fixos falavam com o cuidador como se ele fosse o paciente. */
+/* Teste de usabilidade R2 (N1): com responsável, os textos fixos falavam com o cuidador como se ele fosse o paciente. */
 test('com responsável, os textos fixos falam do histórico do paciente, não de "seu histórico"', async ({ page, contas }) => {
   await contas.criar({ request: page.request, nome: RAFAEL })
   const cuidado = await page.request.post('/api/onboarding', {
