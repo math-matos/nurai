@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type oracledb from 'oracledb'
 import { comConexao, transacao } from './conexao.js'
+import { instanteIso } from './datas.js'
 import { montarPerfil, perfilAtualizado, perfilNovo, type PerfilGravado } from './perfil.js'
 import { ErroConflito, normalizarEmail, type Repositorio, type UsuarioComSenha } from './repo.js'
 
@@ -16,17 +17,22 @@ const deTextoUtc = (s: unknown) => new Date(`${s as string}Z`)
 
 const colunasPerfil = (p: string) => `${p}.id "pacienteId", ${p}.nome "nome",
   TO_CHAR(${p}.data_nascimento, 'YYYY-MM-DD') "dataNascimento", ${p}.condicoes "condicoes", ${p}.alergias "alergias",
-  ${p}.cartao_sus "cartaoSus", ${p}.plano "plano", ${p}.onboarding "onboarding", ${p}.convidado "convidado"`
+  ${p}.cartao_sus "cartaoSus", ${p}.plano "plano", ${p}.onboarding "onboarding", ${p}.convidado "convidado",
+  ${p}.responsavel_nome "responsavelNome", ${p}.responsavel_relacao "responsavelRelacao",
+  ${textoUtc(`${p}.responsavel_autorizado_em`)} "responsavelAutorizadoEm"`
 
 const SQL = {
   perfil: `SELECT ${colunasPerfil('p')} FROM pacientes p WHERE p.id = :paciente`,
   perfilParaAtualizar: `SELECT ${colunasPerfil('p')} FROM pacientes p WHERE p.id = :paciente FOR UPDATE`,
   inserirPaciente: `INSERT INTO pacientes (id, nome, data_nascimento, condicoes, alergias, cartao_sus, plano, onboarding,
-    convidado) VALUES (:paciente, :nome, TO_DATE(:dataNascimento, 'YYYY-MM-DD'), :condicoes, :alergias, :cartaoSus,
-    :plano, :onboarding, :convidado)`,
+    convidado, responsavel_nome, responsavel_relacao, responsavel_autorizado_em) VALUES (:paciente, :nome,
+    TO_DATE(:dataNascimento, 'YYYY-MM-DD'), :condicoes, :alergias, :cartaoSus, :plano, :onboarding, :convidado,
+    :responsavelNome, :responsavelRelacao, ${instanteUtc('responsavelAutorizadoEm')})`,
   atualizarPaciente: `UPDATE pacientes SET nome = :nome, data_nascimento = TO_DATE(:dataNascimento, 'YYYY-MM-DD'),
     condicoes = :condicoes, alergias = :alergias, cartao_sus = :cartaoSus, plano = :plano, onboarding = :onboarding,
-    convidado = :convidado WHERE id = :paciente`,
+    convidado = :convidado, responsavel_nome = :responsavelNome, responsavel_relacao = :responsavelRelacao,
+    responsavel_autorizado_em = ${instanteUtc('responsavelAutorizadoEm')}
+    WHERE id = :paciente`,
   inserirUsuario: `INSERT INTO usuarios (id, paciente_id, email, senha_hash) VALUES (:id, :paciente, :email, :senhaHash)`,
   usuarioPorEmail: `SELECT id "id", email "email", paciente_id "pacienteId", senha_hash "senhaHash"
     FROM usuarios WHERE email = :email`,
@@ -56,6 +62,13 @@ export function paraPerfilGravado(l: Linha): PerfilGravado {
     alergias: JSON.parse(p.alergias as string),
     ...(p.cartaoSus !== undefined && { cartaoSus: p.cartaoSus as string }),
     ...(p.plano !== undefined && { plano: p.plano as string }),
+    ...(p.responsavelNome !== undefined && {
+      responsavel: {
+        nome: p.responsavelNome as string,
+        relacao: p.responsavelRelacao as string,
+        ...(p.responsavelAutorizadoEm !== undefined && { autorizadoEm: instanteIso(deTextoUtc(p.responsavelAutorizadoEm)) }),
+      },
+    }),
     onboarding: p.onboarding as PerfilGravado['onboarding'],
     convidado: p.convidado === 1,
   }
@@ -65,6 +78,8 @@ const linhaPerfil = (p: PerfilGravado): Bind => ({
   paciente: p.pacienteId, nome: p.nome, dataNascimento: p.dataNascimento ?? null,
   condicoes: JSON.stringify(p.condicoes), alergias: JSON.stringify(p.alergias), cartaoSus: p.cartaoSus ?? null,
   plano: p.plano ?? null, onboarding: p.onboarding, convidado: Number(p.convidado),
+  responsavelNome: p.responsavel?.nome ?? null, responsavelRelacao: p.responsavel?.relacao ?? null,
+  responsavelAutorizadoEm: p.responsavel?.autorizadoEm ? paraBindUtc(new Date(p.responsavel.autorizadoEm)) : null,
 })
 
 export async function lerPerfil(conn: oracledb.Connection, pacienteId: string, paraAtualizar = false) {
@@ -81,7 +96,8 @@ export async function gravarPerfil(conn: oracledb.Connection, perfil: PerfilGrav
 export const violouChave = (e: unknown, constraint: string) =>
   (e as { errorNum?: number }).errorNum === 1 && (e as Error).message.toUpperCase().includes(constraint)
 
-type Contas = Omit<Repositorio, 'nome' | 'paraPaciente' | 'aplicarOnboarding' | 'buscarCompartilhamentoAtivo'>
+type Contas = Omit<Repositorio,
+  'nome' | 'paraPaciente' | 'aplicarOnboarding' | 'buscarCompartilhamentoAtivo' | 'buscarCompartilhamento'>
 
 export function contasOracle(): Contas {
   return {

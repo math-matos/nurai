@@ -8,10 +8,11 @@ import { dadosIniciais } from './exemplo.js'
 import {
   contasOracle, gravarPerfil, instanteUtc, lerPerfil, paraBindUtc, violouChave,
 } from './oracle-contas.js'
-import { montarPerfil } from './perfil.js'
+import { montarPerfil, type PerfilGravado } from './perfil.js'
 import {
-  ACAO_EXCLUIR_EVENTO, ErroConflito, itensExclusao, passosSemEvento, semOpcionaisVazios, VALIDADE_COMPARTILHAMENTO_DIAS, type Compartilhamento, type CompartilhamentoAtivo,
-  type FonteConectada, type ModoOnboarding, type NovoAcesso, type Onboarding, type Repositorio, type RepositorioPaciente,
+  ACAO_EXCLUIR_EVENTO, autorDe, ErroConflito, itensExclusao, PAPEL_TITULAR, passosSemEvento, semOpcionaisVazios,
+  VALIDADE_COMPARTILHAMENTO_DIAS, type Compartilhamento, type CompartilhamentoAtivo, type CompartilhamentoEncontrado,
+  type FonteConectada, type ModoOnboarding, type NovoAcesso, type Repositorio, type RepositorioPaciente,
 } from './repo.js'
 
 type Linha = Record<string, unknown>
@@ -56,6 +57,9 @@ const SQL = {
     ORDER BY ordem DESC FETCH FIRST 1 ROWS ONLY`,
   compartilhamentoAtivo: `SELECT paciente_id "pacienteId", para "para", ${texto('expira_em')} "expiraEm"
     FROM compartilhamentos WHERE codigo = :codigo AND revogado = 0 AND expira_em > ${instanteUtc('agora')}`,
+  compartilhamentoPorCodigo: `SELECT paciente_id "pacienteId", para "para", ${texto('expira_em')} "expiraEm",
+    CASE WHEN revogado = 1 THEN 'revogado' WHEN expira_em > ${instanteUtc('agora')} THEN 'ativo' ELSE 'expirado' END "situacao"
+    FROM compartilhamentos WHERE codigo = :codigo`,
   revogarCompartilhamento: `UPDATE compartilhamentos SET revogado = 1
     WHERE paciente_id = :paciente AND codigo = :codigo AND revogado = 0`,
   compartilhamentoDoPaciente: `SELECT para "para" FROM compartilhamentos
@@ -129,11 +133,13 @@ async function inserirVarios(conn: oracledb.Connection, sql: string, linhas: Bin
 }
 
 /* Apaga os dados do paciente e grava o ponto de partida do modo (exemplo: seed; vazio/pendente: nada). */
-async function recomecar(conn: oracledb.Connection, paciente: string, modo: Onboarding, titular: string) {
+async function recomecar(conn: oracledb.Connection, perfil: PerfilGravado) {
+  const paciente = perfil.pacienteId
   for (const tabela of TABELAS_DO_PACIENTE) {
     await conn.execute(`DELETE FROM ${tabela} WHERE paciente_id = :paciente`, { paciente })
   }
-  const dados = dadosIniciais(modo, titular)
+  const { quem, papel } = autorDe(perfil)
+  const dados = dadosIniciais(perfil.onboarding, quem, papel)
   await inserirVarios(conn, SQL.inserirEvento, dados.eventos.map((e) => linhaEvento(paciente, e)))
   await inserirVarios(conn, SQL.inserirConsentimento, dados.consentimentos.map((c) => linhaConsentimento(paciente, c)))
   /* O log vem do mais recente para o mais antigo; a leitura ordena por "ordem" decrescente. */
@@ -163,18 +169,18 @@ function repoPaciente(paciente: string): RepositorioPaciente {
         .map(paraCompartilhamento)[0] ?? null,
     })),
 
-    adicionarEvento: (evento, autor) => transacao(async (conn) => {
+    adicionarEvento: (evento, autor, papel = PAPEL_TITULAR) => transacao(async (conn) => {
       try {
         await conn.execute(SQL.inserirEvento, linhaEvento(paciente, evento))
       } catch (e) {
         if (violouChave(e, 'EVENTOS_PK')) throw new ErroConflito(`Evento "${evento.id}" já existe`)
         throw e
       }
-      await registrar(conn, { quem: autor, papel: 'Titular', acao: 'Anexou documento ao histórico', itens: evento.titulo })
+      await registrar(conn, { quem: autor, papel, acao: 'Anexou documento ao histórico', itens: evento.titulo })
       return structuredClone(semOpcionaisVazios(evento))
     }),
 
-    excluirEvento: (id, autor) => transacao(async (conn) => {
+    excluirEvento: (id, autor, papel = PAPEL_TITULAR) => transacao(async (conn) => {
       const [alvo] = await selecionar(conn, SQL.tituloEvento, { id })
       if (!alvo) return false
       await conn.execute('DELETE FROM eventos WHERE paciente_id = :paciente AND id = :id', { paciente, id })
@@ -187,20 +193,20 @@ function repoPaciente(paciente: string): RepositorioPaciente {
         await conn.execute('DELETE FROM passos WHERE paciente_id = :paciente AND id = :id', { paciente, id: pid })
       }
       await registrar(conn, {
-        quem: autor, papel: 'Titular', acao: ACAO_EXCLUIR_EVENTO,
+        quem: autor, papel, acao: ACAO_EXCLUIR_EVENTO,
         itens: itensExclusao({ titulo: alvo.titulo as string, data: alvo.data as string }),
       })
       return true
     }),
 
-    alternarConsentimento: (id, autor) => transacao(async (conn) => {
+    alternarConsentimento: (id, autor, papel = PAPEL_TITULAR) => transacao(async (conn) => {
       const r = await conn.execute(
         'UPDATE consentimentos SET ativo = 1 - ativo WHERE paciente_id = :paciente AND id = :id', { paciente, id },
       )
       if (!r.rowsAffected) return null
       const [c] = (await selecionar(conn, SQL.consentimento, { id })).map(paraConsentimento)
       await registrar(conn, {
-        quem: autor, papel: 'Titular', acao: c.ativo ? 'Concedeu acesso' : 'Revogou acesso', itens: c.instituicao,
+        quem: autor, papel, acao: c.ativo ? 'Concedeu acesso' : 'Revogou acesso', itens: c.instituicao,
       })
       return c
     }),
@@ -219,7 +225,7 @@ function repoPaciente(paciente: string): RepositorioPaciente {
       return structuredClone(passos)
     }),
 
-    criarCompartilhamento: (para, autor) => transacao(async (conn) => {
+    criarCompartilhamento: (para, autor, papel = PAPEL_TITULAR) => transacao(async (conn) => {
       for (let tentativa = 1; ; tentativa++) {
         const criado = Date.now()
         const compartilhamento: Compartilhamento = {
@@ -232,17 +238,17 @@ function repoPaciente(paciente: string): RepositorioPaciente {
           if (violouChave(e, 'COMPARTILHAMENTOS_PK') && tentativa < TENTATIVAS_CODIGO) continue
           throw e
         }
-        await registrar(conn, { quem: autor, papel: 'Titular', acao: 'Gerou acesso temporário', itens: `${para}, 30 dias` })
+        await registrar(conn, { quem: autor, papel, acao: 'Gerou acesso temporário', itens: `${para}, 30 dias` })
         return compartilhamento
       }
     }),
 
-    revogarCompartilhamento: (codigo, autor) => transacao(async (conn) => {
+    revogarCompartilhamento: (codigo, autor, papel = PAPEL_TITULAR) => transacao(async (conn) => {
       const r = await conn.execute(SQL.revogarCompartilhamento, { paciente, codigo })
       const [alvo] = await selecionar(conn, SQL.compartilhamentoDoPaciente, { codigo })
       if (!alvo) return false
       if (r.rowsAffected) {
-        await registrar(conn, { quem: autor, papel: 'Titular', acao: 'Revogou acesso temporário', itens: alvo.para as string })
+        await registrar(conn, { quem: autor, papel, acao: 'Revogou acesso temporário', itens: alvo.para as string })
       }
       return true
     }),
@@ -263,7 +269,7 @@ function repoPaciente(paciente: string): RepositorioPaciente {
     reiniciar: () => transacao(async (conn) => {
       const perfil = await lerPerfil(conn, paciente, true)
       if (!perfil) throw new Error(`Paciente "${paciente}" não existe`)
-      await recomecar(conn, paciente, perfil.onboarding, perfil.nome)
+      await recomecar(conn, perfil)
     }),
   }
 }
@@ -279,12 +285,17 @@ export function criarRepoOracle(): Repositorio {
       return (r.rows?.[0] as CompartilhamentoAtivo | undefined) ?? null
     }),
 
+    buscarCompartilhamento: (codigo) => comConexao(async (conn) => {
+      const r = await conn.execute<Linha>(SQL.compartilhamentoPorCodigo, { codigo, agora: paraBindUtc(new Date()) })
+      return (r.rows?.[0] as CompartilhamentoEncontrado | undefined) ?? null
+    }),
+
     aplicarOnboarding: (id, modo: ModoOnboarding) => transacao(async (conn) => {
       const atual = await lerPerfil(conn, id, true)
       if (!atual) return null
       const perfil = { ...atual, onboarding: modo }
       await gravarPerfil(conn, perfil)
-      await recomecar(conn, id, modo, perfil.nome)
+      await recomecar(conn, perfil)
       return montarPerfil(perfil)
     }),
   }

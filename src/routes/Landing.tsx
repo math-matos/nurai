@@ -9,7 +9,7 @@ import '../styles/landing.css'
 const FRAGMENTOS = [
   { ano: '2019', data: '02 abr', titulo: 'Glicada 7,8%', fonte: 'sus' as const, onde: 'UBS Vila Mariana' },
   { ano: '2021', data: '09 fev', titulo: 'LDL 168 mg/dL', fonte: 'laboratorio' as const, onde: 'Laboratório Vetor' },
-  { ano: '2022', data: '08 set', titulo: 'Receita de metformina', fonte: 'paciente' as const, onde: 'Foto de um papel' },
+  { ano: '2022', data: '08 set', titulo: 'Receita de metformina', fonte: 'paciente' as const, onde: 'Papel, texto colado' },
   { ano: '2023', data: '27 jan', titulo: 'Fibrilação atrial no pronto-socorro', fonte: 'hospital' as const, onde: 'Hospital Santa Clemência' },
   { ano: '2024', data: '05 nov', titulo: 'Retinopatia leve', fonte: 'operadora' as const, onde: 'Rede credenciada' },
   { ano: '2026', data: '27 mai', titulo: 'Doppler de carótidas', fonte: 'clinica' as const, onde: 'Instituto Anhangá' },
@@ -20,7 +20,7 @@ const ETAPAS = [
   {
     numero: 'Reunir', icone: 'anexar' as const,
     titulo: 'Toda fonte entra, inclusive a de papel',
-    texto: 'Rede pública pela RNDS, laboratórios e hospitais por integração, e o que só existe impresso por foto. O que hoje mora em seis lugares passa a ter um endereço.',
+    texto: 'Rede pública pela RNDS, laboratórios e hospitais por integração e, do que só existe no papel, o PDF com texto ou o texto colado do documento. O que hoje mora em seis lugares passa a ter um endereço.',
     prova: '6 fontes · 24 registros no caso demonstrado',
   },
   {

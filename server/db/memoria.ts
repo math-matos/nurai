@@ -5,8 +5,9 @@ import { agora, hoje } from './datas.js'
 import { dadosIniciais, dadosVazios, type DadosIniciais } from './exemplo.js'
 import { montarPerfil, perfilAtualizado, perfilNovo, type PerfilGravado } from './perfil.js'
 import {
-  ACAO_EXCLUIR_EVENTO, ErroConflito, itensExclusao, normalizarEmail, passosSemEvento, semOpcionaisVazios, VALIDADE_COMPARTILHAMENTO_DIAS, type Compartilhamento,
-  type NovoAcesso, type Repositorio, type RepositorioPaciente, type UsuarioComSenha,
+  ACAO_EXCLUIR_EVENTO, autorDe, ErroConflito, itensExclusao, normalizarEmail, PAPEL_TITULAR, passosSemEvento, semOpcionaisVazios,
+  VALIDADE_COMPARTILHAMENTO_DIAS, type Compartilhamento, type NovoAcesso, type Repositorio, type RepositorioPaciente,
+  type SituacaoCompartilhamento, type UsuarioComSenha,
 } from './repo.js'
 
 interface CompartilhamentoGravado extends Compartilhamento {
@@ -23,8 +24,17 @@ interface Paciente {
 }
 
 const DIA_MS = 86_400_000
-const estadoInicial = (perfil: PerfilGravado): DadosIniciais => dadosIniciais(perfil.onboarding, perfil.nome)
-const ativo = (c: CompartilhamentoGravado) => !c.revogado && c.expiraMs > Date.now()
+function estadoInicial(perfil: PerfilGravado): DadosIniciais {
+  const { quem, papel } = autorDe(perfil)
+  return dadosIniciais(perfil.onboarding, quem, papel)
+}
+
+function situacao(c: CompartilhamentoGravado): SituacaoCompartilhamento {
+  if (c.revogado) return 'revogado'
+  return c.expiraMs > Date.now() ? 'ativo' : 'expirado'
+}
+
+const ativo = (c: CompartilhamentoGravado) => situacao(c) === 'ativo'
 const publico = ({ codigo, criadoEm, para, expiraEm }: CompartilhamentoGravado): Compartilhamento =>
   ({ codigo, criadoEm, para, expiraEm })
 
@@ -63,32 +73,32 @@ export function criarRepoMemoria(): Repositorio {
         return { ...structuredClone(p?.estado ?? dadosVazios()), compartilhamento: atual ? publico(atual) : null }
       },
 
-      async adicionarEvento(evento, autor) {
+      async adicionarEvento(evento, autor, papel = PAPEL_TITULAR) {
         if (ler().eventos.some((e) => e.id === evento.id)) throw new ErroConflito(`Evento "${evento.id}" já existe`)
         const copia = structuredClone(semOpcionaisVazios(evento))
         gravar({ ...ler(), eventos: [...ler().eventos, copia] })
-        registrar({ quem: autor, papel: 'Titular', acao: 'Anexou documento ao histórico', itens: evento.titulo })
+        registrar({ quem: autor, papel, acao: 'Anexou documento ao histórico', itens: evento.titulo })
         return structuredClone(copia)
       },
 
-      async excluirEvento(eid, autor) {
+      async excluirEvento(eid, autor, papel = PAPEL_TITULAR) {
         const alvo = ler().eventos.find((e) => e.id === eid)
         if (!alvo) return false
         const { atualizados, removidos } = passosSemEvento(ler().passos, eid)
         const novos = new Map(atualizados.map((p) => [p.id, p]))
         const passos = ler().passos.filter((p) => !removidos.includes(p.id)).map((p) => novos.get(p.id) ?? p)
         gravar({ ...ler(), eventos: ler().eventos.filter((e) => e.id !== eid), passos })
-        registrar({ quem: autor, papel: 'Titular', acao: ACAO_EXCLUIR_EVENTO, itens: itensExclusao(alvo) })
+        registrar({ quem: autor, papel, acao: ACAO_EXCLUIR_EVENTO, itens: itensExclusao(alvo) })
         return true
       },
 
-      async alternarConsentimento(cid, autor) {
+      async alternarConsentimento(cid, autor, papel = PAPEL_TITULAR) {
         const alvo = ler().consentimentos.find((c) => c.id === cid)
         if (!alvo) return null
         const atualizado = { ...alvo, ativo: !alvo.ativo }
         gravar({ ...ler(), consentimentos: ler().consentimentos.map((c) => (c.id === cid ? atualizado : c)) })
         registrar({
-          quem: autor, papel: 'Titular', acao: alvo.ativo ? 'Revogou acesso' : 'Concedeu acesso',
+          quem: autor, papel, acao: alvo.ativo ? 'Revogou acesso' : 'Concedeu acesso',
           itens: alvo.instituicao,
         })
         return { ...atualizado }
@@ -107,7 +117,7 @@ export function criarRepoMemoria(): Repositorio {
         return structuredClone(passos)
       },
 
-      async criarCompartilhamento(para, autor) {
+      async criarCompartilhamento(para, autor, papel = PAPEL_TITULAR) {
         const agoraMs = Date.now()
         const expiraMs = agoraMs + VALIDADE_COMPARTILHAMENTO_DIAS * DIA_MS
         const gravado: CompartilhamentoGravado = {
@@ -115,17 +125,17 @@ export function criarRepoMemoria(): Repositorio {
           expiraMs, revogado: false,
         }
         gravarCompartilhamentos([...paciente(id).compartilhamentos, gravado])
-        registrar({ quem: autor, papel: 'Titular', acao: 'Gerou acesso temporário', itens: `${para}, 30 dias` })
+        registrar({ quem: autor, papel, acao: 'Gerou acesso temporário', itens: `${para}, 30 dias` })
         return publico(gravado)
       },
 
-      async revogarCompartilhamento(codigo, autor) {
+      async revogarCompartilhamento(codigo, autor, papel = PAPEL_TITULAR) {
         const alvo = pacientes.get(id)?.compartilhamentos.find((c) => c.codigo === codigo)
         if (!alvo) return false
         if (alvo.revogado) return true
         gravarCompartilhamentos(paciente(id).compartilhamentos
           .map((c) => (c.codigo === codigo ? { ...c, revogado: true } : c)))
-        registrar({ quem: autor, papel: 'Titular', acao: 'Revogou acesso temporário', itens: alvo.para })
+        registrar({ quem: autor, papel, acao: 'Revogou acesso temporário', itens: alvo.para })
         return true
       },
 
@@ -157,6 +167,14 @@ export function criarRepoMemoria(): Repositorio {
     for (const [email, u] of usuarios) if (doPaciente.has(u.id)) usuarios.delete(email)
     for (const [token, s] of sessoes) if (doPaciente.has(s.usuarioId)) sessoes.delete(token)
     return true
+  }
+
+  function buscarCompartilhamento(codigo: string) {
+    for (const [pacienteId, p] of pacientes) {
+      const c = p.compartilhamentos.find((x) => x.codigo === codigo)
+      if (c) return { pacienteId, para: c.para, expiraEm: c.expiraEm, situacao: situacao(c) }
+    }
+    return null
   }
 
   const perfilDe = (id: string) => {
@@ -234,11 +252,12 @@ export function criarRepoMemoria(): Repositorio {
     },
 
     async buscarCompartilhamentoAtivo(codigo) {
-      for (const [pacienteId, p] of pacientes) {
-        const c = p.compartilhamentos.find((x) => x.codigo === codigo)
-        if (c) return ativo(c) ? { pacienteId, para: c.para, expiraEm: c.expiraEm } : null
-      }
-      return null
+      const c = buscarCompartilhamento(codigo)
+      return c?.situacao === 'ativo' ? { pacienteId: c.pacienteId, para: c.para, expiraEm: c.expiraEm } : null
+    },
+
+    async buscarCompartilhamento(codigo) {
+      return buscarCompartilhamento(codigo)
     },
 
     async limpar({ sessoesExpiradasAntesDe, tentativasAntesDe, convidadosCriadosAntesDe }) {

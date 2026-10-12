@@ -106,3 +106,12 @@ test('reiniciar restaura o exemplo, e "Começar do zero" troca o modo', async ({
   await expect(page.getByTestId('estado-vazio')).toBeVisible()
   await expect.poll(async () => (await lerEstado(page.request)).eventos.length).toBe(0)
 })
+
+/* Simulação R2: "Aparecida Souza (simulação)" virava "A(" no avatar. */
+test('as iniciais do avatar ignoram parênteses e o que não é letra', async ({ page, contas }) => {
+  await contas.criar({ request: page.request, nome: 'Aparecida Souza (simulação)', modo: 'vazio' })
+  await page.goto('/#/app/linha')
+  await esperarApp(page)
+  await expect(page.getByTestId('shell-iniciais')).toHaveText('AS')
+  await expect(page.getByTestId('shell-perfil-nome')).toHaveText('Aparecida Souza (simulação)')
+})

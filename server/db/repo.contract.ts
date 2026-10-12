@@ -7,6 +7,7 @@ import {
 } from './repo.js'
 
 const AUTOR = 'Paciente Teste da Silva'
+const ACAO_EXCLUIR = 'Excluiu registro do histórico'
 const EXEMPLO = dadosExemplo(AUTOR)
 const FORMATO_QUANDO = /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/
 const FORMATO_DIA = /^\d{2}\/\d{2}\/\d{4}$/
@@ -85,6 +86,20 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
           })
           expect(acessos[0].id).toMatch(/^a/)
           expect(acessos[0].quando).toMatch(FORMATO_QUANDO)
+        })
+
+        it('com papel informado (responsável), as ações vão para o log com ele', async () => {
+          const [quem, papel] = ['Rafael Lima', 'Responsável (filho)']
+          await repo.adicionarEvento(EVENTO_NOVO, quem, papel)
+          await repo.excluirEvento(EVENTO_NOVO.id, quem, papel)
+          await repo.alternarConsentimento('c1', quem, papel)
+          const { codigo } = await repo.criarCompartilhamento('Dr. X', quem, papel)
+          await repo.revogarCompartilhamento(codigo, quem, papel)
+          const novos = (await repo.listarAcessos()).slice(0, 5)
+          expect(novos.map((a) => a.acao)).toEqual([
+            'Revogou acesso temporário', 'Gerou acesso temporário', 'Revogou acesso', ACAO_EXCLUIR, 'Anexou documento ao histórico',
+          ])
+          expect(novos.every((a) => a.quem === quem && a.papel === papel)).toBe(true)
         })
 
         /* O Oracle grava '' como NULL: string opcional vazia equivale a campo ausente nos dois repositórios. */
@@ -353,6 +368,25 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
         expect((await a.repo.estado()).compartilhamento).toBeNull()
       })
 
+      it('buscarCompartilhamento diz a situação do código, inclusive revogado e expirado', async () => {
+        const vivo = await a.repo.criarCompartilhamento('Dr. Vivo', 'Ana Alves')
+        const revogado = await a.repo.criarCompartilhamento('Dr. Revogado', 'Ana Alves')
+        await a.repo.revogarCompartilhamento(revogado.codigo, 'Ana Alves')
+        expect(await raiz.buscarCompartilhamento(vivo.codigo)).toEqual({
+          pacienteId: a.perfil.pacienteId, para: 'Dr. Vivo', expiraEm: vivo.expiraEm, situacao: 'ativo',
+        })
+        expect(await raiz.buscarCompartilhamento(revogado.codigo)).toMatchObject({
+          pacienteId: a.perfil.pacienteId, para: 'Dr. Revogado', situacao: 'revogado',
+        })
+        expect(await raiz.buscarCompartilhamento('ZZZZZ9')).toBeNull()
+
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(Date.now() + 30 * DIA + MINUTO)
+        expect((await raiz.buscarCompartilhamento(vivo.codigo))?.situacao).toBe('expirado')
+        /* Revogado e depois expirado continua revogado: foi a decisão do paciente que o desligou. */
+        expect((await raiz.buscarCompartilhamento(revogado.codigo))?.situacao).toBe('revogado')
+      })
+
       it('reiniciar apaga os códigos do paciente', async () => {
         const comp = await a.repo.criarCompartilhamento('Dr. X', 'Ana Alves')
         await a.repo.reiniciar()
@@ -562,6 +596,42 @@ export function suiteRepositorio(nome: string, fabrica: () => Repositorio | Prom
         })
         expect(atualizado).not.toHaveProperty('cartaoSus')
         expect(await raiz.obterPerfil(perfil.pacienteId)).toEqual(atualizado)
+      })
+
+      it('guarda o responsável; null volta a ser o histórico do próprio usuário', async () => {
+        const responsavel = { nome: 'Rafael Lima', relacao: 'filho' }
+        const perfil = await raiz.criarPaciente({ nome: 'Marcos Vinícius Teixeira', responsavel, convidado: false })
+        criados.push(perfil.pacienteId)
+        /* Sem a declaração de autorização, a leitura marca a pendência. */
+        expect(perfil).toMatchObject({ nome: 'Marcos Vinícius Teixeira', iniciais: 'MT', responsavel: { ...responsavel, autorizacaoPendente: true } })
+        expect(await raiz.obterPerfil(perfil.pacienteId)).toEqual(perfil)
+
+        const mantido = await raiz.atualizarPerfil(perfil.pacienteId, { plano: 'Plano Y' })
+        expect(mantido?.responsavel).toEqual({ ...responsavel, autorizacaoPendente: true })
+        /* O instante volta com o fuso de Brasília, igual ao gravado, mesmo vindo de outro fuso. */
+        const autorizadoEm = '2026-10-06T14:32:05-03:00'
+        const declarado = await raiz.atualizarPerfil(perfil.pacienteId, { responsavel: { ...responsavel, autorizadoEm: '2026-10-06T17:32:05Z' } })
+        expect(declarado?.responsavel).toEqual({ ...responsavel, autorizadoEm })
+        expect((await raiz.obterPerfil(perfil.pacienteId))?.responsavel).toEqual({ ...responsavel, autorizadoEm })
+        const trocado = await raiz.atualizarPerfil(perfil.pacienteId, { responsavel: { nome: 'Rafael', relacao: 'neto' } })
+        expect(trocado?.responsavel).toEqual({ nome: 'Rafael', relacao: 'neto', autorizadoEm })
+        const proprio = await raiz.atualizarPerfil(perfil.pacienteId, { responsavel: null })
+        expect(proprio).not.toHaveProperty('responsavel')
+        expect(await raiz.obterPerfil(perfil.pacienteId)).toEqual(proprio)
+      })
+
+      it('onboarding exemplo com responsável põe o nome e o papel dele nas ações do log', async () => {
+        const perfil = await raiz.criarPaciente({
+          nome: 'Marcos Vinícius Teixeira', responsavel: { nome: 'Rafael Lima', relacao: 'filho' }, convidado: false,
+        })
+        criados.push(perfil.pacienteId)
+        await raiz.aplicarOnboarding(perfil.pacienteId, 'exemplo')
+        const repo = raiz.paraPaciente(perfil.pacienteId)
+        const doUsuario = (await repo.listarAcessos()).filter((a) => a.papel.startsWith('Responsável'))
+        expect(doUsuario.length).toBe(EXEMPLO.acessos.filter((a) => a.papel === 'Titular').length)
+        expect(new Set(doUsuario.map((a) => `${a.quem} | ${a.papel}`))).toEqual(new Set(['Rafael Lima | Responsável (filho)']))
+        await repo.reiniciar()
+        expect((await repo.listarAcessos()).some((a) => a.papel === 'Titular')).toBe(false)
       })
 
       it('obterPerfil e atualizarPerfil devolvem null para paciente inexistente', async () => {

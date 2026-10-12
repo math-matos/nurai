@@ -4,6 +4,7 @@ import type { Evento, Medida } from '../../../src/data/types.js'
 import { pedirJson } from '../json.js'
 import { mensagens, serializarEvento, serializarEventos } from '../prompts.js'
 import { limparTextos } from '../texto.js'
+import { instrucaoDeVoz, naVozDoResponsavel, textosNaVoz, type PerfilVoz } from '../voz.js'
 import { dataBR, filtrarAncoras, formatarNumero, idsDe, mesAno, porData, type ContextoIa } from './comum.js'
 
 export interface RespostaExplicacao {
@@ -77,7 +78,24 @@ function explicarSemIa(evento: Evento, anteriores: Evento[]): Omit<RespostaExpli
   }
 }
 
-export async function explicarExame({ repo, llm }: Pick<ContextoIa, 'repo' | 'llm'>, id: string): Promise<RespostaExplicacao | null> {
+/* Sem perfil (chamada antiga), fala com o próprio paciente. Com responsável, o paciente vai na 3ª pessoa. */
+export async function explicarExame(
+  { repo, llm, perfil }: Pick<ContextoIa, 'repo' | 'llm'> & { perfil?: PerfilVoz }, id: string,
+): Promise<RespostaExplicacao | null> {
+  const r = await explicarNoHistorico({ repo, llm, perfil }, id)
+  if (!r || !perfil) return r
+  return {
+    ...r,
+    explicacao: textosNaVoz(r.explicacao, perfil),
+    pontosDeAtencao: textosNaVoz(r.pontosDeAtencao, perfil),
+    perguntasParaMedico: textosNaVoz(r.perguntasParaMedico, perfil),
+    aviso: naVozDoResponsavel(r.aviso, perfil),
+  }
+}
+
+async function explicarNoHistorico(
+  { repo, llm, perfil }: Pick<ContextoIa, 'repo' | 'llm'> & { perfil?: PerfilVoz }, id: string,
+): Promise<RespostaExplicacao | null> {
   const { eventos } = await repo.estado()
   const evento = eventos.find((e) => e.id === id)
   if (!evento) return null
@@ -87,6 +105,7 @@ export async function explicarExame({ repo, llm }: Pick<ContextoIa, 'repo' | 'll
 
   const r = await pedirJson(llm, mensagens(
     tarefa(evento),
+    ...(perfil?.responsavel ? [instrucaoDeVoz(perfil)] : []),
     `Registro a explicar:\n${serializarEvento(evento)}`,
     anteriores.length ? `Registros anteriores relacionados:\n${serializarEventos(anteriores)}` : 'Não há registros anteriores relacionados.',
   ), esquema)

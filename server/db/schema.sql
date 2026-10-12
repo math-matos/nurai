@@ -25,6 +25,28 @@ EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF;
 END;
 /
 
+-- Modo cuidador (o usuário gerencia o histórico de outra pessoa): colunas acrescentadas depois do
+-- lançamento. ALTER aditivo e idempotente (ORA-01430: a coluna já existe), sem tocar nos dados.
+BEGIN
+  EXECUTE IMMEDIATE 'ALTER TABLE pacientes ADD (responsavel_nome VARCHAR2(200))';
+EXCEPTION WHEN OTHERS THEN IF SQLCODE != -1430 THEN RAISE; END IF;
+END;
+/
+
+BEGIN
+  EXECUTE IMMEDIATE 'ALTER TABLE pacientes ADD (responsavel_relacao VARCHAR2(40))';
+EXCEPTION WHEN OTHERS THEN IF SQLCODE != -1430 THEN RAISE; END IF;
+END;
+/
+
+-- Quando o responsável declarou ter autorização para tratar os dados do paciente (LGPD). NULL numa conta
+-- cuidador anterior à declaração: o app pede a declaração no próximo acesso.
+BEGIN
+  EXECUTE IMMEDIATE 'ALTER TABLE pacientes ADD (responsavel_autorizado_em TIMESTAMP WITH TIME ZONE)';
+EXCEPTION WHEN OTHERS THEN IF SQLCODE != -1430 THEN RAISE; END IF;
+END;
+/
+
 -- Um usuário por paciente; email guardado em minúsculas.
 BEGIN
   EXECUTE IMMEDIATE q'[

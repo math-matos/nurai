@@ -3,6 +3,7 @@ import { EVENTOS } from '../../../src/data/seed.js'
 import { PERFIL_DEMO } from '../../db/exemplo.js'
 import { criarRepoMemoria } from '../../db/memoria.js'
 import { DEMO_MARCOS } from '../../teste/demo-marcos.js'
+import { pontosDoHistorico } from '../fatos.js'
 import { AVISO_MEDICO } from '../guardrails.js'
 import { criarLlmMock } from '../mock.js'
 import { descreverPerfil, serializarEvento } from '../prompts.js'
@@ -210,8 +211,41 @@ describe('gerarResumo', () => {
     const r = await gerarResumo(d, 'Endocrinologia')
     expect(prompt(chamadas)).toContain('FATOS DERIVADOS')
     expect(r.sintese).toEqual(['Diabetes desde 2019.'])
-    expect(r.pontos).toEqual([{ texto: 'Glicada subiu para 7,4% em 14/09/2025.', ancoras: ['e18'] }])
+    /* Os pontos em aberto (os mesmos da tela do médico) vêm primeiro; o modelo completa com o resto. */
+    expect(r.pontos).toEqual([
+      ...r.pontosEmAberto.map(({ texto, ancoras }) => ({ texto, ancoras })),
+      { texto: 'Glicada subiu para 7,4% em 14/09/2025.', ancoras: ['e18'] },
+    ])
     expect(r.perguntasSugeridas).toEqual(['Devo manter a metformina?'])
+  })
+
+  it('manda os pontos em aberto ao modelo e os garante mesmo quando ele não cita (N3)', async () => {
+    const { deps: d, chamadas } = await deps({
+      sintese: ['Fibrilação atrial em acompanhamento.'],
+      pontos: [
+        { texto: 'Doppler de carótidas de 27/05/2026 e novo pedido em 08/07/2026.', ancoras: ['e22', 'e24'] },
+        { texto: 'Carga de fibrilação subiu.', ancoras: ['e23'] },
+      ],
+      perguntasSugeridas: [],
+    })
+    const r = await gerarResumo(d, 'Cardiologia')
+    const abertos = pontosDoHistorico(EVENTOS)
+    expect(r.pontosEmAberto).toEqual(abertos)
+    expect(abertos.map((p) => p.tipo)).toContain('repeticao')
+    expect(prompt(chamadas)).toContain('PONTOS EM ABERTO')
+    for (const p of abertos) expect(prompt(chamadas)).toContain(p.texto)
+    /* O ponto do modelo sobre o par feito × pedido sai: o do servidor já diz o mesmo. */
+    expect(r.pontos).toEqual([...abertos.map(({ texto, ancoras }) => ({ texto, ancoras })), { texto: 'Carga de fibrilação subiu.', ancoras: ['e23'] }])
+  })
+
+  it('sem IA, a síntese conta os pontos em aberto e os lista nos pontos', async () => {
+    const raiz = criarRepoMemoria()
+    const { pacienteId } = await raiz.criarPaciente(PERFIL_DEMO)
+    const perfil = (await raiz.aplicarOnboarding(pacienteId, 'exemplo'))!
+    const r = await gerarResumo({ repo: raiz.paraPaciente(pacienteId), llm: criarLlmMock(), perfil }, 'Cardiologia')
+    expect(r.pontosEmAberto).toEqual(pontosDoHistorico(EVENTOS))
+    expect(r.sintese.join(' ')).toMatch(new RegExp(`Há ${r.pontosEmAberto.length} ponto\\(s\\) em aberto.*exame possivelmente repetido`))
+    expect(r.pontos.slice(0, r.pontosEmAberto.length).map((p) => p.texto)).toEqual(r.pontosEmAberto.map((p) => p.texto))
   })
 })
 

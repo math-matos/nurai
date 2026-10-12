@@ -4,6 +4,7 @@ import type { Perfil } from '../db/repo.js'
 import { dataBR, formatarNumero } from './casos/comum.js'
 import { derivarFatos, serializarFatos } from './fatos.js'
 import type { MensagemLlm } from './provider.js'
+import { instrucaoDeVoz } from './voz.js'
 
 export const SISTEMA = `Você é o assistente do Nurai, um app que organiza o histórico de saúde de quem o usa, reunindo registros de várias instituições.
 Regras inegociáveis:
@@ -12,7 +13,7 @@ Regras inegociáveis:
 - Cite os ids dos registros usados (ex.: "e12") no campo de âncoras pedido.
 - Sempre que houver uma decisão de saúde envolvida, recomende confirmar com o médico ou a equipe que acompanha a pessoa.
 - Não cite diagnósticos ou condições que não estejam no Perfil ou nos registros: não deduza uma doença pelo nome de um remédio nem por uma orientação.
-- Escreva em português do Brasil, em linguagem simples, falando diretamente com a pessoa ("você"). No texto, datas no formato dd/mm/aaaa e números com vírgula decimal (ex.: 7,2%); nos campos numéricos do JSON, sempre ponto decimal (ex.: 7.2).
+- Escreva em português do Brasil, em linguagem simples, falando diretamente com quem usa o app ("você"). Se o Perfil disser que quem usa o app cuida do histórico de outra pessoa, siga a regra de voz do Perfil: quem é paciente fica na 3ª pessoa, pelo primeiro nome. No texto, datas no formato dd/mm/aaaa e números com vírgula decimal (ex.: 7,2%); nos campos numéricos do JSON, sempre ponto decimal (ex.: 7.2).
 - Não presuma o gênero de ninguém: nada de artigo masculino ou feminino antes de "paciente" nem adjetivo flexionado pela pessoa; fale com "você", use "paciente" sem artigo ou a voz passiva (ex.: "Foi solicitada nova espirometria."), salvo o que o registro declarar.
 - Não escreva ids de registros (como "e12" ou "[e12]") no texto: eles vão só no campo de âncoras. No texto, refira-se a um registro pelo nome e pela data (ex.: "o exame de 05/03/2026").
 - Responda somente com um objeto JSON válido no formato pedido, sem texto antes ou depois, numa linha só e com acentos e cedilha escritos diretamente (ex.: "função"), nunca como escape (\\u00e7).`
@@ -43,11 +44,15 @@ export function contextoHistorico(eventos: Evento[]): string {
   ].join('\n\n')
 }
 
-/* Perfil preenchido pelo próprio paciente: idade, condições e alergias podem faltar. */
-export function descreverPerfil({ idade, condicoes, alergias }: Pick<Perfil, 'idade' | 'condicoes' | 'alergias'>): string {
+/* Perfil preenchido pelo próprio paciente: idade, condições e alergias podem faltar. Com responsável,
+   vem junto a regra de voz (o paciente na 3ª pessoa). */
+export function descreverPerfil(
+  { idade, condicoes, alergias, nome, responsavel }: Pick<Perfil, 'idade' | 'condicoes' | 'alergias'> & Partial<Pick<Perfil, 'nome' | 'responsavel'>>,
+): string {
   const lista = (itens: string[]) => (itens.length ? itens.join(', ') : 'nenhuma informada')
   const anos = idade === undefined ? 'idade não informada' : `${idade} anos`
-  return `Perfil: ${anos}. Condições registradas: ${lista(condicoes)}. Alergias: ${lista(alergias)}.`
+  const voz = nome ? instrucaoDeVoz({ nome, responsavel }) : ''
+  return [`Perfil: ${anos}. Condições registradas: ${lista(condicoes)}. Alergias: ${lista(alergias)}.`, voz].filter(Boolean).join('\n')
 }
 
 export function mensagens(...partes: string[]): MensagemLlm[] {

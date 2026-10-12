@@ -78,4 +78,24 @@ describe('extrairPorHeuristica', () => {
       expect(clinico('Receita\nAmoxicilina 500 mg, 1 cápsula de 8 em 8 horas por 7 dias').tipo).toBe('medicacao')
     })
   })
+
+  it('faixa só com teto ou só com piso, em tabela ou com rótulo, inclusive "até" e "acima de"', () => {
+    const bruto = clinico([
+      'Laboratório Teste - resultado de exame',
+      'Data da coleta: 12/03/2026',
+      'Colesterol total     212 mg/dL     Até 190 mg/dL',
+      'Colesterol HDL       44 mg/dL      Acima de 40 mg/dL',
+      'Triglicérides        165 mg/dL     inferior a 150 mg/dL',
+      'LDL: 118 mg/dL (VR: até 130)',
+      'HDL controle: 52 mg/dL (ref: ≥ 40)',
+    ].join('\n'))
+    expect(bruto.medidas).toEqual(expect.arrayContaining([
+      { nome: 'Colesterol total', valor: 212, unidade: 'mg/dL', refMin: null, refMax: 190 },
+      { nome: 'Colesterol HDL', valor: 44, unidade: 'mg/dL', refMin: 40, refMax: null },
+      { nome: 'Triglicérides', valor: 165, unidade: 'mg/dL', refMin: null, refMax: 150 },
+      { nome: 'LDL', valor: 118, unidade: 'mg/dL', refMin: null, refMax: 130 },
+      { nome: 'HDL controle', valor: 52, unidade: 'mg/dL', refMin: 40, refMax: null },
+    ]))
+    expect(bruto.medidas).toHaveLength(5)
+  })
 })

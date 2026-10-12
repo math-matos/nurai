@@ -327,3 +327,52 @@ describe('extrairEvento — uma chamada, saída curta', () => {
     expect(prompt).toMatch(/só os campos do formato/)
   })
 })
+
+/* Formatos dos laudos reais: tabela com "Desejável" e rótulos "VR". */
+const PERFIL_UNILATERAL = `Laboratório Quaresmeira
+Paciente: Marcos Vinícius Teixeira
+Data da coleta: 12/03/2026
+Colesterol total     212 mg/dL     Desejável: ≤ 190 mg/dL
+LDL-COLESTEROL       118 mg/dL     até 130 mg/dL
+Colesterol HDL       44 mg/dL      ≥ 40 mg/dL
+Triglicérides        165 mg/dL     desejável: inferior a 150 mg/dL
+Glicose              92 mg/dL      70 até 99 mg/dL
+Eosinófilos          0 %           1 a 5 %`
+
+describe('montarEvento — faixa unilateral impressa ("≤ X", "≥ X", "até X", "acima de X")', () => {
+  const lidas = (medidas: MedidaBruta[]) =>
+    montarEvento(bruto(medidas), undefined, PERFIL_UNILATERAL).evento.medidas!.map((x) => [x.nome, x.refMin, x.refMax, x.sinal])
+
+  it('teto impresso não ganha piso 0, mesmo com um 0 impresso em outra linha', () => {
+    expect(lidas([m('Colesterol total', 212, 0, 190), m('Colesterol LDL', 118, 0, 130), m('Triglicérides', 165, 0, 150)])).toEqual([
+      ['Colesterol total', undefined, 190, 'alterado'],
+      ['Colesterol LDL', undefined, 130, 'normal'],
+      ['Triglicérides', undefined, 150, 'alterado'],
+    ])
+  })
+
+  it('piso impresso não ganha teto, e o limite lido do lado errado volta para o lado impresso', () => {
+    expect(lidas([m('Colesterol HDL', 44, 40, 40), m('Colesterol LDL', 118, 130, null), m('Colesterol HDL', 38, null, 40)])).toEqual([
+      ['Colesterol HDL', 40, undefined, 'normal'],
+      ['Colesterol LDL', undefined, 130, 'normal'],
+      ['Colesterol HDL', 40, undefined, 'alterado'],
+    ])
+  })
+
+  it('"70 até 99" e "1 a 5" seguem com os dois lados; medida sem linha no documento fica como foi lida', () => {
+    expect(lidas([m('Glicose', 92, 70, 99), m('Eosinófilos', 0, 1, 5), m('Pressão arterial sistólica', 152, 0, 140)])).toEqual([
+      ['Glicose', 70, 99, 'normal'],
+      ['Eosinófilos', 1, 5, 'alterado'],
+      ['Pressão arterial sistólica', 0, 140, 'alterado'],
+    ])
+  })
+
+  it('o prompt trata "≤ X", "até X", "≥ X" e "acima de X" como faixa de um lado só', async () => {
+    const { llm, recebidas } = llmFixo(bruto([]))
+    await extrairEvento({ llm, perfil: MARCOS }, { texto: PEDIDO })
+    const prompt = instrucoes(recebidas)
+    expect(prompt).toMatch(/só com teto \([^)]*"≤ X"[^)]*"até X"[^)]*\): refMin null e refMax X/)
+    expect(prompt).toMatch(/só com piso \([^)]*"≥ X"[^)]*"acima de X"[^)]*\): refMin X e refMax null/)
+    expect(prompt).toMatch(/"≤ 190" não vira "0 a 190"/)
+  })
+})

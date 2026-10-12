@@ -18,7 +18,7 @@
     "db:setup": "tsx server/scripts/db-setup.ts",
     "test:oci": "pnpm smoke:genai && pnpm smoke:db",
     "eval:ia": "tsx server/scripts/eval-ia.ts",
-    "e2e": "playwright test",
+    "e2e": "node e2e/rede-isolada.mjs playwright test",
     "e2e:real": "node -e \"if(!process.env.E2E_BASE_URL){console.error('defina E2E_BASE_URL');process.exit(1)}\" && playwright test",
     "e2e:real:local": "E2E_REAL=1 playwright test --project=desktop",
     "e2e:prod": "E2E_BASE_URL=https://nurai-iota.vercel.app E2E_REAL=1 playwright test --grep @smoke --project=desktop --retries=0 && E2E_BASE_URL=https://nurai-iota.vercel.app E2E_REAL=1 playwright test --grep @mobile --project=mobile --retries=0",

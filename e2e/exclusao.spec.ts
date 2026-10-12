@@ -1,3 +1,4 @@
+import type { Locator, Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DIR_DOCUMENTOS } from './fixtures/gerar.ts'
@@ -86,4 +87,109 @@ test('logo após o F5 no detalhe, um clique em "Excluir este registro" abre a co
   await page.waitForLoadState('networkidle')
   await expect(confirmacao).toBeVisible()
   await expect(detalhe.getByTestId('evento-excluir')).toHaveCount(0)
+})
+
+/* Visto em produção (simulação R2, P12): o DELETE apagou no servidor, mas a resposta não chegou ao celular.
+   A tela não mudou, o erro foi para o topo da página (fora da vista) e o 2º toque recebeu 404. */
+test.describe('exclusão com resposta perdida ou repetida', () => {
+  test.use({ ignorarErros: [/net::ERR_FAILED/] })
+
+  const tocar = (alvo: Locator, isMobile: boolean) => (isMobile ? alvo.tap() : alvo.click())
+
+  async function abrirConfirmacao(page: Page, id: string, isMobile: boolean) {
+    await page.goto(`/#/app/linha/${id}`)
+    await esperarApp(page)
+    const detalhe = page.getByTestId('evento-detalhe')
+    await tocar(detalhe.getByTestId('evento-excluir'), isMobile)
+    const confirmar = detalhe.getByTestId('evento-excluir-confirmar')
+    /* A confirmação aparece onde a pessoa está olhando, não abaixo da dobra. */
+    await expect(confirmar).toBeInViewport()
+    return confirmar
+  }
+
+  async function afirmarExcluido(page: Page, id: string, titulo: string) {
+    await expect(page).toHaveURL(/#\/app\/linha$/)
+    const aviso = page.getByTestId('evento-excluido')
+    await expect(aviso).toContainText(`“${titulo}” foi excluído`)
+    await expect(aviso).toBeInViewport()
+    await expect(aviso).toBeFocused()
+    await expect(page.locator(`#evento-${id}`)).toHaveCount(0)
+    await expect(page.locator('.palco__falha')).toHaveCount(0)
+    await expect(page.getByRole('alert')).toHaveCount(0)
+  }
+
+  test('a resposta do DELETE se perde: a tela confere e mostra a exclusão, sem erro @mobile', async ({ page, contas, isMobile }) => {
+    await contas.criar({ request: page.request, nome: 'Paciente Resposta Perdida', modo: 'exemplo' })
+    const { id, titulo } = (await lerEstado(page.request)).eventos.find((e) => e.id === 'e09')!
+    const confirmar = await abrirConfirmacao(page, id, isMobile)
+
+    /* O servidor apaga; a resposta é derrubada no caminho. */
+    await page.route(`**/api/eventos/${id}`, async (rota) => {
+      await rota.fetch()
+      await rota.abort('failed')
+    }, { times: 1 })
+    await tocar(confirmar, isMobile)
+
+    await afirmarExcluido(page, id, titulo)
+    expect((await lerEstado(page.request)).eventos.map((e) => e.id)).not.toContain(id)
+  })
+
+  test('o registro já tinha sido excluído (404): a tela trata como excluído, sem erro @mobile', async ({ page, contas, isMobile }) => {
+    await contas.criar({ request: page.request, nome: 'Paciente Já Excluído', modo: 'exemplo' })
+    const { id, titulo } = (await lerEstado(page.request)).eventos.find((e) => e.id === 'e09')!
+    const confirmar = await abrirConfirmacao(page, id, isMobile)
+
+    expect((await page.request.delete(`/api/eventos/${id}`, { headers: CSRF })).status()).toBe(204)
+    const exclusao = respostaDe(page, 'DELETE', `/api/eventos/${id}`)
+    await tocar(confirmar, isMobile)
+    expect((await exclusao).status()).toBe(404)
+
+    await afirmarExcluido(page, id, titulo)
+  })
+
+  test('durante a exclusão o botão fica desabilitado; sem rede, o erro aparece na própria confirmação @mobile', async ({
+    page, contas, isMobile,
+  }) => {
+    await contas.criar({ request: page.request, nome: 'Paciente Sem Rede', modo: 'exemplo' })
+    const { id } = (await lerEstado(page.request)).eventos.find((e) => e.id === 'e09')!
+    const confirmar = await abrirConfirmacao(page, id, isMobile)
+
+    /* Nenhuma tentativa chega ao servidor. */
+    let tentativas = 0
+    let liberar = () => {}
+    const segura = new Promise<void>((r) => { liberar = r })
+    await page.route(`**/api/eventos/${id}`, async (rota) => {
+      tentativas += 1
+      await segura
+      await rota.abort('failed')
+    })
+    await tocar(confirmar, isMobile)
+    await expect(confirmar).toBeDisabled()
+    await expect(confirmar).toHaveText('Excluindo…')
+    liberar()
+
+    const confirmacao = page.getByTestId('evento-detalhe').getByRole('group', { name: /Excluir .* do seu histórico/ })
+    const erro = confirmacao.getByRole('alert')
+    await expect(erro).toContainText('Não foi possível falar com o servidor')
+    await expect(erro).toBeInViewport()
+    await expect(confirmar).toBeEnabled()
+    await expect(page.locator('.palco__falha')).toHaveCount(0)
+    expect(tentativas).toBeGreaterThanOrEqual(1)
+    expect((await lerEstado(page.request)).eventos.map((e) => e.id)).toContain(id)
+  })
+})
+
+/* Ao recarregar, uma falha passageira ao buscar o histórico não vira tela de erro: o app tenta de novo sozinho. */
+test.describe('recarga com servidor instável', () => {
+  test.use({ ignorarErros: [/HTTP 502|status of 502/] })
+
+  test('falha passageira ao carregar o histórico é repetida sem mostrar erro @mobile', async ({ page, contas }) => {
+    await contas.criar({ request: page.request, nome: 'Paciente Recarga Instável', modo: 'exemplo' })
+    await page.route('**/api/estado', (rota) => rota.fulfill({ status: 502, body: '' }), { times: 1 })
+    await page.goto('/#/app/linha/nao-existe')
+    await esperarApp(page)
+    await expect(page.getByText('Registro não encontrado')).toBeVisible()
+    await expect(page.getByText('Não foi possível carregar o histórico')).toHaveCount(0)
+    await expect(page.getByTestId('evento-item').first()).toBeVisible()
+  })
 })

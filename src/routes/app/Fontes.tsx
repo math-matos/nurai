@@ -10,6 +10,7 @@ import { navegar } from '../../lib/router'
 import { isoHoje, useAcoes, useEstado } from '../../lib/store'
 import { useRequisicao } from '../../lib/useRequisicao'
 import { TID } from '../../lib/testids'
+import { useTom } from '../../lib/tom'
 import { Conferencia } from './Conferencia'
 
 const LIMITE_PDF = 4 * 1024 * 1024
@@ -27,6 +28,7 @@ function consentimentoDa(fonte: FonteConectada, consentimentos: Consentimento[])
 
 export function Fontes() {
   const { fontes, consentimentos, saude } = useEstado()
+  const tom = useTom()
   const { conectarFonte, adicionarEvento } = useAcoes()
   const leitura = useRequisicao<Extracao>()
   const [texto, setTexto] = useState('')
@@ -197,7 +199,7 @@ export function Fontes() {
 
         {fontes.length === 0 && (
           <p className="painel__nada">
-            Nenhuma fonte conectada. Por enquanto, o seu histórico cresce com os documentos que você envia acima.
+            Nenhuma fonte conectada. Por enquanto, o {tom.dono('histórico')} cresce com os documentos que você envia acima.
           </p>
         )}
         <ul className="fontes__lista">
@@ -217,7 +219,7 @@ export function Fontes() {
                   {revogada && (
                     <p className="fonte__aviso">
                       A permissão desta fonte está desligada em Acessos e consentimento: ela não
-                      envia registros novos nem acessa o seu histórico até você reativar.
+                      envia registros novos nem acessa o {tom.dono('histórico')} até você reativar.
                     </p>
                   )}
                 </div>

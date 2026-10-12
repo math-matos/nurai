@@ -266,8 +266,9 @@ export function Projeto() {
               </li>
               <li>
                 <strong>Papel entra como cidadão de primeira classe.</strong> Quem tem pasta de
-                plástico não é exceção: é a maioria. Foto e PDF entram pelo mesmo fluxo das
-                integrações, com conferência do paciente antes de gravar.
+                plástico não é exceção: é a maioria. PDF com texto e texto colado entram pelo mesmo
+                fluxo das integrações, com conferência do paciente antes de gravar. Foto (leitura por
+                OCR) ainda não está neste protótipo.
               </li>
             </ul>
           </section>
