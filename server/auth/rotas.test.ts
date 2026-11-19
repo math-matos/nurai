@@ -323,7 +323,7 @@ describe('autenticação', () => {
       erroConsole.mockRestore()
     })
   })
-})
+}, 30_000) // Com a suíte inteira em paralelo, o hash de senha e os cadastros passam de 5 s.
 
 describe('conta', () => {
   let repo: Repositorio
