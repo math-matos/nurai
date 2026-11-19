@@ -30,7 +30,9 @@ passo de cuidado.
   (`server/dev.ts`), com o Vite fazendo proxy de `/api`.
 - **IA** (`server/ai/`): extração de documento, explicação de exame, copiloto ancorado,
   resumo pré-consulta e análise de pendências via OCI Generative AI. Sem as variáveis
-  `OCI_*`, cai para um provider **mock** determinístico.
+  `OCI_*`, cai para um provider **mock** determinístico. PDF escaneado pode ser lido com
+  OCI Document Understanding, opcional e ligado só com `OCI_DOCUMENT_OCR=1`
+  ([docs/setup-oci.md](docs/setup-oci.md), seção 10).
 - **Banco** (`server/db/`): Oracle Autonomous Database via `node-oracledb` em modo thin,
   com mTLS pela wallet. Sem as variáveis `ORACLE_DB_*`, usa um repositório **em memória**.
   Multi-tenant: todo dado clínico pertence a um paciente e some com ele.
@@ -110,7 +112,8 @@ Toda rota de `/api` exige sessão, exceto `/api/health`, `/api/auth/*` e
   aceite LGPD) e `POST /api/auth/login`. A sessão dura 7 dias, em cookie `HttpOnly`;
   `POST /api/auth/logout` encerra. Depois do cadastro, a pessoa escolhe começar com o
   histórico de exemplo ou vazio (`POST /api/onboarding`). `DELETE /api/conta` apaga a conta
-  com todos os dados.
+  com todos os dados. `GET /api/exportacao` devolve o histórico em JSON (portabilidade), sem
+  ids internos, e registra o download no registro de acessos.
 - **Conta demo** — `POST /api/auth/demo` cria uma conta convidada ("Visitante"), sem senha,
   já com o histórico de exemplo e sessão de 24 h. Ela não volta depois que a sessão expira, e
   é apagada com todos os dados 24 h depois disso.
@@ -209,7 +212,7 @@ Detalhes e troubleshooting em [docs/setup-oci.md](docs/setup-oci.md).
 | `#/app/copiloto`    | Copiloto ancorado: toda resposta cita os registros que a sustentam                               |
 | `#/app/cuidado`     | Pendências, reanálise do histórico com IA, centros de referência e ensaios clínicos              |
 | `#/app/resumo`      | Resumo pré-consulta por especialidade, com síntese por IA, imprimível e compartilhável           |
-| `#/app/privacidade` | Consentimento por instituição, revogável, e registro de acessos                                  |
+| `#/app/privacidade` | Consentimento por instituição, revogável, registro de acessos e download do histórico em JSON    |
 
 ## Roteiro de demonstração (3 minutos)
 

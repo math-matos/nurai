@@ -267,16 +267,18 @@ export function Projeto() {
               <li>
                 <strong>Papel entra como cidadão de primeira classe.</strong> Quem tem pasta de
                 plástico não é exceção: é a maioria. PDF com texto e texto colado entram pelo mesmo
-                fluxo das integrações, com conferência do paciente antes de gravar. Foto (leitura por
-                OCR) ainda não está neste protótipo.
+                fluxo das integrações, com conferência do paciente antes de gravar. PDF escaneado
+                pode ser lido por OCR (OCI Document Understanding) quando o serviço está ativo;
+                foto ainda não entra neste protótipo.
               </li>
             </ul>
 
             <h3>Registro das dificuldades e dos ajustes</h3>
             <p>
-              Cada rodada de teste com o protótipo gerou uma correção. A tabela junta a
-              dificuldade observada, o ajuste feito e onde ele está no código, para que cada
-              mudança possa ser conferida.
+              As dificuldades abaixo foram observadas nos testes de usabilidade com o protótipo
+              (os códigos entre parênteses identificam a observação no código, como P3), e cada
+              uma gerou uma correção. A tabela junta a dificuldade, o ajuste feito e onde ele
+              está no código, para que cada mudança possa ser conferida.
             </p>
             <div className="rolagem-x">
               <table className="doc__tabela">
@@ -318,16 +320,6 @@ export function Projeto() {
                     <th scope="row">Com responsável, os textos falavam com o cuidador como se ele fosse o paciente (N1)</th>
                     <td>Textos fixos e a voz da IA falam do paciente na terceira pessoa; o cuidador declara autorização antes de gerenciar o histórico</td>
                     <td>102b379, 575ee9f, 606fb90 · <code>voz.ts</code>, <code>cuidador.spec.ts</code></td>
-                  </tr>
-                  <tr>
-                    <th scope="row">Uma turma inteira, atrás do mesmo IP, não conseguia criar conta</th>
-                    <td>Limite de cadastro por IP de 50 por hora, contando todas as tentativas</td>
-                    <td>1288668 · <code>server/auth/rotas.ts</code></td>
-                  </tr>
-                  <tr>
-                    <th scope="row">A confirmação de exclusão da conta não aceitava "Excluir" como o teclado do celular digita</th>
-                    <td>A confirmação aceita a palavra como digitada; a exclusão da conta ganhou atalho na tela de privacidade</td>
-                    <td>f8b52a7 · <code>Privacidade.tsx</code>, <code>ExcluirConta.tsx</code></td>
                   </tr>
                 </tbody>
               </table>
@@ -503,7 +495,7 @@ export function Projeto() {
                   <tr><th scope="row">Interface</th><td>React 19 + TypeScript, roteamento por hash, CSS próprio com tokens</td><td>Nenhum framework de UI além do React: as telas ficam leves e sob controle do time</td></tr>
                   <tr><th scope="row">Domínio</th><td>Modelo de evento clínico tipado, com fonte, origem, medidas e faixa de referência</td><td>É o mesmo formato que a API valida e o Oracle Database persiste — o modelo já nasce estável</td></tr>
                   <tr><th scope="row">Estado</th><td>Store própria com assinatura, alimentada pela API; histórico no Oracle Autonomous Database</td><td>As telas falam só com a store — a API e o banco ficam atrás dela</td></tr>
-                  <tr><th scope="row">Inteligência</th><td>OCI Generative AI (Llama 3.3 70B) para extração, explicação, copiloto, resumo e pendências; motor determinístico no modo simulado</td><td>Âncoras que não existem no histórico são descartadas: nenhuma frase sem registro que a sustente</td></tr>
+                  <tr><th scope="row">Inteligência</th><td>OCI Generative AI (Llama 3.3 70B) para extração, explicação, copiloto, resumo e pendências; OCI Document Understanding, opcional, para ler PDF escaneado; motor determinístico no modo simulado</td><td>Âncoras que não existem no histórico são descartadas: nenhuma frase sem registro que a sustente</td></tr>
                 </tbody>
               </table>
             </div>
