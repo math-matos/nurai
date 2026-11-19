@@ -31,11 +31,15 @@ de dados — é falta de contexto acessível no instante da decisão clínica.
 5. Que isso reduz desperdício concreto (exame repetido evitado) e tempo de consulta.
 
 ## Restrições
-- MVP sem backend: todo estado em `localStorage`, dados sintéticos e rotulados como tais.
+- Protótipo com API e banco: o histórico é gravado pela API no Oracle Autonomous Database
+  (ou em memória, sem credenciais), e só a conversa com o copiloto fica no `localStorage`.
+  Dados sintéticos e rotulados como tais.
 - Nenhuma alegação clínica ou comercial não verificável. Nada de diagnóstico automático:
   a IA organiza, resume e encaminha — decisão é do médico.
 - LGPD é argumento central de produto, não rodapé.
-- Camada de nuvem (incl. Oracle) fica como fase seguinte, marcada na arquitetura.
+- Oracle Autonomous Database e OCI Generative AI já atendem a API. Ficam para a fase
+  seguinte: armazenamento de documentos, busca semântica, fila de ingestão e gestão de
+  segredos (detalhado na Parte 4 da página do projeto).
 
 ## Não é
 Não é prontuário eletrônico de hospital, não é telemedicina, não é seguro de saúde,

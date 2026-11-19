@@ -271,6 +271,83 @@ export function Projeto() {
                 OCR) ainda não está neste protótipo.
               </li>
             </ul>
+
+            <h3>Registro das dificuldades e dos ajustes</h3>
+            <p>
+              Cada rodada de teste com o protótipo gerou uma correção. A tabela junta a
+              dificuldade observada, o ajuste feito e onde ele está no código, para que cada
+              mudança possa ser conferida.
+            </p>
+            <div className="rolagem-x">
+              <table className="doc__tabela">
+                <thead>
+                  <tr><th>Dificuldade observada</th><th>Ajuste feito</th><th>Onde está</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">Com a tela aberta, a médica ainda abriu um registro depois que a paciente revogou o código (P3)</th>
+                    <td>Abrir um registro confere o código antes; revogado, a tela se fecha sem mostrar nada</td>
+                    <td>b9aceba · <code>AcessoMedico.tsx</code>, <code>medico.spec.ts</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Em telas estreitas, "Voltar à lista" não fechava o detalhe e o foco se perdia (P7)</th>
+                    <td>O botão fecha o detalhe e devolve o foco ao item de origem</td>
+                    <td>40f2985 · <code>LinhaDoTempo.tsx</code>, <code>mobile.spec.ts</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">O servidor apagou um registro, mas a resposta não chegou ao celular, e o segundo toque recebeu 404 (P12)</th>
+                    <td>404 passa a significar "já excluído"; repetir a exclusão após falha de rede é seguro</td>
+                    <td>46b8efd · <code>store.ts</code>, <code>exclusao.spec.ts</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">A folha do paciente dizia "Nenhuma pendência" enquanto a tela do médico mostrava o exame repetido (P13)</th>
+                    <td>Paciente e médico leem os mesmos pontos em aberto, calculados no servidor</td>
+                    <td>65e4eac, 2b6a113, 42bca7a · <code>Resumo.tsx</code>, <code>medico.spec.ts</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">A síntese com IA não citava o exame repetido que a tela do médico mostrava</th>
+                    <td>Os pontos em aberto entram primeiro no resumo; o modelo completa com o restante</td>
+                    <td><code>server/ai/casos/resumo.ts</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">"Aparecida Souza (mãe)" virava "A(" no avatar</th>
+                    <td>As iniciais ignoram parênteses e o que não é letra</td>
+                    <td>277514b, 889111b · <code>formato.ts</code>, <code>onboarding.spec.ts</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Com responsável, os textos falavam com o cuidador como se ele fosse o paciente (N1)</th>
+                    <td>Textos fixos e a voz da IA falam do paciente na terceira pessoa; o cuidador declara autorização antes de gerenciar o histórico</td>
+                    <td>102b379, 575ee9f, 606fb90 · <code>voz.ts</code>, <code>cuidador.spec.ts</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Uma turma inteira, atrás do mesmo IP, não conseguia criar conta</th>
+                    <td>Limite de cadastro por IP de 50 por hora, contando todas as tentativas</td>
+                    <td>1288668 · <code>server/auth/rotas.ts</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">A confirmação de exclusão da conta não aceitava "Excluir" como o teclado do celular digita</th>
+                    <td>A confirmação aceita a palavra como digitada; a exclusão da conta ganhou atalho na tela de privacidade</td>
+                    <td>f8b52a7 · <code>Privacidade.tsx</code>, <code>ExcluirConta.tsx</code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>O MVP resolve o problema identificado?</h3>
+            <p>
+              <strong>Resolve em parte.</strong> O protótipo cumpre a parte técnica do problema:
+              reúne fontes diferentes em uma linha do tempo, transforma PDF e texto colado em
+              registros estruturados e responde com a citação de cada registro. Os testes também
+              mostraram que a folha do paciente e a visão do médico precisam dizer a mesma coisa,
+              e isso foi corrigido.
+            </p>
+            <p>
+              A evidência de que o público-alvo sente essa dor ainda é insuficiente. O registro
+              de coleta não identifica o perfil dos participantes, e nenhum médico foi ouvido
+              até aqui. Por isso, as hipóteses sobre autorização de acesso, disposição a pagar
+              e uso do resumo na consulta ainda não estão validadas. O próximo passo é testar
+              com pelo menos três pessoas do público-alvo e entrevistar ao menos um médico.
+            </p>
           </section>
 
           {/* ---------------- PARTE 3 ---------------- */}
