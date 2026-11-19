@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -47,7 +48,31 @@ describe('textoDoDocumento', () => {
 })
 
 describe('ocrDoAmbiente', () => {
+  const CREDENCIAIS = {
+    OCI_TENANCY_OCID: 'ocid1.tenancy.oc1..t', OCI_USER_OCID: 'ocid1.user.oc1..u', OCI_FINGERPRINT: 'aa:bb',
+    /* O cliente do SDK valida a chave ao ser criado; esta nunca chega a chamar a OCI. */
+    OCI_PRIVATE_KEY: generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    }).privateKey,
+    OCI_COMPARTMENT_OCID: 'ocid1.compartment.oc1..c',
+  }
+
   it('sem variáveis OCI_*, não há OCR (a aplicação segue sem ele)', () => {
     expect(ocrDoAmbiente({})).toBeNull()
+  })
+
+  it('com as credenciais do GenAI, mas sem OCI_DOCUMENT_OCR=1, o OCR continua desligado', () => {
+    expect(ocrDoAmbiente({ ...CREDENCIAIS })).toBeNull()
+    expect(ocrDoAmbiente({ ...CREDENCIAIS, OCI_DOCUMENT_OCR: 'true' })).toBeNull()
+  })
+
+  it('OCI_DOCUMENT_OCR=1 sem credenciais não liga nada', () => {
+    expect(ocrDoAmbiente({ OCI_DOCUMENT_OCR: '1' })).toBeNull()
+  })
+
+  it('OCI_DOCUMENT_OCR=1 com credenciais liga o leitor', () => {
+    expect(ocrDoAmbiente({ ...CREDENCIAIS, OCI_DOCUMENT_OCR: '1' })).toBeTypeOf('function')
   })
 })

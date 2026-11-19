@@ -63,7 +63,7 @@ function extrairTexto(resposta: Awaited<ReturnType<GenerativeAiInferenceClient['
   return conteudo?.type === 'TEXT' ? ((conteudo as models.TextContent).text ?? '') : ''
 }
 
-function comTimeout<T>(promessa: Promise<T>, ms: number): Promise<T> {
+export function comTimeout<T>(promessa: Promise<T>, ms: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined
   const limite = new Promise<never>((_, rejeitar) => {
     timer = setTimeout(() => rejeitar(new Error(`timeout de ${ms} ms`)), ms)
