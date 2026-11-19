@@ -39,6 +39,28 @@ describe('API', () => {
     api = logado(app, conta.cookie)
   })
 
+  it('GET /api/exportacao devolve o histórico como arquivo JSON, sem o id interno', async () => {
+    await repo.adicionarEvento(EVENTO, NOME)
+    const res = await api.request('/api/exportacao')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename="nurai-historico-\d{4}-\d{2}-\d{2}\.json"$/)
+    const texto = await res.text()
+    const dados = JSON.parse(texto)
+    expect(dados.formato).toBe('nurai-historico/1')
+    expect(dados.perfil.nome).toBe(NOME)
+    expect(dados.perfil).not.toHaveProperty('pacienteId')
+    expect(dados.eventos.some((e: Evento) => e.titulo === EVENTO.titulo)).toBe(true)
+    expect(Array.isArray(dados.consentimentos)).toBe(true)
+    expect(Array.isArray(dados.registroDeAcessos)).toBe(true)
+    expect(texto).not.toContain(conta.perfil.pacienteId)
+  })
+
+  it('GET /api/exportacao exige sessão', async () => {
+    const res = await app.request('/api/exportacao')
+    expect(res.status).toBe(401)
+  })
+
   it('GET /api/health informa providers sem exigir sessão', async () => {
     const res = await app.request('/api/health')
     expect(res.status).toBe(200)

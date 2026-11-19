@@ -8,6 +8,7 @@ import type { LlmProvider } from './ai/provider.js'
 import { exigirCsrf, exigirSessao, type AmbienteApp } from './auth/middleware.js'
 import { rotasAuth } from './auth/rotas.js'
 import { normalizarCodigo } from './db/codigo.js'
+import { instanteIso } from './db/datas.js'
 import { autorDe, ErroConflito, type Repositorio } from './db/repo.js'
 import { esquemaCompartilhamento, esquemaEvento } from './esquemas.js'
 import { ErroValidacao, lerCorpo } from './http.js'
@@ -107,6 +108,26 @@ export function criarApp(deps: Deps): Hono<AmbienteApp> {
   })
 
   app.get('/acessos', async (c) => c.json(await c.var.repoPaciente.listarAcessos()))
+
+  /* Portabilidade (LGPD): o histórico do titular em JSON aberto, como arquivo para baixar.
+     Sai o que é só do sistema (id interno do paciente, código de compartilhamento ativo). */
+  app.get('/exportacao', async (c) => {
+    const perfil = Object.fromEntries(Object.entries(c.var.perfil).filter(([chave]) => chave !== 'pacienteId'))
+    const estado = await c.var.repoPaciente.estado()
+    const agora = instanteIso()
+    const dados = {
+      formato: 'nurai-historico/1',
+      exportadoEm: agora,
+      perfil,
+      eventos: estado.eventos,
+      consentimentos: estado.consentimentos,
+      registroDeAcessos: estado.acessos,
+    }
+    return c.body(JSON.stringify(dados, null, 2), 200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="nurai-historico-${agora.slice(0, 10)}.json"`,
+    })
+  })
 
   app.post('/reiniciar', async (c) => {
     await c.var.repoPaciente.reiniciar()

@@ -149,6 +149,17 @@ export function Privacidade() {
         </dl>
       </section>
 
+      <section className="painel">
+        <div className="painel__cabeca">
+          <h2>Baixar meu histórico</h2>
+          <p>
+            Um arquivo JSON com o seu perfil, os registros, as permissões e o registro de acessos.
+            Serve para guardar uma cópia ou levar o histórico para outro serviço.
+          </p>
+        </div>
+        <a className="btn" href="/api/exportacao" download>Baixar arquivo JSON</a>
+      </section>
+
       <ExcluirConta convidado={perfil.convidado} />
     </div>
   )
