@@ -2,7 +2,7 @@ import { extractText } from 'unpdf'
 import { ErroIa } from './erros.js'
 
 export const LIMITE_PDF = 4 * 1024 * 1024
-const MINIMO_CARACTERES = 20
+export const MINIMO_CARACTERES = 20
 
 export async function textoDoPdf(bytes: Uint8Array): Promise<string> {
   if (new TextDecoder().decode(bytes.subarray(0, 5)) !== '%PDF-') {

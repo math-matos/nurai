@@ -353,6 +353,40 @@ Docs:
 
 ---
 
+## 8.1 OCR de documentos digitalizados (opcional)
+
+PDFs escaneados (sem camada de texto) são lidos com o **OCI Document Understanding**, outro serviço da Oracle. Ele usa as mesmas variáveis `OCI_*` do Generative AI (seção 6), então **não há variável nova para preencher**.
+
+**Comportamento sem configuração:** nada muda. O PDF sem texto continua recebendo a mensagem "Não encontrei texto neste PDF…" e o usuário pode colar o texto. O mesmo vale quando o OCR falha: a API registra no log `[ocr] leitura falhou` com o nome do erro e segue com a mensagem.
+
+**Para ativar:**
+
+1. Confirme que as variáveis `OCI_*` estão preenchidas (seção 6.1 ou 6.2).
+2. Se o seu usuário não for administrador, adicione uma policy no mesmo compartment do GenAI (seção 3.2). A forma mais provável é:
+   ```
+   allow group NuraiDevs to use ai-service-document-family in compartment nurai
+   ```
+   **Não foi confirmado na doc qual é a permissão mínima exata.** Confira em *Policies for Document Understanding* na documentação da OCI antes de usar em produção.
+3. Reinicie a API (`pnpm dev:all`) ou faça um deploy na Vercel.
+
+**Para validar:** envie um PDF escaneado, por exemplo `e2e/fixtures/documentos/11-escaneado-sem-texto.pdf`, pela tela de anexos. Se o OCR funcionar, o registro aparece na linha do tempo com o texto lido. Se não, a mensagem antiga volta e o log do servidor mostra a causa.
+
+**Pendências conhecidas:**
+
+- O idioma é enviado como `pt` (padrão BCP 47). Não foi testado contra a OCI real. Se a leitura sair sem acentos ou em outro idioma, confira o valor aceito pela API.
+- A qualidade depende da digitalização. Foto com pouca luz ou inclinada pode vir com erros, e a conferência do paciente antes de gravar continua obrigatória.
+- Fotos (JPG/PNG) não são aceitas pela API de anexos; o OCR atual só lê PDF.
+
+**Troubleshooting:**
+
+| Sintoma no log (`[ocr]`) ou na tela | Causa provável | O que fazer |
+| --- | --- | --- |
+| `leitura falhou: NotAuthorizedOrNotFound` | falta a policy de Document Understanding | Revise o passo 2 |
+| `leitura falhou` com outro nome de erro | credenciais, região ou endpoint | Confira `OCI_REGION` e o compartment, como na seção 8 |
+| A mensagem de PDF sem texto continua, sem linha `[ocr]` no log | o OCR não está configurado (faltam variáveis `OCI_*`) | Confira a seção 6.1 |
+
+---
+
 ## 9. Segurança
 
 - **Nunca** commite o `.pem`, o wallet (`Wallet_*.zip`, `ewallet.pem`, `cwallet.sso`, ...) ou o `.env.local`. Guarde-os fora do repositório (ex.: `~/.oci/`).

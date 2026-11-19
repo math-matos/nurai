@@ -7,7 +7,8 @@ import { extrairEvento, type EntradaExtracao } from '../ai/casos/extrair.js'
 import { gerarPassos } from '../ai/casos/passos.js'
 import { gerarResumo } from '../ai/casos/resumo.js'
 import { ErroIa } from '../ai/erros.js'
-import { LIMITE_PDF, textoDoPdf } from '../ai/pdf.js'
+import { LIMITE_PDF } from '../ai/pdf.js'
+import { ocrDoAmbiente, textoDoDocumento } from '../ai/ocr.js'
 import type { LlmProvider } from '../ai/provider.js'
 import type { AmbienteApp } from '../auth/middleware.js'
 import { lerCorpo } from '../http.js'
@@ -33,7 +34,7 @@ async function lerPdf(c: Context): Promise<EntradaExtracao> {
   if (!(arquivo instanceof File)) throw new HTTPException(400, { message: 'Envie o PDF no campo "arquivo"' })
   if (arquivo.size > LIMITE_PDF) throw new ErroIa('ARQUIVO_GRANDE', 'O PDF passa do limite de 4 MB')
   const bytes = new Uint8Array(await arquivo.arrayBuffer())
-  return { texto: await textoDoPdf(bytes), nomeArquivo: arquivo.name.slice(0, 200) }
+  return { texto: await textoDoDocumento(bytes, ocrDoAmbiente()), nomeArquivo: arquivo.name.slice(0, 200) }
 }
 
 /* Os casos de IA enxergam só o histórico e o perfil do paciente da sessão. */
