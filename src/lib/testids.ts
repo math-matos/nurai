@@ -111,4 +111,5 @@ export const TID = {
   excluirConfirmacao: 'excluir-confirmacao',
   excluirBotao: 'excluir-botao',
   atalhoConta: 'atalho-conta',
+  exportarHistorico: 'exportar-historico',
 } as const

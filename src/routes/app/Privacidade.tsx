@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { ChipFonte, VazioHistorico } from '../../components/ui'
+import { ChipFonte, Falha, VazioHistorico } from '../../components/ui'
 import { ExcluirConta } from '../../components/ExcluirConta'
+import { api, mensagemDeErro } from '../../lib/api'
 import { formatarDataCurta } from '../../lib/formato'
-import { useAcoes, useEstado, usePerfil } from '../../lib/store'
+import { isoHoje, useAcoes, useEstado, usePerfil } from '../../lib/store'
 import { TID } from '../../lib/testids'
 import { tomDe } from '../../lib/tom'
 import { MeusDados } from './MeusDados'
@@ -14,6 +15,8 @@ export function Privacidade() {
   const tom = tomDe(perfil)
   const { alternarConsentimento, atualizarAcessos } = useAcoes()
   const [alternando, setAlternando] = useState<string | null>(null)
+  const [exportando, setExportando] = useState(false)
+  const [erroExportacao, setErroExportacao] = useState<string | null>(null)
   const ativos = consentimentos.filter((c) => c.ativo).length
 
   useEffect(() => { void atualizarAcessos() }, [atualizarAcessos])
@@ -23,6 +26,29 @@ export function Privacidade() {
     setAlternando(id)
     await alternarConsentimento(id)
     setAlternando(null)
+  }
+
+  /* Pela API (e não por link direto): com a sessão vencida, um link salvaria o JSON de erro como se fosse o histórico. */
+  const baixarHistorico = async () => {
+    if (exportando) return
+    setExportando(true)
+    setErroExportacao(null)
+    try {
+      const dados = await api.exportacao()
+      const url = URL.createObjectURL(new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `nurai-historico-${isoHoje()}.json`
+      document.body.append(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      void atualizarAcessos()
+    } catch (erro) {
+      setErroExportacao(mensagemDeErro(erro))
+    } finally {
+      setExportando(false)
+    }
   }
 
   /* A exclusão fica no fim de uma página longa: o atalho do topo leva até ela. */
@@ -151,13 +177,20 @@ export function Privacidade() {
 
       <section className="painel">
         <div className="painel__cabeca">
-          <h2>Baixar meu histórico</h2>
+          <h2>{tom.nome ? `Baixar o histórico de ${tom.nome}` : 'Baixar meu histórico'}</h2>
           <p>
-            Um arquivo JSON com o seu perfil, os registros, as permissões e o registro de acessos.
-            Serve para guardar uma cópia ou levar o histórico para outro serviço.
+            Um arquivo JSON com o perfil, os registros, as permissões e o registro de acessos
+            {tom.nome ? ` de ${tom.nome}` : ''}. Serve para guardar uma cópia ou levar o histórico
+            para outro serviço. O download fica no registro de acessos.
           </p>
         </div>
-        <a className="btn" href="/api/exportacao" download>Baixar arquivo JSON</a>
+        {erroExportacao && <Falha mensagem={erroExportacao} />}
+        <button
+          type="button" className="btn" onClick={() => { void baixarHistorico() }}
+          disabled={exportando} data-testid={TID.exportarHistorico}
+        >
+          {exportando ? 'Preparando o arquivo…' : 'Baixar arquivo JSON'}
+        </button>
       </section>
 
       <ExcluirConta convidado={perfil.convidado} />

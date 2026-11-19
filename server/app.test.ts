@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Evento } from '../src/data/types.js'
 import { criarLlmMock } from './ai/mock.js'
-import { criarApp } from './app.js'
+import { ACAO_EXPORTAR, criarApp } from './app.js'
 import { dadosExemplo } from './db/exemplo.js'
 import { criarRepoMemoria } from './db/memoria.js'
 import type { EstadoRepositorio, Repositorio, RepositorioPaciente } from './db/repo.js'
@@ -54,6 +54,14 @@ describe('API', () => {
     expect(Array.isArray(dados.consentimentos)).toBe(true)
     expect(Array.isArray(dados.registroDeAcessos)).toBe(true)
     expect(texto).not.toContain(conta.perfil.pacienteId)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+  })
+
+  it('GET /api/exportacao fica no registro de acessos, no nome de quem exportou', async () => {
+    const total = (await repo.estado()).eventos.length
+    await api.request('/api/exportacao')
+    const [ultimo] = await repo.listarAcessos()
+    expect(ultimo).toMatchObject({ acao: ACAO_EXPORTAR, quem: NOME, itens: `${total} registros` })
   })
 
   it('GET /api/exportacao exige sessão', async () => {

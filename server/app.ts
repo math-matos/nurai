@@ -40,6 +40,8 @@ const limiteExtrair = bodyLimit({
     : c.json({ erro: 'O corpo da requisição passa do limite de 4 MB', codigo: 'CORPO_GRANDE' }, 413),
 })
 
+export const ACAO_EXPORTAR = 'Exportou o histórico'
+
 function naoEncontrado(oQue: string, id: string): never {
   throw new HTTPException(404, { message: `${oQue} "${id}" não encontrado` })
 }
@@ -110,10 +112,14 @@ export function criarApp(deps: Deps): Hono<AmbienteApp> {
   app.get('/acessos', async (c) => c.json(await c.var.repoPaciente.listarAcessos()))
 
   /* Portabilidade (LGPD): o histórico do titular em JSON aberto, como arquivo para baixar.
-     Sai o que é só do sistema (id interno do paciente, código de compartilhamento ativo). */
+     Sai o que é só do sistema (id interno do paciente, código de compartilhamento ativo).
+     Exportar é ler o histórico inteiro: fica no registro de acessos, no nome de quem exportou. */
   app.get('/exportacao', async (c) => {
     const perfil = Object.fromEntries(Object.entries(c.var.perfil).filter(([chave]) => chave !== 'pacienteId'))
     const estado = await c.var.repoPaciente.estado()
+    await c.var.repoPaciente.registrarAcesso({
+      ...autorDe(c.var.perfil), acao: ACAO_EXPORTAR, itens: `${estado.eventos.length} registros`,
+    })
     const agora = instanteIso()
     const dados = {
       formato: 'nurai-historico/1',
@@ -126,6 +132,7 @@ export function criarApp(deps: Deps): Hono<AmbienteApp> {
     return c.body(JSON.stringify(dados, null, 2), 200, {
       'Content-Type': 'application/json; charset=utf-8',
       'Content-Disposition': `attachment; filename="nurai-historico-${agora.slice(0, 10)}.json"`,
+      'Cache-Control': 'no-store',
     })
   })
 

@@ -297,6 +297,8 @@ export const api = {
   /* Os mesmos pontos que o médico vê pelo código, calculados dos registros sem IA. */
   pontosEmAberto: () => requisitar<{ pontosEmAberto: PontoEmAberto[] }>('/pontos-em-aberto'),
   acessos: () => requisitar<AcessoLog[]>('/acessos'),
+  /* O histórico inteiro em JSON, para o titular baixar (portabilidade). Fica no registro de acessos. */
+  exportacao: () => requisitar<unknown>('/exportacao'),
   reiniciar: () => requisitar<EstadoServidor>('/reiniciar', json('POST')),
 
   adicionarEvento: (evento: Evento) => requisitar<Evento>('/eventos', json('POST', evento)),

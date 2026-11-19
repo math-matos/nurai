@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { esperarApp, lerEstado } from './helpers/sessao.ts'
 import { expect, test } from './helpers/test.ts'
 
@@ -110,4 +111,23 @@ test('excluir a conta leva à landing e o login com ela deixa de funcionar', asy
   await page.getByTestId('entrar-enviar').click()
   await expect(page.getByTestId('erro-formulario')).toHaveText('E-mail ou senha incorretos.')
   await expect(page).toHaveURL(/#\/entrar$/)
+})
+
+test('baixar o histórico gera um JSON com os registros e entra no registro de acessos', async ({ page, contas }) => {
+  const conta = await contas.criar({ request: page.request, nome: 'Helena Duarte Nogueira', modo: 'exemplo' })
+  await page.goto('/#/app/privacidade')
+  await esperarApp(page)
+
+  const download = page.waitForEvent('download')
+  await page.getByTestId('exportar-historico').click()
+  const arquivo = await download
+  expect(arquivo.suggestedFilename()).toMatch(/^nurai-historico-\d{4}-\d{2}-\d{2}\.json$/)
+  const dados = JSON.parse(readFileSync(await arquivo.path(), 'utf8'))
+  expect(dados.formato).toBe('nurai-historico/1')
+  expect(dados.eventos).toHaveLength((await lerEstado(page.request)).eventos.length)
+  expect(dados.perfil).not.toHaveProperty('pacienteId')
+
+  const registro = page.locator('.auditoria li').first()
+  await expect(registro).toContainText('Exportou o histórico')
+  await expect(registro).toContainText(conta.nome)
 })
