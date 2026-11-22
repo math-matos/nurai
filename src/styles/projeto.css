@@ -152,7 +152,6 @@
 .doc__tabela td { color: var(--ink-2); }
 .doc__ok { color: var(--sig-normal) !important; font-weight: 600; }
 .doc__fora th, .doc__fora td { color: var(--ink-3); }
-.doc__tabela--vazia td { color: var(--line-strong); font-size: 18px; }
 
 /* ---------------- questionário ---------------- */
 .questionario { counter-reset: q; display: grid; gap: 2px; }

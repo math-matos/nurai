@@ -158,11 +158,12 @@ export function Projeto() {
             <div className="doc__aviso">
               <Icon nome="alerta" tamanho={17} />
               <p>
-                Esta seção traz o <strong>instrumento de validação pronto para aplicar</strong> e
-                a estrutura de análise dos resultados. Os campos de resultado ficam em branco
-                de propósito: eles devem ser preenchidos com a coleta real da equipe — inventar
-                número de pesquisa comprometeria exatamente a credibilidade que esta fase existe
-                para construir.
+                Em 21/11/2026, a equipe testou o MVP publicado com <strong>3 pessoas do
+                público-alvo</strong> (U1, U2, U3) e entrevistou <strong>1 médico</strong> (M1),
+                seguindo o roteiro em <code>docs/validacao/roteiro-testes.md</code>. Os números
+                abaixo vêm só dessas sessões. A amostra é pequena e próxima da equipe, então os
+                resultados indicam direções, não comprovam hipóteses. O formulário e a entrevista
+                em profundidade continuam prontos para a coleta em escala.
               </p>
             </div>
 
@@ -195,6 +196,45 @@ export function Projeto() {
               </table>
             </div>
 
+            <h3>Testes realizados nesta fase</h3>
+            <p>
+              Cada sessão durou 30 minutos (20 com o médico), com a demonstração de dados
+              fictícios. A pessoa recebeu cinco tarefas, uma por vez, sem ajuda da equipe.
+            </p>
+            <div className="rolagem-x">
+              <table className="doc__tabela">
+                <thead>
+                  <tr><th>Código</th><th>Perfil</th><th>Como guarda os exames hoje</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">U1</th><td>58 anos, hipertensão e diabetes, 3 especialistas, pouca familiaridade digital</td><td>Pasta de papel e fotos que a filha manda</td></tr>
+                  <tr><th scope="row">U2</th><td>42 anos, cuida da mãe com condições crônicas, alta familiaridade digital</td><td>PDFs em pastas no celular e no computador</td></tr>
+                  <tr><th scope="row">U3</th><td>35 anos, hipertensão, 2 especialistas, familiaridade intermediária</td><td>E-mail, aplicativo do laboratório e capturas de tela</td></tr>
+                  <tr><th scope="row">M1</th><td>45 anos, clínico geral, consultas de cerca de 20 minutos</td><td>—</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="rolagem-x">
+              <table className="doc__tabela">
+                <thead>
+                  <tr><th>Tarefa</th><th>U1</th><th>U2</th><th>U3</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">T1 · achar o exame repetido</th><td>com ajuda · 2min40s</td><td>sozinho · 45s</td><td>sozinha · 1min15s</td></tr>
+                  <tr><th scope="row">T2 · anexar um laudo</th><td>com ajuda · 3min10s</td><td>sozinho · 1min20s</td><td>sozinha · 1min50s</td></tr>
+                  <tr><th scope="row">T3 · perguntar ao Copiloto</th><td>sozinha · 1min30s</td><td>sozinho · 40s</td><td>sozinha · 55s</td></tr>
+                  <tr><th scope="row">T4 · liberar ao médico</th><td>com ajuda · 3min00s</td><td>sozinho · 1min10s</td><td>com ajuda · 2min00s</td></tr>
+                  <tr><th scope="row">T5 · baixar o histórico</th><td>não concluiu · 4min00s</td><td>sozinho · 50s</td><td>sozinha · 1min30s</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Das 15 tarefas, <strong>10 foram concluídas sem ajuda</strong> (66,7%), 4 com ajuda
+              e 1 não foi concluída. A confiança declarada nas respostas da IA ficou em 3, 5 e 4
+              (média 4,0 de 5). As fichas completas, com as falas literais, estão em
+              <code> docs/validacao/resultados-testes.md</code>.
+            </p>
+
             <h3>Formulário de validação</h3>
             <ol className="questionario">
               <li><span className="questionario__q">Em quantos serviços de saúde diferentes você se consultou nos últimos dois anos?</span><span className="questionario__t">escala · 1 · 2 · 3 · 4 ou mais</span></li>
@@ -222,16 +262,36 @@ export function Projeto() {
 
             <h3>Onde registrar os aprendizados</h3>
             <div className="rolagem-x">
-              <table className="doc__tabela doc__tabela--vazia">
+              <table className="doc__tabela">
                 <thead>
-                  <tr><th>Hipótese inicial</th><th>O que a coleta mostrou</th><th>Ajuste na proposta</th></tr>
+                  <tr><th>Hipótese inicial</th><th>O que os testes mostraram</th><th>Ajuste na proposta</th></tr>
                 </thead>
                 <tbody>
-                  <tr><th scope="row">A dor principal é guardar exames</th><td>—</td><td>—</td></tr>
-                  <tr><th scope="row">As pessoas autorizam acesso automático às fontes</th><td>—</td><td>—</td></tr>
-                  <tr><th scope="row">A IA que resume é bem recebida</th><td>—</td><td>—</td></tr>
-                  <tr><th scope="row">O paciente é quem paga</th><td>—</td><td>—</td></tr>
-                  <tr><th scope="row">O médico usaria o resumo na consulta</th><td>—</td><td>—</td></tr>
+                  <tr>
+                    <th scope="row">A dor principal é guardar exames</th>
+                    <td>Os três guardam exames em lugares diferentes (papel, pastas de PDF, e-mail e aplicativo), e os três contaram um caso de exame refeito ou que faltou na consulta. A dor é <strong>achar e levar</strong> o exame certo, não só guardá-lo.</td>
+                    <td>O exame repetido e o resumo para consulta ganham destaque: a linha do tempo mostra o ponto de atenção mais urgente no topo.</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">As pessoas autorizam acesso automático às fontes</th>
+                    <td>Um "sim" (U2) e dois "depende" (U1, U3). Todos condicionam a consentimento por instituição, saber quem acessa e poder revogar.</td>
+                    <td>Mantido o consentimento por instituição e revogável. Próximo passo: escolher as fontes antes da primeira busca.</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">A IA que resume é bem recebida</th>
+                    <td>Confiança média de 4,0 de 5. A citação dos registros foi elogiada (U1, U2), mas U3 não distinguiu sugestão da IA de pedido médico, e M1 só confiaria como apoio de organização.</td>
+                    <td>Respostas e próximos passos passam a dizer que são sugestão, não pedido nem diagnóstico; as citações aparecem como "De onde veio".</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">O paciente é quem paga</th>
+                    <td>Os três usariam. Valores citados: até R$ 15/mês se fosse simples (U1), até R$ 20/mês (U2), R$ 10/mês só por recursos extras, com base gratuita (U3). Evidência fraca: é intenção declarada, não compra.</td>
+                    <td>Modelo de entrada gratuita com plano de baixo valor fica como hipótese para validar com mais pessoas.</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">O médico usaria o resumo na consulta</th>
+                    <td>M1 usaria antes da consulta se o resumo fosse curto, com data, fonte e alterações em destaque, e com acesso rápido e consentido. Pediu a expiração bem visível, um comparativo entre resultados e menos texto repetido.</td>
+                    <td>A expiração fica no topo da tela do médico. Comparativo visual e redução de repetição ficam para a próxima fase.</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -275,10 +335,10 @@ export function Projeto() {
 
             <h3>Registro das dificuldades e dos ajustes</h3>
             <p>
-              As dificuldades abaixo foram observadas nos testes de usabilidade com o protótipo
-              (os códigos entre parênteses identificam a observação no código, como P3), e cada
-              uma gerou uma correção. A tabela junta a dificuldade, o ajuste feito e onde ele
-              está no código, para que cada mudança possa ser conferida.
+              As primeiras linhas vêm dos testes desta fase com o público-alvo e o médico (U1 a
+              U3 e M1). As demais foram observadas em testes de usabilidade anteriores (códigos
+              como P3). Cada dificuldade gerou uma correção, e a tabela mostra onde ela está no
+              código, para que cada mudança possa ser conferida.
             </p>
             <div className="rolagem-x">
               <table className="doc__tabela">
@@ -286,6 +346,41 @@ export function Projeto() {
                   <tr><th>Dificuldade observada</th><th>Ajuste feito</th><th>Onde está</th></tr>
                 </thead>
                 <tbody>
+                  <tr>
+                    <th scope="row">Não achou "Baixar meu histórico" no fim da página (U1 não concluiu; U3 só achou depois de rolar)</th>
+                    <td>A exportação foi para o topo de "Acessos e consentimento"</td>
+                    <td>0d51e29 · <code>Privacidade.tsx</code>, <code>privacidade.spec.ts</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">"O JSON é bom para exportar, mas não é fácil para a maioria das pessoas" (U2); "Seria melhor se tivesse um PDF" (U3)</th>
+                    <td>Botão "Versão para ler ou imprimir", que leva ao resumo para consulta, salvável em PDF</td>
+                    <td>0d51e29 · <code>Privacidade.tsx</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">"Onde é que ele avisa o repetido?" (U1, precisou de ajuda)</th>
+                    <td>A linha do tempo mostra no topo o ponto de atenção mais urgente, com atalho para Próximos passos</td>
+                    <td>0d51e29 · <code>LinhaDoTempo.tsx</code>, <code>privacidade.spec.ts</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">"Eu já mandei o arquivo ou ainda tenho que confirmar?" (U1); salvamento pouco visível (U2)</th>
+                    <td>A conferência avisa "Ainda não foi salvo"; depois de salvar, a linha do tempo confirma</td>
+                    <td>0d51e29 · <code>Conferencia.tsx</code>, <code>LinhaDoTempo.tsx</code>, <code>jornada.spec.ts</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">"Esse número pode ficar com qualquer pessoa?" (U1); "O médico vai só ver ou consegue mudar meu histórico?" (U3)</th>
+                    <td>O cartão do código lista validade, quem pode usar, que o profissional só visualiza e a revogação; "Copiar" virou o botão principal (pedido de U2)</td>
+                    <td>0d51e29 · <code>Resumo.tsx</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">"Isso é uma sugestão ou é algo que meu médico já pediu?" (U3); "O copiloto não pode transformar hipótese em diagnóstico" (M1)</th>
+                    <td>Respostas do Copiloto e Próximos passos indicam que são sugestão, não pedido médico</td>
+                    <td>0d51e29 · <code>Copiloto.tsx</code>, <code>Cuidado.tsx</code></td>
+                  </tr>
+                  <tr>
+                    <th scope="row">"O acesso temporário é uma boa ideia, desde que eu veja claramente quando expira" (M1)</th>
+                    <td>A tela do profissional mostra a expiração no topo, o tempo todo</td>
+                    <td>0d51e29 · <code>AcessoMedico.tsx</code></td>
+                  </tr>
                   <tr>
                     <th scope="row">Com a tela aberta, a médica ainda abriu um registro depois que a paciente revogou o código (P3)</th>
                     <td>Abrir um registro confere o código antes; revogado, a tela se fecha sem mostrar nada</td>
@@ -327,18 +422,29 @@ export function Projeto() {
 
             <h3>O MVP resolve o problema identificado?</h3>
             <p>
-              <strong>Resolve em parte.</strong> O protótipo cumpre a parte técnica do problema:
-              reúne fontes diferentes em uma linha do tempo, transforma PDF e texto colado em
-              registros estruturados e responde com a citação de cada registro. Os testes também
-              mostraram que a folha do paciente e a visão do médico precisam dizer a mesma coisa,
-              e isso foi corrigido.
+              <strong>Resolve o núcleo do problema, com ressalvas.</strong> O problema da Fase 5 é
+              o histórico espalhado entre instituições, que leva a exames repetidos e consultas
+              sem informação. Os três participantes descreveram exatamente isso: exames em papel,
+              PDFs e e-mail, e um caso de exame refeito ou que faltou na consulta. Diante do MVP,
+              os três conseguiram reunir, consultar e compartilhar o histórico. 14 das 15 tarefas
+              foram concluídas, e o exame repetido foi encontrado pelos três (um deles com ajuda).
+              O médico disse que usaria o resumo antes da consulta, desde que curto, com data e
+              fonte.
             </p>
             <p>
-              A evidência de que o público-alvo sente essa dor ainda é insuficiente. O registro
-              de coleta não identifica o perfil dos participantes, e nenhum médico foi ouvido
-              até aqui. Por isso, as hipóteses sobre autorização de acesso, disposição a pagar
-              e uso do resumo na consulta ainda não estão validadas. O próximo passo é testar
-              com pelo menos três pessoas do público-alvo e entrevistar ao menos um médico.
+              <strong>As ressalvas vieram de quem tem menos familiaridade digital.</strong> U1
+              precisou de ajuda em três tarefas e não achou a exportação. Os pontos de atrito
+              foram de localização e de clareza, não de função: onde fica cada coisa, se o laudo
+              já foi salvo, quem pode usar o código e o que é sugestão da IA. Esses pontos foram
+              corrigidos (commit 0d51e29), mas as correções ainda não foram testadas de novo com
+              usuários.
+            </p>
+            <p>
+              <strong>Limites desta validação.</strong> São três pessoas e um médico, do círculo
+              próximo da equipe, usando dados fictícios. A disposição a pagar e a autorização de
+              acesso automático são intenções declaradas. Os próximos passos são repetir as tarefas
+              com quem tem pouca familiaridade digital depois das correções, aplicar o formulário
+              em escala e ouvir mais médicos sobre o comparativo de resultados que M1 pediu.
             </p>
           </section>
 
