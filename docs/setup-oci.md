@@ -372,7 +372,7 @@ Docs:
 
 PDFs escaneados (sem camada de texto) podem ser lidos com o **OCI Document Understanding**, outro serviço da Oracle. Ele usa as mesmas credenciais `OCI_*` do Generative AI (seção 6) e só liga com **`OCI_DOCUMENT_OCR=1`**.
 
-**Desligado (padrão):** nada muda. O PDF sem texto recebe a mensagem "Não encontrei texto neste PDF…" e a pessoa pode colar o texto. O mesmo acontece quando o OCR está ligado e falha, demora mais de 15 s ou lê menos de 20 caracteres.
+**Desligado (padrão):** nada muda. O PDF sem texto recebe a mensagem "Este PDF não tem texto selecionável…" e a pessoa pode colar o texto. O mesmo acontece quando o OCR está ligado e falha, demora mais de 15 s ou lê menos de 20 caracteres.
 
 **Por que é opt-in:** o serviço cobra por página, e ligar o OCR muda o resultado de um PDF escaneado. O `pnpm e2e:real` e o `pnpm e2e:prod` esperam a mensagem de "sem texto" para `11-escaneado-sem-texto.pdf`. Com o OCR ligado no ambiente testado, esse caso passa a ser lido e o teste falha.
 
@@ -391,8 +391,7 @@ PDFs escaneados (sem camada de texto) podem ser lidos com o **OCI Document Under
 
 **Pendências conhecidas:**
 
-- Ainda não foi testado contra a OCI real.
-- O idioma não é enviado, e o serviço usa o padrão dele. Se a leitura sair sem acentos, teste o campo `language` de `analyzeDocument` em `server/ai/ocr.ts`.
+- Testado contra a OCI real em 21/11/2026 com `11-escaneado-sem-texto.pdf`: 711 caracteres lidos em cerca de 4,5 s, com acentos corretos, sem enviar o idioma e com uma conta administradora (sem policy extra).
 - A qualidade depende da digitalização. A conferência do paciente antes de gravar continua obrigatória.
 - Foto (JPG/PNG) não é aceita pela API de anexos. O OCR atual só lê PDF.
 
