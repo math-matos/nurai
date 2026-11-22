@@ -5,13 +5,15 @@ Dois roteiros:
 1. **Conferência da aplicação**: a equipe confere que o fluxo principal funciona antes das sessões.
 2. **Testes com o público-alvo e entrevista com médico**: o que a Parte 2 da Fase 7 pede (pelo menos 3 usuários do público-alvo).
 
+**Link do app:** https://nurai-one.vercel.app (abre sem login, no celular ou no computador).
+
 Paciente, instituições e resultados da demonstração são fictícios. **Ninguém informa dados reais de saúde** durante os testes.
 
 ---
 
 ## 1. Conferência da aplicação (cerca de 15 minutos)
 
-Suba com `pnpm dev:all` e abra `http://localhost:5173`. Clique em **"Abrir a demonstração"**.
+Abra https://nurai-one.vercel.app (ou, localmente, `pnpm dev:all` e `http://localhost:5173`). Clique em **"Abrir a demonstração"**.
 
 Os PDFs citados estão em `e2e/fixtures/documentos/`.
 
@@ -19,7 +21,7 @@ Os PDFs citados estão em `e2e/fixtures/documentos/`.
 |---|---|---|---|
 | 1 | Linha do tempo | Olhar a lista | 24 registros de fontes diferentes |
 | 2 | Fontes e anexos | **Escolher PDF** → `01-hemograma-2026-03-10.pdf` | Abre a conferência com os valores lidos. Ao salvar, o registro aparece na linha do tempo. |
-| 3 | Fontes e anexos | Enviar `11-escaneado-sem-texto.pdf` | Mensagem de PDF sem texto (com o OCR desligado; ver `docs/setup-oci.md`, seção 10) |
+| 3 | Fontes e anexos | Enviar `11-escaneado-sem-texto.pdf` | Com o OCR ligado, abre a conferência com o texto lido da imagem. Com o OCR desligado, aparece a mensagem de PDF sem texto (ver `docs/setup-oci.md`, seção 10) |
 | 4 | Perguntar ao Copiloto | "Ficou alguma coisa pendente?" | A resposta cita registros; clicar numa citação abre o registro |
 | 5 | Próximos passos | Ver as pendências | Aparece o exame repetido (perfil lipídico) |
 | 6 | Resumo para consulta | **Gerar acesso temporário** e anotar o código | Aparece um código de 6 caracteres |
@@ -27,7 +29,7 @@ Os PDFs citados estão em `e2e/fixtures/documentos/`.
 | 8 | Resumo para consulta | Revogar o código e voltar à janela anônima | A tela do médico se fecha |
 | 9 | Acessos e consentimento | Rolar até **"Baixar meu histórico"** → **"Baixar arquivo JSON"** | O arquivo baixa e o Registro de acessos mostra "Exportou o histórico" |
 
-Com `OCI_*` e `ORACLE_DB_*` configurados, cada ação de IA consome crédito da OCI e a conta de demonstração fica no Oracle (é apagada sozinha 24 h depois de a sessão vencer). Para conferir o modo: `http://localhost:3001/api/health`.
+Com `OCI_*` e `ORACLE_DB_*` configurados, cada ação de IA consome crédito da OCI e a conta de demonstração fica no Oracle (é apagada sozinha 24 h depois de a sessão vencer). Para conferir o modo: https://nurai-one.vercel.app/api/health (localmente, `http://localhost:3001/api/health`).
 
 Se um passo falhar, anote o número do passo e a mensagem de erro.
 
@@ -37,13 +39,14 @@ Se um passo falhar, anote o número do passo e a mensagem de erro.
 
 ### Quem recrutar
 
-- **3 pessoas do público-alvo**: adultos com doença crônica (diabetes, hipertensão, cardiopatia) que consultam mais de um especialista, **ou** quem cuida dos exames de alguém assim. Não podem ser familiares de integrantes da equipe.
+- **3 pessoas do público-alvo**: adultos com doença crônica (diabetes, hipertensão, cardiopatia) que consultam mais de um especialista, **ou** quem cuida dos exames de alguém assim. Familiares e conhecidos da equipe valem; anote o vínculo (por exemplo, "mãe de integrante") para citar como limitação.
 - **1 médico ou médica**: de preferência clínico geral ou especialista que atenda pacientes crônicos.
 
 ### Antes de cada sessão
 
 - Reservar 30 minutos (20 para o médico), pessoalmente ou em chamada com compartilhamento de tela.
-- Usar o computador ou celular **de quem conduz**, com a demonstração aberta. Assim a pessoa não precisa dos arquivos de teste.
+- Usar o computador ou celular **de quem conduz**, com a demonstração aberta em https://nurai-one.vercel.app. Assim a pessoa não precisa dos arquivos de teste.
+- À distância: mande o link e peça para a pessoa compartilhar a tela (WhatsApp, Meet). Sem o PDF de teste, pule a T2 e anote "T2 não aplicada".
 - Explicar que os dados são fictícios e pedir que a pessoa **não** informe dados reais de saúde.
 - Pedir permissão para anotar, sem nome: usar os códigos **U1, U2, U3** (usuários) e **M1** (médico).
 - Ter um cronômetro.
@@ -77,7 +80,17 @@ Para cada tarefa, anotar: conseguiu **sozinha**, **com ajuda** ou **não consegu
 - "Você autorizaria o app a buscar seus exames direto no laboratório e no SUS? Por quê?"
 - "Você usaria isso? Pagaria? Quanto?"
 
-### Entrevista com o médico (20 minutos)
+### Versão curta (15 minutos)
+
+Para quem tem pouco tempo. Usa o mesmo modelo de anotação; o que não for feito fica como "não aplicada".
+
+- **Contexto:** "Como você guarda seus exames hoje?" e "Já refez algum exame?"
+- **Tarefas:** T1 (exame repetido), T3 (copiloto) e T4 (liberar ao médico).
+- **Final:** "O que foi mais confuso?", a nota de confiança na IA (1 a 5) e "Você usaria isso?"
+
+### Entrevista com o médico (20 minutos, opcional)
+
+Não é exigida pela atividade (que pede os 3 usuários). Se não houver médico disponível, registre como limitação e próximo passo.
 
 1. Mostrar a tela do médico pelo código (passos 6 e 7 da seção 1) e o resumo pré-consulta.
 2. Perguntar:
@@ -136,7 +149,9 @@ Frases literais:
 
 ## 4. Depois das sessões
 
-Com as 4 anotações em mãos:
+Cada condutor preenche o modelo logo após a sessão, **sem nome** do participante, e salva em `docs/validacao/sessoes/U1.md`, `U2.md`, `U3.md` (e `M1.md`, se houver), ou manda o texto para quem vai consolidar.
+
+Com as anotações em mãos:
 
 1. Preencher a tabela "Onde registrar os aprendizados" e o registro de dificuldades na página do projeto (`src/routes/Projeto.tsx`, Parte 2).
 2. Corrigir no app o que as pessoas travaram, quando for viável, e registrar o ajuste e o commit na mesma tabela.
