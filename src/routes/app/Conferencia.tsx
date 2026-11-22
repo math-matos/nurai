@@ -144,6 +144,15 @@ export function Conferencia({ extracao, arquivo, salvando, aoSalvar, aoDescartar
         </div>
       </div>
 
+      {/* Teste com usuários: U1 perguntou "Eu já mandei o arquivo ou ainda tenho que confirmar?". */}
+      <p className="recado-app" data-testid={TID.conferenciaAindaNaoSalvo}>
+        <Icon nome="alerta" tamanho={16} />
+        <span>
+          <strong>Ainda não foi salvo.</strong> Confira os dados que a IA leu, corrija o que estiver
+          errado e clique em <strong>Salvar no histórico</strong>, no fim desta tela.
+        </span>
+      </p>
+
       {divergencia && (
         <div className="revisao__identidade" role="alert" data-testid={TID.conferenciaIdentidade}>
           <p><Icon nome="alerta" tamanho={16} /> <strong>{divergencia.texto}</strong></p>

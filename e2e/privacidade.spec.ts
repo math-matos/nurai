@@ -131,3 +131,18 @@ test('baixar o histórico gera um JSON com os registros e entra no registro de a
   await expect(registro).toContainText('Exportou o histórico')
   await expect(registro).toContainText(conta.nome)
 })
+
+test('a exportação fica no topo, com versão para ler, e a linha do tempo destaca o ponto de atenção', async ({ page, contas }) => {
+  await contas.criar({ request: page.request, nome: 'Helena Duarte Nogueira', modo: 'exemplo' })
+  await page.goto('/#/app/linha')
+  await esperarApp(page)
+  const aviso = page.getByTestId('aviso-passo')
+  await expect(aviso).toContainText('Ponto de atenção')
+  await aviso.getByRole('button', { name: 'Ver próximos passos' }).click()
+  await expect(page).toHaveURL(/#\/app\/cuidado$/)
+
+  await page.goto('/#/app/privacidade')
+  await expect(page.getByTestId('exportar-historico')).toBeInViewport()
+  await page.getByTestId('versao-legivel').click()
+  await expect(page).toHaveURL(/#\/app\/resumo$/)
+})

@@ -391,14 +391,25 @@ function PainelAcesso({ compartilhamento, aoRevogar }: {
     <div className="acesso" role="region" aria-label="Acesso temporário para o profissional" data-testid={TID.acessoPainel}>
       <div>
         <p className="acesso__titulo">Acesso temporário criado para {compartilhamento.para}</p>
-        <p className="acesso__texto" data-testid={TID.acessoValidade}>
-          Válido até <strong className="num">{compartilhamento.expiraEm}</strong> (criado em{' '}
-          <span className="num">{compartilhamento.criadoEm}</span>). O profissional acessa em{' '}
-          <strong>{endereco}</strong> e informa o código — vê o histórico só para leitura, e
-          cada acesso entra no {tom.dono('registro')}.
-        </p>
+        {/* Teste com usuários: U1 não sabia quanto tempo o código vale nem quem pode usá-lo; U3 não sabia
+            se o médico podia alterar o histórico; o médico (M1) pediu a expiração bem visível. */}
+        <ul className="acesso__regras">
+          <li data-testid={TID.acessoValidade}>
+            <strong>Válido até <span className="num">{compartilhamento.expiraEm}</span></strong> (criado em{' '}
+            <span className="num">{compartilhamento.criadoEm}</span>). Depois disso, o código para de funcionar sozinho.
+          </li>
+          <li>
+            <strong>Quem tiver o código consegue ver o {tom.dono('histórico')}.</strong> Passe só para o
+            profissional da consulta. Ele acessa em <strong>{endereco}</strong>, sem precisar de conta.
+          </li>
+          <li>
+            <strong>O profissional só visualiza.</strong> Não consegue alterar, anexar nem apagar nada, e cada
+            acesso entra no {tom.dono('registro')}.
+          </li>
+          <li>Você pode revogar a qualquer momento, antes do vencimento.</li>
+        </ul>
         <div className="acesso__acoes">
-          <button type="button" className="btn btn--ghost" onClick={() => { void copiar() }} data-testid={TID.acessoCopiar}>
+          <button type="button" className="btn" onClick={() => { void copiar() }} data-testid={TID.acessoCopiar}>
             <Icon nome="papel" tamanho={15} /> Copiar código e endereço
           </button>
           <button

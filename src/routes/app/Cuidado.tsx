@@ -88,6 +88,8 @@ export function Cuidado() {
                   <span className="chip chip--prioridade">{ROTULO_PRIORIDADE[p.prioridade]}</span>
                 </div>
                 <p className="passo__porque">{p.porque}</p>
+                {/* Teste com usuários (U3): "Isso é uma sugestão ou é algo que meu médico já pediu?" */}
+                <p className="passo__origem">Sugestão do Nurai a partir dos registros abaixo · não é pedido médico, confirme na consulta</p>
                 <div className="passo__pe">
                   <span className="passo__prazo"><Icon nome="calendario" tamanho={14} /> {p.prazo}</span>
                   {p.ancoras.map((id) => {

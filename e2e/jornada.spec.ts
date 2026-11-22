@@ -42,12 +42,14 @@ test('jornada: cadastro, histórico do zero, anexar PDF, persistir, perguntar, s
     expect(acertos / total, JSON.stringify(divergencias)).toBeGreaterThanOrEqual(0.9)
   }
 
+  await expect(page.getByTestId('conferencia-ainda-nao-salvo')).toContainText('Ainda não foi salvo')
   const gravacao = respostaDe(page, 'POST', '/api/eventos')
   await page.getByTestId('conferencia-salvar').click()
   const gravada = await gravacao
   expect(gravada.status()).toBe(201)
   const salvo: Evento = await gravada.json()
   await expect(page).toHaveURL(new RegExp(`#/app/linha/${salvo.id}$`))
+  await expect(page.getByTestId('evento-salvo')).toContainText(salvo.titulo)
 
   await page.reload()
   await esperarApp(page)

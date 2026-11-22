@@ -80,13 +80,15 @@ export function Copiloto() {
               </div>
             ) : t.resposta ? (
               <div className="turno__resposta" data-testid={TID.copilotoResposta}>
+                {/* Teste com usuários (U3) e médico (M1): separar a leitura da IA do que está nos documentos. */}
+                <p className="label turno__origem">Leitura do Copiloto (IA) · não é pedido nem diagnóstico médico</p>
                 {t.resposta.texto.map((p, i) => <p key={i}>{p}</p>)}
 
                 {t.resposta.serie && t.resposta.serie.pontos.length > 0 && <Serie {...t.resposta.serie} />}
 
                 {t.resposta.aviso && <AvisoIa>{t.resposta.aviso}</AvisoIa>}
 
-                <Ancoras ids={t.resposta.ancoras} eventos={eventos} />
+                <Ancoras ids={t.resposta.ancoras} eventos={eventos} titulo="De onde veio: registros do histórico" />
 
                 <SeloIa geradoPor={t.resposta.geradoPor} />
               </div>

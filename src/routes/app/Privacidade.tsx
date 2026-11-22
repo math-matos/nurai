@@ -4,6 +4,7 @@ import { ChipFonte, Falha, VazioHistorico } from '../../components/ui'
 import { ExcluirConta } from '../../components/ExcluirConta'
 import { api, mensagemDeErro } from '../../lib/api'
 import { formatarDataCurta } from '../../lib/formato'
+import { navegar } from '../../lib/router'
 import { isoHoje, useAcoes, useEstado, usePerfil } from '../../lib/store'
 import { TID } from '../../lib/testids'
 import { tomDe } from '../../lib/tom'
@@ -73,6 +74,35 @@ export function Privacidade() {
           texto="As permissões e o registro de acessos ganham sentido quando o histórico tem documentos. Comece anexando um laudo ou resultado de exame."
         />
       )}
+
+      {/* Teste com usuários: no fim da página, U1 não encontrou a exportação e U3 só achou depois de rolar.
+          U2 e U3 pediram uma versão para ler, além do JSON. */}
+      <section className="painel" id="baixar-historico">
+        <div className="painel__cabeca">
+          <h2>{tom.nome ? `Baixar o histórico de ${tom.nome}` : 'Baixar meu histórico'}</h2>
+          <p>
+            <strong>Para ler ou imprimir:</strong> o resumo para consulta, que pode ser salvo em PDF
+            pela opção Imprimir. <strong>Para guardar ou levar a outro serviço:</strong> um arquivo
+            JSON com o perfil, os registros, as permissões e o registro de acessos
+            {tom.nome ? ` de ${tom.nome}` : ''}. O download fica no registro de acessos.
+          </p>
+        </div>
+        {erroExportacao && <Falha mensagem={erroExportacao} />}
+        <div className="privacidade__baixar">
+          <button
+            type="button" className="btn btn--ghost" onClick={() => navegar('/app/resumo')}
+            data-testid={TID.versaoLegivel}
+          >
+            <Icon nome="papel" tamanho={16} /> Versão para ler ou imprimir
+          </button>
+          <button
+            type="button" className="btn" onClick={() => { void baixarHistorico() }}
+            disabled={exportando} data-testid={TID.exportarHistorico}
+          >
+            {exportando ? 'Preparando o arquivo…' : 'Baixar arquivo JSON'}
+          </button>
+        </div>
+      </section>
 
       <MeusDados key={perfil.pacienteId} perfil={perfil} />
 
@@ -173,24 +203,6 @@ export function Privacidade() {
             <dd>O histórico fica no servidor da demonstração (Oracle Database ou memória, conforme o selo no topo), separado por conta, e cada concessão, revogação e anexo entra neste registro. Só a conversa com o copiloto fica no seu navegador, e é apagada ao sair. Excluir a conta apaga tudo.</dd>
           </div>
         </dl>
-      </section>
-
-      <section className="painel">
-        <div className="painel__cabeca">
-          <h2>{tom.nome ? `Baixar o histórico de ${tom.nome}` : 'Baixar meu histórico'}</h2>
-          <p>
-            Um arquivo JSON com o perfil, os registros, as permissões e o registro de acessos
-            {tom.nome ? ` de ${tom.nome}` : ''}. Serve para guardar uma cópia ou levar o histórico
-            para outro serviço. O download fica no registro de acessos.
-          </p>
-        </div>
-        {erroExportacao && <Falha mensagem={erroExportacao} />}
-        <button
-          type="button" className="btn" onClick={() => { void baixarHistorico() }}
-          disabled={exportando} data-testid={TID.exportarHistorico}
-        >
-          {exportando ? 'Preparando o arquivo…' : 'Baixar arquivo JSON'}
-        </button>
       </section>
 
       <ExcluirConta convidado={perfil.convidado} />

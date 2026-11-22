@@ -37,7 +37,7 @@ function rolarAte(alvo: HTMLElement | null) {
 }
 
 export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
-  const { eventos, novos } = useEstado()
+  const { eventos, novos, passos } = useEstado()
   const tom = useTom()
   const [busca, setBusca] = useState('')
   const [tipos, setTipos] = useState<TipoId[]>([])
@@ -109,6 +109,32 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
 
   const filtrando = tipos.length > 0 || fontes.length > 0 || busca.trim() !== ''
 
+  /* Teste com usuários (U1): no meio de 24 registros, a pessoa não achava o exame repetido
+     sem saber que ele aparece em "Próximos passos". O ponto mais urgente fica no topo da lista. */
+  const abertos = passos.filter((p) => !p.feito)
+  const destaque = abertos.find((p) => p.prioridade === 'alta') ?? abertos[0]
+  /* Teste com usuários (U2): depois de conferir o laudo, faltava um sinal claro de que ele foi gravado. */
+  const recemSalvo = atual && novos.includes(atual.id) && atual.id === selecionado ? atual : undefined
+  const avisoSalvo = recemSalvo && (
+    <p className="recado-app" role="status" data-testid={TID.eventoSalvo}>
+      <Icon nome="check" tamanho={16} />
+      <span>“{recemSalvo.titulo}” foi salvo no {tom.dono('histórico')} e já aparece na lista.</span>
+    </p>
+  )
+
+  const avisoPasso = destaque && (
+    <div className="recado-app" data-testid={TID.avisoPasso}>
+      <Icon nome="bussola" tamanho={16} />
+      <p>
+        <strong>Ponto de atenção:</strong> {destaque.titulo}
+        {abertos.length > 1 && <> (e mais <span className="num">{abertos.length - 1}</span>)</>}
+      </p>
+      <button type="button" className="btn btn--quiet" onClick={() => navegar('/app/cuidado')}>
+        Ver próximos passos
+      </button>
+    </div>
+  )
+
   if (eventos.length === 0) {
     return (
       <>
@@ -126,6 +152,8 @@ export function LinhaDoTempo({ selecionado }: { selecionado?: string }) {
     <div className={`linha${selecionado === undefined ? ' linha--sem-escolha' : ''}`}>
       <div className="linha__coluna" ref={coluna}>
         {avisoExcluido}
+        {avisoSalvo}
+        {avisoPasso}
         <div className="filtros">
           <label className="filtros__busca">
             <Icon nome="busca" tamanho={17} />

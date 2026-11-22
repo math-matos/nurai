@@ -186,7 +186,10 @@ function VisaoMedico({ dados, codigo, profissional, aoSair, aoEncerrar }: Libera
       <header className="porta__topo">
         <span className="medico__marca">
           <Marca tamanho={24} />
-          <span className="label">Acesso do profissional · somente leitura</span>
+          {/* Entrevista com o médico (M1): a expiração precisa estar à vista o tempo todo. */}
+          <span className="label">
+            Acesso do profissional · somente leitura · expira em <span className="num">{expiraEm}</span>
+          </span>
         </span>
         <button type="button" className="btn btn--ghost" onClick={aoSair} data-testid={TID.medicoSair}>
           Encerrar acesso
