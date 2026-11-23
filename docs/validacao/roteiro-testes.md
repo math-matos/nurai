@@ -1,9 +1,9 @@
-# Roteiro de testes — Fase 7
+# Roteiro de testes · Fase 7
 
-Dois roteiros:
+Este documento reúne dois roteiros:
 
-1. **Conferência da aplicação**: a equipe confere que o fluxo principal funciona antes das sessões.
-2. **Testes com o público-alvo e entrevista com médico**: o que a Parte 2 da Fase 7 pede (pelo menos 3 usuários do público-alvo).
+1. **Conferência da aplicação**: verificação do fluxo principal pelo grupo, antes das sessões.
+2. **Testes com o público-alvo e entrevista com médico**: sessões com pelo menos 3 pessoas do público-alvo e 1 médico.
 
 **Link do app:** https://nurai-one.vercel.app (abre sem login, no celular ou no computador).
 
@@ -13,7 +13,7 @@ Paciente, instituições e resultados da demonstração são fictícios. **Ningu
 
 ## 1. Conferência da aplicação (cerca de 15 minutos)
 
-Abra https://nurai-one.vercel.app (ou, localmente, `pnpm dev:all` e `http://localhost:5173`). Clique em **"Abrir a demonstração"**.
+Abrir https://nurai-one.vercel.app (ou, localmente, `pnpm dev:all` e `http://localhost:5173`) e clicar em **"Abrir a demonstração"**.
 
 Os PDFs citados estão em `e2e/fixtures/documentos/`.
 
@@ -29,9 +29,9 @@ Os PDFs citados estão em `e2e/fixtures/documentos/`.
 | 8 | Resumo para consulta | Revogar o código e voltar à janela anônima | A tela do médico se fecha |
 | 9 | Acessos e consentimento | Rolar até **"Baixar meu histórico"** → **"Baixar arquivo JSON"** | O arquivo baixa e o Registro de acessos mostra "Exportou o histórico" |
 
-Com `OCI_*` e `ORACLE_DB_*` configurados, cada ação de IA consome crédito da OCI e a conta de demonstração fica no Oracle (é apagada sozinha 24 h depois de a sessão vencer). Para conferir o modo: https://nurai-one.vercel.app/api/health (localmente, `http://localhost:3001/api/health`).
+Com `OCI_*` e `ORACLE_DB_*` configurados, cada ação de IA consome crédito da OCI e a conta de demonstração fica no Oracle (ela é apagada automaticamente 24 h depois de a sessão vencer). O modo em uso aparece em https://nurai-one.vercel.app/api/health (localmente, `http://localhost:3001/api/health`).
 
-Se um passo falhar, anote o número do passo e a mensagem de erro.
+Se um passo falhar, registrar o número do passo e a mensagem de erro.
 
 ---
 
@@ -39,14 +39,14 @@ Se um passo falhar, anote o número do passo e a mensagem de erro.
 
 ### Quem recrutar
 
-- **3 pessoas do público-alvo**: adultos com doença crônica (diabetes, hipertensão, cardiopatia) que consultam mais de um especialista, **ou** quem cuida dos exames de alguém assim. Familiares e conhecidos da equipe valem; anote o vínculo (por exemplo, "mãe de integrante") para citar como limitação.
+- **3 pessoas do público-alvo**: adultos com doença crônica (diabetes, hipertensão, cardiopatia) que consultam mais de um especialista, **ou** quem cuida dos exames de alguém nessa situação. Podem participar familiares e conhecidos do grupo, com o vínculo registrado (por exemplo, "mãe de integrante") como limitação da amostra.
 - **1 médico ou médica**: de preferência clínico geral ou especialista que atenda pacientes crônicos.
 
 ### Antes de cada sessão
 
 - Reservar 30 minutos (20 para o médico), pessoalmente ou em chamada com compartilhamento de tela.
 - Usar o computador ou celular **de quem conduz**, com a demonstração aberta em https://nurai-one.vercel.app. Assim a pessoa não precisa dos arquivos de teste.
-- À distância: mande o link e peça para a pessoa compartilhar a tela (WhatsApp, Meet). Sem o PDF de teste, pule a T2 e anote "T2 não aplicada".
+- À distância: enviar o link e pedir que a pessoa compartilhe a tela (WhatsApp, Meet). Sem o PDF de teste, a T2 é registrada como "não aplicada".
 - Explicar que os dados são fictícios e pedir que a pessoa **não** informe dados reais de saúde.
 - Pedir permissão para anotar, sem nome: usar os códigos **U1, U2, U3** (usuários) e **M1** (médico).
 - Ter um cronômetro.
@@ -61,7 +61,7 @@ Se um passo falhar, anote o número do passo e a mensagem de erro.
 
 **2. Tarefas no app (15 min)**
 
-Ler uma tarefa por vez. **Não ajudar.** Cronometrar. Pedir que a pessoa pense em voz alta.
+Ler uma tarefa por vez, cronometrar e pedir que a pessoa pense em voz alta. Ajudar só se a pessoa travar, e registrar a tarefa como "com ajuda".
 
 | Tarefa | O que dizer |
 |---|---|
@@ -90,7 +90,7 @@ Para quem tem pouco tempo. Usa o mesmo modelo de anotação; o que não for feit
 
 ### Entrevista com o médico (20 minutos, opcional)
 
-Não é exigida pela atividade (que pede os 3 usuários). Se não houver médico disponível, registre como limitação e próximo passo.
+Complementa os testes com usuários. Sem médico disponível, a ausência fica registrada como limitação.
 
 1. Mostrar a tela do médico pelo código (passos 6 e 7 da seção 1) e o resumo pré-consulta.
 2. Perguntar:
@@ -104,7 +104,7 @@ Não é exigida pela atividade (que pede os 3 usuários). Se não houver médico
 
 ## 3. Modelos de anotação
 
-Preencher logo depois de cada sessão, enquanto a memória está fresca. Copiar as **frases literais**, não resumos.
+Preencher logo depois de cada sessão, registrando as **frases literais** dos participantes, e não resumos.
 
 ### Usuário (U1, U2, U3)
 
@@ -123,7 +123,7 @@ Frases literais:
 -
 
 Confiança na IA (1-5):
-Autorizaria buscar exames no laboratório/SUS? (sim / não / depende — por quê):
+Autorizaria buscar exames no laboratório/SUS? (sim / não / depende, e por quê):
 Usaria? Pagaria? Quanto?
 Maior dificuldade:
 ```
@@ -147,14 +147,12 @@ Frases literais:
 
 ---
 
-## 4. Depois das sessões
+## 4. Consolidação
 
-Cada condutor preenche o modelo logo após a sessão, **sem nome** do participante, e salva em `docs/validacao/sessoes/U1.md`, `U2.md`, `U3.md` (e `M1.md`, se houver), ou manda o texto para quem vai consolidar.
+Depois das sessões, as fichas foram consolidadas sem o nome dos participantes em [resultados-testes.md](resultados-testes.md), com:
 
-Com as anotações em mãos:
+1. os resultados de cada tarefa, as falas literais e as respostas às perguntas finais;
+2. as dificuldades observadas e o ajuste feito no app para cada uma;
+3. a análise de se o MVP resolve o problema identificado.
 
-1. Preencher a tabela "Onde registrar os aprendizados" e o registro de dificuldades na página do projeto (`src/routes/Projeto.tsx`, Parte 2).
-2. Corrigir no app o que as pessoas travaram, quando for viável, e registrar o ajuste e o commit na mesma tabela.
-3. Reescrever a análise "O MVP resolve o problema identificado?" com os dados reais.
-
-Não inventar números: o que não foi medido fica como "não testado".
+O que não foi medido nas sessões aparece como "não testado" ou "não aplicada".

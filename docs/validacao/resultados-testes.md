@@ -1,16 +1,16 @@
-# Resultados dos testes — Fase 7
+# Resultados dos testes · Fase 7
 
-Transcrição anonimizada de `Testes_Nurai_Fase_7.odt`, preenchido pela equipe com o [roteiro de testes](roteiro-testes.md). Os nomes dos participantes foram retirados; ficam só os códigos.
+Transcrição anonimizada das fichas preenchidas pelo grupo durante as sessões, seguindo o [roteiro de testes](roteiro-testes.md). Os nomes dos participantes foram substituídos por códigos.
 
 - **Aplicação testada:** https://nurai-one.vercel.app (demonstração com dados fictícios)
 - **Data das sessões:** 21/11/2026
-- **Condução:** membros da equipe
+- **Condução:** integrantes do grupo
 
-Todas as sessões, incluindo a entrevista com o médico (M1), foram feitas com pessoas reais. Não houve dados simulados.
+Os participantes, incluindo o médico (M1), são pessoas reais. O histórico mostrado no app é o da demonstração, com dados fictícios.
 
 ## 1. Participantes
 
-| Código | Perfil | Cenário e familiaridade digital | Vínculo com a equipe |
+| Código | Perfil | Cenário e familiaridade digital | Vínculo com o grupo |
 |---|---|---|---|
 | U1 | 58 anos; paciente com hipertensão e diabetes | 3 especialistas; guarda laudos em papel e no WhatsApp; baixa familiaridade | familiar de integrante |
 | U2 | 42 anos; cuida da mãe, que tem condições crônicas | 2 especialistas (da mãe); organiza PDFs em pastas no celular e no computador; alta familiaridade | conhecido |
@@ -21,11 +21,11 @@ Todas as sessões, incluindo a entrevista com o médico (M1), foram feitas com p
 
 | Tarefa | U1 | U2 | U3 |
 |---|---|---|---|
-| T1 — exame repetido | com ajuda, 2min40s | sozinho, 45s | sozinha, 1min15s |
-| T2 — anexar laudo | com ajuda, 3min10s | sozinho, 1min20s | sozinha, 1min50s |
-| T3 — copiloto | sozinha, 1min30s | sozinho, 40s | sozinha, 55s |
-| T4 — liberar ao médico | com ajuda, 3min00s | sozinho, 1min10s | com ajuda, 2min00s |
-| T5 — baixar histórico | **não conseguiu**, 4min00s | sozinho, 50s | sozinha, 1min30s |
+| T1 · exame repetido | com ajuda, 2min40s | sozinho, 45s | sozinha, 1min15s |
+| T2 · anexar laudo | com ajuda, 3min10s | sozinho, 1min20s | sozinha, 1min50s |
+| T3 · copiloto | sozinha, 1min30s | sozinho, 40s | sozinha, 55s |
+| T4 · liberar ao médico | com ajuda, 3min00s | sozinho, 1min10s | com ajuda, 2min00s |
+| T5 · baixar histórico | **não conseguiu**, 4min00s | sozinho, 50s | sozinha, 1min30s |
 
 **Onde travaram:**
 
@@ -111,7 +111,7 @@ Cenário apresentado: o resumo pré-consulta e a tela de acesso por código temp
 
 **Limitações:**
 - A amostra é pequena.
-- Os três participantes são do círculo próximo da equipe.
+- Os três participantes são do círculo próximo do grupo.
 - As sessões usaram dados fictícios, não o histórico real de cada pessoa.
 - Os tempos foram medidos por quem conduziu.
 
