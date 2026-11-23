@@ -32,13 +32,13 @@
 
 .doc__indice { position: sticky; top: var(--sp-5); display: grid; gap: var(--sp-3); }
 .doc__indice ol { display: grid; gap: 2px; }
-.doc__indice a {
+.doc__indice ol a {
   display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px;
   padding: 7px 9px; border-radius: var(--r-md);
   font-size: 13.5px; color: var(--ink-2); text-decoration: none;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.doc__indice a:hover { background: var(--panel); color: var(--ink); }
+.doc__indice ol a:hover { background: var(--panel); color: var(--ink); }
 .doc__indice .num { color: var(--ink-3); font-weight: 700; }
 .doc__indice .btn { justify-content: center; margin-top: var(--sp-2); }
 
