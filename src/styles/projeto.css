@@ -62,6 +62,12 @@
 .doc__texto h4 { font-size: 13px; letter-spacing: 0.02em; margin-bottom: 7px; }
 .doc__texto p { max-width: 70ch; color: var(--ink-2); }
 .doc__texto p + p { margin-top: var(--sp-3); }
+/* Tabela seguida de tabela ou de parágrafo não fica colada no que vem depois. */
+.doc__texto .rolagem-x + .rolagem-x { margin-top: var(--sp-5); }
+.doc__texto .rolagem-x + p { margin-top: var(--sp-4); }
+.doc__texto p + .rolagem-x { margin-top: var(--sp-2); }
+.doc__texto code { overflow-wrap: anywhere; }
+.doc__texto .doc__caminho { white-space: nowrap; }
 .doc__texto strong { color: var(--ink); font-weight: 650; }
 .doc__texto code {
   font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, monospace;
@@ -157,7 +163,7 @@
 .questionario { counter-reset: q; display: grid; gap: 2px; }
 .questionario li {
   counter-increment: q;
-  display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--sp-3);
+  display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: var(--sp-3); row-gap: 3px;
   padding: 13px 0; border-bottom: 1px solid var(--line);
 }
 .questionario li::before {
@@ -165,8 +171,10 @@
   font-size: 12px; font-weight: 700; color: var(--ink-3);
   font-variant-numeric: tabular-nums; padding-top: 3px;
 }
-.questionario__q { display: block; font-size: 14.5px; font-weight: 550; }
-.questionario__t { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 3px; }
+/* O número ocupa só a primeira linha; pergunta e tipo de resposta ficam na segunda coluna. */
+.questionario li::before { grid-row: 1 / span 2; }
+.questionario__q { display: block; grid-column: 2; font-size: 14.5px; font-weight: 550; }
+.questionario__t { display: block; grid-column: 2; font-size: 12.5px; color: var(--ink-3); }
 
 /* ---------------- figuras e diagramas ---------------- */
 .doc__figura { margin: var(--sp-5) 0 0; }
@@ -225,3 +233,8 @@
   .persona { grid-template-columns: minmax(0, 1fr); }
   .doc__tabela tbody th { width: 34%; }
 }
+
+/* Resultado de cada tarefa: desfecho em cima, tempo embaixo. */
+.tarefa__desfecho { display: block; white-space: nowrap; }
+.tarefa__tempo { display: block; font-size: 12.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tarefa__desfecho--nao { color: var(--sig-alterado); font-weight: 600; }

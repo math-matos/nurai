@@ -220,19 +220,19 @@ export function Projeto() {
                   <tr><th>Tarefa</th><th>U1</th><th>U2</th><th>U3</th></tr>
                 </thead>
                 <tbody>
-                  <tr><th scope="row">T1 · achar o exame repetido</th><td>com ajuda · 2min40s</td><td>sozinho · 45s</td><td>sozinha · 1min15s</td></tr>
-                  <tr><th scope="row">T2 · anexar um laudo</th><td>com ajuda · 3min10s</td><td>sozinho · 1min20s</td><td>sozinha · 1min50s</td></tr>
-                  <tr><th scope="row">T3 · perguntar ao Copiloto</th><td>sozinha · 1min30s</td><td>sozinho · 40s</td><td>sozinha · 55s</td></tr>
-                  <tr><th scope="row">T4 · liberar ao médico</th><td>com ajuda · 3min00s</td><td>sozinho · 1min10s</td><td>com ajuda · 2min00s</td></tr>
-                  <tr><th scope="row">T5 · baixar o histórico</th><td>não concluiu · 4min00s</td><td>sozinho · 50s</td><td>sozinha · 1min30s</td></tr>
+                  <tr><th scope="row">T1 · achar o exame repetido</th><td><span className="tarefa__desfecho">com ajuda</span><span className="tarefa__tempo">2min40s</span></td><td><span className="tarefa__desfecho">sozinho</span><span className="tarefa__tempo">45s</span></td><td><span className="tarefa__desfecho">sozinha</span><span className="tarefa__tempo">1min15s</span></td></tr>
+                  <tr><th scope="row">T2 · anexar um laudo</th><td><span className="tarefa__desfecho">com ajuda</span><span className="tarefa__tempo">3min10s</span></td><td><span className="tarefa__desfecho">sozinho</span><span className="tarefa__tempo">1min20s</span></td><td><span className="tarefa__desfecho">sozinha</span><span className="tarefa__tempo">1min50s</span></td></tr>
+                  <tr><th scope="row">T3 · perguntar ao Copiloto</th><td><span className="tarefa__desfecho">sozinha</span><span className="tarefa__tempo">1min30s</span></td><td><span className="tarefa__desfecho">sozinho</span><span className="tarefa__tempo">40s</span></td><td><span className="tarefa__desfecho">sozinha</span><span className="tarefa__tempo">55s</span></td></tr>
+                  <tr><th scope="row">T4 · liberar ao médico</th><td><span className="tarefa__desfecho">com ajuda</span><span className="tarefa__tempo">3min00s</span></td><td><span className="tarefa__desfecho">sozinho</span><span className="tarefa__tempo">1min10s</span></td><td><span className="tarefa__desfecho">com ajuda</span><span className="tarefa__tempo">2min00s</span></td></tr>
+                  <tr><th scope="row">T5 · baixar o histórico</th><td><span className="tarefa__desfecho tarefa__desfecho--nao">não concluiu</span><span className="tarefa__tempo">4min00s</span></td><td><span className="tarefa__desfecho">sozinho</span><span className="tarefa__tempo">50s</span></td><td><span className="tarefa__desfecho">sozinha</span><span className="tarefa__tempo">1min30s</span></td></tr>
                 </tbody>
               </table>
             </div>
             <p>
               Das 15 tarefas, <strong>10 foram concluídas sem ajuda</strong> (66,7%), 4 com ajuda
               e 1 não foi concluída. A confiança declarada nas respostas da IA ficou em 3, 5 e 4
-              (média 4,0 de 5). As fichas completas, com as falas literais, estão em
-              <code> docs/validacao/resultados-testes.md</code>.
+              (média 4,0 de 5). As fichas completas, com as falas literais, estão em{' '}
+              <code className="doc__caminho">docs/validacao/resultados-testes.md</code>.
             </p>
 
             <h3>Formulário de validação</h3>
