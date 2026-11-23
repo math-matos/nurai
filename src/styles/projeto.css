@@ -271,3 +271,18 @@
   }
 }
 .doc__subtitulo { margin-top: var(--sp-5); font-size: 13px; color: var(--ink); }
+
+/* ---------------- impressão (documento consolidado em PDF) ---------------- */
+@media print {
+  .doc .skip, .doc .lp__nav, .doc__indice, .doc__fecho .btn { display: none !important; }
+  .doc__corpo { display: block; padding: var(--sp-5) 0 0; max-width: none; }
+  .doc__capa { padding: 24px 0 28px; }
+  .doc__texto section { break-before: page; padding-bottom: 0; }
+  .doc__texto section#problema { break-before: auto; }
+  .doc__texto section + section { border-top: 0; padding-top: 0; }
+  .doc__texto h3, .doc__texto h4 { break-after: avoid; }
+  .doc__tabela tr, .canvas__bloco, .persona, .doc__figura, .doc__lista li, .doc__lista-num li, .questionario li { break-inside: avoid; }
+  .rolagem-x, .doc__rolagem { overflow: visible; }
+  .doc__texto a { color: inherit; }
+  .lp__rodape { break-before: avoid; }
+}

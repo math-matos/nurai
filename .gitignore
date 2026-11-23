@@ -32,3 +32,6 @@ e2e/resultados
 blob-report
 playwright/.cache
 e2e/fixtures/documentos
+
+# Entrega da Fase 7 (montada por docs/entrega/montar-zip.sh)
+dist-entrega
