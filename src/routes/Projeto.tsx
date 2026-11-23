@@ -5,16 +5,19 @@ import { Arquitetura, Jornada, Stakeholders } from './diagramas'
 import '../styles/projeto.css'
 
 const SECOES = [
-  { id: 'parte-1', rotulo: 'Refinamento do problema' },
-  { id: 'parte-2', rotulo: 'Validação estruturada' },
-  { id: 'parte-3', rotulo: 'Estruturação da solução' },
-  { id: 'parte-4', rotulo: 'Estrutura tecnológica' },
+  { id: 'problema', marca: '·', rotulo: 'O problema' },
+  { id: 'parte-1', marca: '1', rotulo: 'MVP funcional' },
+  { id: 'tecnologia', marca: '1', rotulo: 'Tecnologia e Oracle' },
+  { id: 'parte-2', marca: '2', rotulo: 'Teste e validação' },
+  { id: 'parte-3', marca: '3', rotulo: 'Modelo de negócio' },
+  { id: 'parte-4', marca: '4', rotulo: 'Estratégia de lançamento' },
+  { id: 'parte-5', marca: '5', rotulo: 'Pitch final' },
 ]
 
 export function Projeto() {
   return (
     <div className="doc">
-      <a className="skip" href="#parte-1">Pular para o conteúdo</a>
+      <a className="skip" href="#problema">Pular para o conteúdo</a>
 
       <header className="lp__topo">
         <Link para="/" aria-label="Nurai, início"><Marca /></Link>
@@ -25,12 +28,13 @@ export function Projeto() {
       </header>
 
       <div className="doc__capa grid-paper">
-        <p className="doc__selo">Challenge STO 2026 · FIAP · ESOA4 · Fase 6</p>
-        <h1>Do problema identificado ao MVP construído</h1>
+        <p className="doc__selo">Challenge STO 2026 · FIAP · ESOA4 · Fase 7 · Documento consolidado</p>
+        <h1>Nurai: do MVP validado ao plano de negócio</h1>
         <p className="doc__linhafina">
-          Refinamento do problema, instrumento de validação, definição do produto mínimo
-          viável e arquitetura da solução — com o protótipo navegável que materializa cada
-          decisão descrita aqui.
+          O MVP funcional com tecnologia Oracle, os testes com o público-alvo, o modelo de
+          negócio, a estratégia de lançamento e o pitch, com o sistema no ar em{' '}
+          <a href="https://nurai-one.vercel.app">nurai-one.vercel.app</a> para conferir cada
+          afirmação.
         </p>
         <p className="doc__equipe">
           Lúcia Boutti · Thiago Eiji · Murilo Mansano · Pedro Eugênio · Matheus Matos
@@ -41,10 +45,10 @@ export function Projeto() {
         <nav className="doc__indice" aria-label="Índice">
           <p className="label">Nesta página</p>
           <ol>
-            {SECOES.map((s, i) => (
+            {SECOES.map((s) => (
               <li key={s.id}>
                 <a href={`#${s.id}`}>
-                  <span className="num">{i + 1}</span> {s.rotulo}
+                  <span className="num">{s.marca}</span> {s.rotulo}
                 </a>
               </li>
             ))}
@@ -55,10 +59,10 @@ export function Projeto() {
         </nav>
 
         <main className="doc__texto">
-          {/* ---------------- PARTE 1 ---------------- */}
-          <section id="parte-1">
-            <p className="doc__parte">Parte 1</p>
-            <h2>Refinamento do problema</h2>
+          {/* ---------------- CONTEXTO ---------------- */}
+          <section id="problema">
+            <p className="doc__parte">Contexto · Fases 5 e 6</p>
+            <h2>O problema</h2>
 
             <p className="doc__lead">
               Dos três problemas levantados na fase anterior — histórico fragmentado,
@@ -148,6 +152,224 @@ export function Projeto() {
                 de valor objetiva para paciente, operadora e sistema público.
               </li>
             </ol>
+          </section>
+
+          {/* ---------------- PARTE 1 ---------------- */}
+          <section id="parte-1">
+            <p className="doc__parte">Parte 1</p>
+            <h2>MVP funcional</h2>
+
+            <p className="doc__lead">
+              O MVP está no ar em <a href="https://nurai-one.vercel.app">nurai-one.vercel.app</a>.
+              Ele reúne o histórico clínico disperso numa linha do tempo, lê documentos com IA,
+              responde com a fonte de cada informação e prepara a consulta, com o histórico salvo
+              no Oracle Autonomous Database e a IA rodando na Oracle Cloud.
+            </p>
+
+            <h3>Requisitos obrigatórios</h3>
+            <div className="rolagem-x">
+              <table className="doc__tabela">
+                <thead>
+                  <tr><th>Requisito</th><th>Como o MVP atende</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Sistema operacional</th><td>Publicado na Vercel, com cadastro, login, sessão e exclusão de conta. <code className="doc__caminho">/api/health</code> mostra o banco e a IA em uso.</td></tr>
+                  <tr><th scope="row">Fluxo principal demonstrável</th><td>Anexar um laudo → conferir o que a IA leu → salvar na linha do tempo → perguntar ao Copiloto → ver o exame repetido em Próximos passos → gerar o resumo e o acesso temporário para o médico</td></tr>
+                  <tr><th scope="row">Persistência</th><td>Oracle Autonomous Database: contas, registros, permissões, acessos do médico e registro de acessos</td></tr>
+                  <tr><th scope="row">Interface funcional</th><td>Aplicação web responsiva, testada no computador e no celular (mais de 150 testes automáticos de ponta a ponta e mais de 480 testes unitários)</td></tr>
+                  <tr><th scope="row">Tecnologia Oracle</th><td>Três serviços da Oracle Cloud: Autonomous Database, Generative AI (Llama 3.3 70B, em São Paulo) e Document Understanding, para ler PDF escaneado</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Como demonstrar</h3>
+            <ol className="doc__lista-num">
+              <li>Abrir <a href="https://nurai-one.vercel.app">nurai-one.vercel.app</a> e clicar em <strong>Abrir a demonstração</strong>. A conta de exemplo já tem 24 registros de fontes diferentes.</li>
+              <li>Em <strong>Fontes e anexos</strong>, enviar um laudo em PDF, conferir os valores lidos e salvar.</li>
+              <li>Em <strong>Perguntar ao Copiloto</strong>, perguntar "Ficou alguma coisa pendente?" e abrir uma citação.</li>
+              <li>Em <strong>Resumo para consulta</strong>, gerar o acesso temporário e abrir o código numa janela anônima, como o médico.</li>
+              <li>Em <strong>Acessos e consentimento</strong>, ver o registro de cada acesso e baixar o histórico.</li>
+            </ol>
+            <p>
+              Para rodar localmente, sem nenhuma credencial: <code className="doc__caminho">pnpm install</code> e{' '}
+              <code className="doc__caminho">pnpm dev:all</code>. A API sobe com banco em memória e
+              IA simulada, e o mesmo fluxo funciona em <code className="doc__caminho">localhost:5173</code>.
+            </p>
+
+            <p>
+              A Nurai é uma plataforma centrada no paciente que reúne o histórico clínico
+              disperso em uma linha do tempo única, estrutura com IA o que estava solto — em
+              PDF, imagem ou papel — e devolve esse contexto em forma de próximo passo: para o
+              paciente, em linguagem que ele entende; para o médico, em uma página que cabe nos
+              minutos que ele tem.
+            </p>
+
+            <h3>Produto mínimo viável</h3>
+            <p>
+              O corte do MVP obedece a uma regra: fica dentro o que é necessário para provar
+              que contexto reunido muda uma decisão. Tudo que só melhora a experiência depois
+              dessa prova fica fora.
+            </p>
+            <div className="rolagem-x">
+              <table className="doc__tabela">
+                <thead>
+                  <tr><th>Funcionalidade essencial</th><th>Por que é essencial</th><th>Estado no protótipo</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">Linha do tempo clínica unificada</th>
+                    <td>É a prova central: fontes incompatíveis na mesma sequência, cada evento com a origem visível</td>
+                    <td className="doc__ok">construída</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Entrada de documento com extração</th>
+                    <td>Sem o papel, o histórico continua incompleto — e é o papel que a integração não alcança</td>
+                    <td className="doc__ok">construída</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Copiloto ancorado no histórico</th>
+                    <td>Transforma acervo em entendimento, e a citação da fonte é o que sustenta a confiança</td>
+                    <td className="doc__ok">construída</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Próximos passos e navegação</th>
+                    <td>É onde o contexto vira valor mensurável: exame evitado, retorno recuperado</td>
+                    <td className="doc__ok">construída</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Resumo pré-consulta compartilhável</th>
+                    <td>Leva o valor para dentro do consultório, que é onde a decisão acontece</td>
+                    <td className="doc__ok">construída</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Consentimento e registro de acesso</th>
+                    <td>Sem controle verificável do titular, nada disso é aceitável nem legal</td>
+                    <td className="doc__ok">construída</td>
+                  </tr>
+                  <tr className="doc__fora">
+                    <th scope="row">Integração real com RNDS e laboratórios</th>
+                    <td>Depende de credenciamento e homologação — simulada no protótipo</td>
+                    <td>fora do MVP</td>
+                  </tr>
+                  <tr className="doc__fora">
+                    <th scope="row">Visualizador DICOM e telemedicina</th>
+                    <td>Alto custo, não testa a hipótese central</td>
+                    <td>fora do MVP</td>
+                  </tr>
+                  <tr className="doc__fora">
+                    <th scope="row">Área do médico com login próprio</th>
+                    <td>O acesso temporário por link resolve a mesma necessidade na fase de teste</td>
+                    <td>fora do MVP</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Jornada principal do usuário</h3>
+            <figure className="doc__figura">
+              <div className="doc__rolagem"><Jornada /></div>
+              <figcaption>
+                Figura 1 — Da primeira conexão ao consultório. O trecho em destaque é o ciclo
+                que se repete a cada novo documento; o retângulo tracejado marca o único ponto
+                em que a pessoa precisa conferir antes de gravar.
+              </figcaption>
+            </figure>
+
+          </section>
+
+          {/* ---------------- PARTE 1 · TECNOLOGIA ---------------- */}
+          <section id="tecnologia">
+            <p className="doc__parte">Parte 1 · Tecnologia</p>
+            <h2>Tecnologia e integração com a Oracle</h2>
+
+            <p className="doc__lead">
+              O protótipo desta entrega tem front em React com TypeScript sobre Vite e uma API
+              em Hono na Vercel, que chama o OCI Generative AI (São Paulo) e grava o histórico no
+              Oracle Autonomous Database. Sem credenciais, a mesma API sobe com IA simulada e
+              banco em memória — o produto segue testável em qualquer máquina. O desenho abaixo
+              separa o que já existe do que a fase seguinte precisa construir.
+            </p>
+
+            <figure className="doc__figura">
+              <div className="doc__rolagem"><Arquitetura /></div>
+              <figcaption>
+                Figura 2 — Arquitetura em três camadas. Em traço cheio, o que está construído
+                e rodando; em traço tracejado, a camada gerenciada que a próxima fase precisa
+                ocupar para sair do protótipo.
+              </figcaption>
+            </figure>
+
+            <h3>O que já está construído</h3>
+            <div className="rolagem-x">
+              <table className="doc__tabela">
+                <thead>
+                  <tr><th>Camada</th><th>Implementação atual</th><th>Por quê</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Interface</th><td>React 19 + TypeScript, roteamento por hash, CSS próprio com tokens</td><td>Nenhum framework de UI além do React: as telas ficam leves e sob controle do time</td></tr>
+                  <tr><th scope="row">Domínio</th><td>Modelo de evento clínico tipado, com fonte, origem, medidas e faixa de referência</td><td>É o mesmo formato que a API valida e o Oracle Database persiste — o modelo já nasce estável</td></tr>
+                  <tr><th scope="row">Estado</th><td>Store própria com assinatura, alimentada pela API; histórico no Oracle Autonomous Database</td><td>As telas falam só com a store — a API e o banco ficam atrás dela</td></tr>
+                  <tr><th scope="row">Inteligência</th><td>OCI Generative AI (Llama 3.3 70B) para extração, explicação, copiloto, resumo e pendências; OCI Document Understanding, opcional, para ler PDF escaneado; motor determinístico no modo simulado</td><td>Âncoras que não existem no histórico são descartadas: nenhuma frase sem registro que a sustente</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Como a solução escala</h3>
+            <ul className="doc__lista">
+              <li>
+                <strong>O gargalo é ingestão, não tráfego.</strong> Cada paciente gera poucos
+                eventos por mês, mas cada documento novo custa leitura, extração e ligação ao
+                histórico. Escalar significa processar documento em fila assíncrona, não
+                dimensionar servidor de página.
+              </li>
+              <li>
+                <strong>Particionamento natural por titular.</strong> O dado de uma pessoa nunca
+                precisa ser lido junto com o de outra. Isso permite isolar por paciente, o que
+                serve tanto à escala horizontal quanto ao requisito de privacidade.
+              </li>
+              <li>
+                <strong>Conector por instituição, não por cliente.</strong> Cada integração nova
+                atende todos os pacientes daquela fonte de uma vez — o custo de aquisição de
+                dado cai à medida que a base cresce.
+              </li>
+              <li>
+                <strong>Padrões abertos como interface.</strong> Falar HL7 FHIR e DICOM significa
+                que uma nova instituição entra pela mesma porta, sem código sob medida.
+              </li>
+              <li>
+                <strong>Custo de IA controlado na origem.</strong> Extração roda uma vez por
+                documento e o resultado fica estruturado. A pergunta do copiloto recupera contexto
+                já processado, em vez de reler o acervo inteiro a cada vez.
+              </li>
+            </ul>
+
+            <h3>A camada que a próxima fase precisa ocupar</h3>
+            <p>
+              A arquitetura foi desenhada com um encaixe explícito: as telas conversam com uma
+              store, e não com o banco. Essa store já fala com a API; para o protótipo virar
+              produto, falta o restante da camada gerenciada. O que ela precisa entregar:
+            </p>
+            <div className="rolagem-x">
+              <table className="doc__tabela">
+                <thead>
+                  <tr><th>Necessidade</th><th>O que precisa garantir</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Armazenamento de documentos</th><td>Objeto durável para PDF, imagem e DICOM, com criptografia em repouso e ciclo de vida por titular</td></tr>
+                  <tr><th scope="row">Banco do histórico</th><td>Persistência do evento clínico estruturado, com trilha de auditoria e isolamento por paciente</td></tr>
+                  <tr><th scope="row">Busca semântica</th><td>Recuperação por significado sobre laudos, para o copiloto responder com as âncoras corretas</td></tr>
+                  <tr><th scope="row">Execução de IA</th><td>Extração de documento e geração de resumo em ambiente gerenciado, com registro do que foi enviado</td></tr>
+                  <tr><th scope="row">Gestão de segredos e chaves</th><td>Credenciais das integrações e chaves de criptografia fora do código, com rotação</td></tr>
+                  <tr><th scope="row">Fila de ingestão</th><td>Processamento assíncrono por documento, com reprocessamento sem perda</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="doc__nota">
+              O Challenge pede a incorporação de uma tecnologia da empresa parceira. Ela entra
+              exatamente na camada gerenciada, e não na interface: OCI Generative AI e Oracle
+              Autonomous Database já atendem a API. Documentos, busca semântica, fila e
+              segredos gerenciados seguem como a próxima decisão de arquitetura.
+            </p>
           </section>
 
           {/* ---------------- PARTE 2 ---------------- */}
@@ -306,7 +528,7 @@ export function Projeto() {
             <figure className="doc__figura">
               <div className="doc__rolagem"><Stakeholders /></div>
               <figcaption>
-                Figura 1 — O paciente é o titular; a Nurai é a camada de contexto. Linha cheia:
+                Figura 3 — O paciente é o titular; a Nurai é a camada de contexto. Linha cheia:
                 troca de dado clínico mediante consentimento. Linha tracejada: acesso derivado,
                 que nunca inclui o histórico bruto.
               </figcaption>
@@ -451,88 +673,325 @@ export function Projeto() {
           {/* ---------------- PARTE 3 ---------------- */}
           <section id="parte-3">
             <p className="doc__parte">Parte 3</p>
-            <h2>Estruturação da solução</h2>
+            <h2>Modelo de negócio consolidado</h2>
 
             <p className="doc__lead">
-              A Nurai é uma plataforma centrada no paciente que reúne o histórico clínico
-              disperso em uma linha do tempo única, estrutura com IA o que estava solto — em
-              PDF, imagem ou papel — e devolve esse contexto em forma de próximo passo: para o
-              paciente, em linguagem que ele entende; para o médico, em uma página que cabe nos
-              minutos que ele tem.
+              A Nurai cobra de quem ganha com o histórico organizado: o paciente ou o cuidador,
+              que paga pouco por mês para não perder exames e chegar preparado à consulta, e a
+              clínica ou operadora que acompanha pacientes crônicos e economiza com exame
+              repetido. A Nurai não vende dado de saúde: esse é o compromisso que sustenta a
+              confiança.
             </p>
 
-            <h3>Produto mínimo viável</h3>
-            <p>
-              O corte do MVP obedece a uma regra: fica dentro o que é necessário para provar
-              que contexto reunido muda uma decisão. Tudo que só melhora a experiência depois
-              dessa prova fica fora.
-            </p>
+            <h3>Business Model Canvas</h3>
+            <div className="canvas" role="list" aria-label="Business Model Canvas da Nurai">
+              <div className="canvas__bloco canvas__parceiros" role="listitem">
+                <h4>Parceiros-chave</h4>
+                <ul>
+                  <li>Oracle (OCI Generative AI, Autonomous Database, Document Understanding)</li>
+                  <li>Laboratórios e clínicas que enviam resultados</li>
+                  <li>Ministério da Saúde (RNDS, padrão FHIR)</li>
+                  <li>Associações de pacientes crônicos</li>
+                  <li>Médicos de atenção primária</li>
+                </ul>
+              </div>
+              <div className="canvas__bloco canvas__atividades" role="listitem">
+                <h4>Atividades-chave</h4>
+                <ul>
+                  <li>Ler e estruturar documentos com IA</li>
+                  <li>Cruzar registros para achar exame repetido e retorno atrasado</li>
+                  <li>Integrar fontes por padrão aberto</li>
+                  <li>Garantir consentimento e auditoria (LGPD)</li>
+                </ul>
+              </div>
+              <div className="canvas__bloco canvas__recursos" role="listitem">
+                <h4>Recursos-chave</h4>
+                <ul>
+                  <li>Plataforma e modelo de evento clínico</li>
+                  <li>Infraestrutura na OCI</li>
+                  <li>Conectores por instituição</li>
+                  <li>Base de usuários e confiança na marca</li>
+                </ul>
+              </div>
+              <div className="canvas__bloco canvas__proposta" role="listitem">
+                <h4>Proposta de valor</h4>
+                <ul>
+                  <li><strong>Paciente e cuidador:</strong> o histórico inteiro num lugar, sem exame repetido, e a consulta preparada em minutos</li>
+                  <li><strong>Médico:</strong> uma página com data, fonte e pendências, que cabe na consulta</li>
+                  <li><strong>Clínica e operadora:</strong> menos exame duplicado e pacientes crônicos acompanhados</li>
+                </ul>
+              </div>
+              <div className="canvas__bloco canvas__relacionamento" role="listitem">
+                <h4>Relacionamento</h4>
+                <ul>
+                  <li>Autoatendimento no app</li>
+                  <li>Avisos de pendência e de retorno</li>
+                  <li>Suporte humano no plano pago e no B2B</li>
+                  <li>Transparência: registro de cada acesso</li>
+                </ul>
+              </div>
+              <div className="canvas__bloco canvas__canais" role="listitem">
+                <h4>Canais</h4>
+                <ul>
+                  <li>App web e celular</li>
+                  <li>Indicação pelo médico (código de acesso)</li>
+                  <li>Associações e grupos de cuidadores</li>
+                  <li>Venda direta a clínicas e operadoras</li>
+                </ul>
+              </div>
+              <div className="canvas__bloco canvas__segmentos" role="listitem">
+                <h4>Segmentos de clientes</h4>
+                <ul>
+                  <li>Adultos com doença crônica que consultam 2 ou mais especialistas</li>
+                  <li>Cuidadores que organizam os exames de um familiar</li>
+                  <li>Clínicas de atenção primária e operadoras com programa de crônicos</li>
+                </ul>
+              </div>
+              <div className="canvas__bloco canvas__custos" role="listitem">
+                <h4>Estrutura de custos</h4>
+                <ul>
+                  <li>Equipe (produto, engenharia, saúde, vendas)</li>
+                  <li>Nuvem e IA na OCI, proporcionais ao uso</li>
+                  <li>Segurança, jurídico e encarregado de dados (LGPD)</li>
+                  <li>Marketing e parcerias</li>
+                </ul>
+              </div>
+              <div className="canvas__bloco canvas__receitas" role="listitem">
+                <h4>Fontes de receita</h4>
+                <ul>
+                  <li>Assinatura Nurai Plus: R$ 14,90 por mês</li>
+                  <li>B2B2C: R$ 4,00 por vida por mês para clínicas e operadoras</li>
+                  <li>Plano gratuito como porta de entrada</li>
+                </ul>
+              </div>
+            </div>
+
+            <h3>Estratégia de monetização</h3>
             <div className="rolagem-x">
               <table className="doc__tabela">
                 <thead>
-                  <tr><th>Funcionalidade essencial</th><th>Por que é essencial</th><th>Estado no protótipo</th></tr>
+                  <tr><th>Oferta</th><th>Quem paga</th><th>O que inclui</th><th>Preço</th></tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <th scope="row">Linha do tempo clínica unificada</th>
-                    <td>É a prova central: fontes incompatíveis na mesma sequência, cada evento com a origem visível</td>
-                    <td className="doc__ok">construída</td>
+                    <th scope="row">Nurai Grátis</th>
+                    <td>Ninguém</td>
+                    <td>Linha do tempo, até 5 documentos por mês, copiloto com limite, acesso temporário para o médico, exportação</td>
+                    <td className="num">R$ 0</td>
                   </tr>
                   <tr>
-                    <th scope="row">Entrada de documento com extração</th>
-                    <td>Sem o papel, o histórico continua incompleto — e é o papel que a integração não alcança</td>
-                    <td className="doc__ok">construída</td>
+                    <th scope="row">Nurai Plus</th>
+                    <td>Paciente ou cuidador</td>
+                    <td>Documentos ilimitados, leitura de PDF escaneado, até 3 perfis de familiares, resumo pré-consulta ilimitado, lembretes de retorno</td>
+                    <td className="num">R$ 14,90/mês</td>
                   </tr>
                   <tr>
-                    <th scope="row">Copiloto ancorado no histórico</th>
-                    <td>Transforma acervo em entendimento, e a citação da fonte é o que sustenta a confiança</td>
-                    <td className="doc__ok">construída</td>
-                  </tr>
-                  <tr>
-                    <th scope="row">Próximos passos e navegação</th>
-                    <td>É onde o contexto vira valor mensurável: exame evitado, retorno recuperado</td>
-                    <td className="doc__ok">construída</td>
-                  </tr>
-                  <tr>
-                    <th scope="row">Resumo pré-consulta compartilhável</th>
-                    <td>Leva o valor para dentro do consultório, que é onde a decisão acontece</td>
-                    <td className="doc__ok">construída</td>
-                  </tr>
-                  <tr>
-                    <th scope="row">Consentimento e registro de acesso</th>
-                    <td>Sem controle verificável do titular, nada disso é aceitável nem legal</td>
-                    <td className="doc__ok">construída</td>
-                  </tr>
-                  <tr className="doc__fora">
-                    <th scope="row">Integração real com RNDS e laboratórios</th>
-                    <td>Depende de credenciamento e homologação — simulada no protótipo</td>
-                    <td>fora do MVP</td>
-                  </tr>
-                  <tr className="doc__fora">
-                    <th scope="row">Visualizador DICOM e telemedicina</th>
-                    <td>Alto custo, não testa a hipótese central</td>
-                    <td>fora do MVP</td>
-                  </tr>
-                  <tr className="doc__fora">
-                    <th scope="row">Área do médico com login próprio</th>
-                    <td>O acesso temporário por link resolve a mesma necessidade na fase de teste</td>
-                    <td>fora do MVP</td>
+                    <th scope="row">Nurai para clínicas e operadoras</th>
+                    <td>Clínica de atenção primária ou operadora</td>
+                    <td>Plus para os pacientes do programa, painel de pendências agregado e anônimo, integração com o prontuário</td>
+                    <td className="num">R$ 4,00/vida/mês</td>
                   </tr>
                 </tbody>
               </table>
             </div>
+            <p>
+              <strong>Por que esses preços.</strong> Nos testes, os três participantes disseram que
+              usariam o app e citaram R$ 10 a R$ 20 por mês. A pessoa com menos familiaridade
+              digital só pagaria se fosse simples, e outra preferia uma base gratuita. O Plus fica
+              no meio dessa faixa, e o plano gratuito resolve a barreira de entrada. No B2B2C, o
+              valor por vida se paga se evitar um exame laboratorial repetido por paciente a cada
+              poucos meses, e esse é o argumento de venda para a operadora.
+            </p>
 
-            <h3>Jornada principal do usuário</h3>
-            <figure className="doc__figura">
-              <div className="doc__rolagem"><Jornada /></div>
-              <figcaption>
-                Figura 2 — Da primeira conexão ao consultório. O trecho em destaque é o ciclo
-                que se repete a cada novo documento; o retângulo tracejado marca o único ponto
-                em que a pessoa precisa conferir antes de gravar.
-              </figcaption>
-            </figure>
+            <h3>Estrutura de custos</h3>
+            <div className="rolagem-x">
+              <table className="doc__tabela">
+                <thead>
+                  <tr><th>Custo</th><th>Tipo</th><th className="num">2027</th><th className="num">2028</th><th className="num">2029</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Equipe</th><td>fixo</td><td className="num">R$ 240 mil (5 fundadores)</td><td className="num">R$ 720 mil (8 pessoas)</td><td className="num">R$ 1,68 mi (14 pessoas)</td></tr>
+                  <tr><th scope="row">Infraestrutura base (OCI, Vercel)</th><td>fixo</td><td className="num">R$ 24 mil</td><td className="num">R$ 60 mil</td><td className="num">R$ 150 mil</td></tr>
+                  <tr><th scope="row">Jurídico, LGPD e segurança</th><td>fixo</td><td className="num">R$ 36 mil</td><td className="num">R$ 70 mil</td><td className="num">R$ 170 mil</td></tr>
+                  <tr><th scope="row">Marketing e vendas</th><td>fixo</td><td className="num">R$ 90 mil</td><td className="num">R$ 250 mil</td><td className="num">R$ 500 mil</td></tr>
+                  <tr><th scope="row">Outros (contabilidade, ferramentas)</th><td>fixo</td><td className="num">R$ 30 mil</td><td className="num">R$ 50 mil</td><td className="num">R$ 100 mil</td></tr>
+                  <tr><th scope="row">IA e nuvem por uso</th><td>variável</td><td colSpan={3}>R$ 0,40 por usuário gratuito, R$ 2,00 por assinante e R$ 1,00 por vida B2B2C, por mês</td></tr>
+                  <tr><th scope="row">Meios de pagamento</th><td>variável</td><td colSpan={3}>5% da receita de assinaturas</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              O custo de IA é controlado na origem: cada documento é lido uma vez, e o resultado
+              fica estruturado no banco. O copiloto consulta o que já foi processado, em vez de
+              reler os documentos a cada pergunta. O plano gratuito tem limite de documentos para
+              que o custo por usuário que não paga continue baixo.
+            </p>
 
-            <h3>Diferencial competitivo</h3>
+            <h3>Projeção financeira simplificada</h3>
+            <div className="rolagem-x">
+              <table className="doc__tabela">
+                <thead>
+                  <tr><th>Indicador</th><th className="num">2027</th><th className="num">2028</th><th className="num">2029</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Usuários ativos (fim do ano)</th><td className="num">8 mil</td><td className="num">40 mil</td><td className="num">150 mil</td></tr>
+                  <tr><th scope="row">Conversão para o Plus</th><td className="num">4%</td><td className="num">6%</td><td className="num">7%</td></tr>
+                  <tr><th scope="row">Assinantes Plus (fim do ano)</th><td className="num">320</td><td className="num">2.400</td><td className="num">10.500</td></tr>
+                  <tr><th scope="row">Vidas B2B2C (média do ano)</th><td className="num">1 mil</td><td className="num">15 mil</td><td className="num">60 mil</td></tr>
+                  <tr><th scope="row">Receita de assinaturas</th><td className="num">R$ 29 mil</td><td className="num">R$ 243 mil</td><td className="num">R$ 1,15 mi</td></tr>
+                  <tr><th scope="row">Receita B2B2C</th><td className="num">R$ 48 mil</td><td className="num">R$ 720 mil</td><td className="num">R$ 2,88 mi</td></tr>
+                  <tr><th scope="row">Receita total</th><td className="num">R$ 77 mil</td><td className="num">R$ 963 mil</td><td className="num">R$ 4,03 mi</td></tr>
+                  <tr><th scope="row">Custos variáveis</th><td className="num">R$ 36 mil</td><td className="num">R$ 333 mil</td><td className="num">R$ 1,36 mi</td></tr>
+                  <tr><th scope="row">Margem de contribuição</th><td className="num">53%</td><td className="num">65%</td><td className="num">66%</td></tr>
+                  <tr><th scope="row">Custos fixos</th><td className="num">R$ 420 mil</td><td className="num">R$ 1,15 mi</td><td className="num">R$ 2,60 mi</td></tr>
+                  <tr><th scope="row">Resultado do ano</th><td className="num">−R$ 379 mil</td><td className="num">−R$ 520 mil</td><td className="num">+R$ 76 mil</td></tr>
+                  <tr><th scope="row">Resultado acumulado</th><td className="num">−R$ 379 mil</td><td className="num">−R$ 899 mil</td><td className="num">−R$ 824 mil</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              <strong>Leitura.</strong> A operação fica no azul em 2029, quando a receita de
+              clínicas e operadoras passa a cobrir a equipe. Até lá, a necessidade de caixa
+              acumulada chega a cerca de R$ 900 mil, que é o tamanho de uma rodada pré-semente
+              (ou de editais de inovação em saúde) de R$ 1,2 milhão, com folga.
+            </p>
+            <p className="doc__nota">
+              <strong>Premissas.</strong> Os usuários crescem de forma linear dentro de cada ano, e
+              as médias anuais vêm daí. O preço e a faixa de disposição a pagar vêm dos testes
+              desta fase (3 pessoas), e a conversão de 4% a 7% é típica de produtos freemium, mas
+              ainda não foi medida na Nurai. Os custos por usuário são estimativas da equipe, a
+              confirmar com a calculadora de preços da OCI e com o uso real em produção. É uma
+              projeção para orientar decisões, não uma previsão.
+            </p>
+
+            <h3>Principais indicadores (KPIs)</h3>
+            <div className="rolagem-x">
+              <table className="doc__tabela">
+                <thead>
+                  <tr><th>Indicador</th><th>O que mede</th><th>Meta no primeiro ano</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Consultas preparadas por mês (indicador principal)</th><td>Resumos ou acessos temporários usados antes de uma consulta: é o momento em que a Nurai entrega valor</td><td>1 para cada 4 usuários ativos</td></tr>
+                  <tr><th scope="row">Ativação</th><td>Quem anexa o primeiro documento em até 7 dias após o cadastro</td><td>50%</td></tr>
+                  <tr><th scope="row">Retenção em 90 dias</th><td>Quem volta a usar três meses depois</td><td>35%</td></tr>
+                  <tr><th scope="row">Conversão para o Plus</th><td>Usuários ativos que assinam</td><td>4%</td></tr>
+                  <tr><th scope="row">Cancelamento mensal do Plus</th><td>Assinantes que cancelam no mês</td><td>até 6%</td></tr>
+                  <tr><th scope="row">LTV / CAC</th><td>Valor de um assinante ao longo da vida (cerca de R$ 200, com 6% de cancelamento) sobre o custo para conquistá-lo</td><td>3 ou mais (CAC até R$ 68)</td></tr>
+                  <tr><th scope="row">Exames repetidos sinalizados</th><td>Pontos de "exame repetido" encontrados e resolvidos: é o valor para a operadora</td><td>acompanhar a partir do piloto</td></tr>
+                  <tr><th scope="row">Custo de IA por usuário ativo</th><td>Gasto na OCI dividido pelos usuários ativos</td><td>até R$ 0,60/mês</td></tr>
+                  <tr><th scope="row">Tarefas concluídas sem ajuda</th><td>O mesmo teste desta fase, repetido a cada versão</td><td>de 67% para 85%</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Como o MVP evolui para um produto escalável</h3>
+            <ol className="doc__lista-num">
+              <li>
+                <strong>Produção (0 a 6 meses).</strong> Documentos no OCI Object Storage, segredos
+                no OCI Vault, fila para processar documentos, OCR ligado para todos, aplicativo de
+                celular, e o reteste de usabilidade com pessoas de pouca familiaridade digital.
+              </li>
+              <li>
+                <strong>Integrações (6 a 18 meses).</strong> Leitura da RNDS pelo padrão HL7 FHIR,
+                conectores com os primeiros laboratórios e busca semântica para o copiloto. Cada
+                conector atende todos os pacientes daquela fonte de uma vez.
+              </li>
+              <li>
+                <strong>B2B2C (12 a 24 meses).</strong> Painel para clínicas e operadoras com
+                indicadores agregados e anônimos, e integração com o prontuário do médico.
+              </li>
+              <li>
+                <strong>Escala (24 meses em diante).</strong> Outras regiões, outras condições
+                crônicas, e o comparativo visual entre resultados que o médico pediu nos testes.
+              </li>
+            </ol>
+            <p>
+              A arquitetura já foi pensada para isso, como mostra a seção de tecnologia: o dado é
+              particionado por paciente, a IA roda uma vez por documento, e cada instituição entra
+              pela mesma porta, por padrão aberto.
+            </p>
+          </section>
+
+          {/* ---------------- PARTE 4 ---------------- */}
+          <section id="parte-4">
+            <p className="doc__parte">Parte 4</p>
+            <h2>Estratégia de lançamento</h2>
+
+            <h3>Público-alvo prioritário</h3>
+            <p>
+              <strong>Adultos de 45 a 70 anos com hipertensão ou diabetes, que consultam dois ou
+              mais especialistas, e os filhos que cuidam dos exames deles</strong>, começando pela
+              Grande São Paulo. Essa é a base com o problema mais frequente: segundo a Pesquisa
+              Nacional de Saúde de 2019, do IBGE, 52% dos 159,1 milhões de adultos brasileiros
+              tinham diagnóstico de ao menos uma doença crônica. Os testes reforçaram o papel do
+              cuidador: a participante de 58 anos só usaria "com ajuda da filha", e o cuidador foi
+              quem mais se dispôs a pagar.
+            </p>
+            <div className="rolagem-x">
+              <table className="doc__tabela">
+                <thead>
+                  <tr><th>Recorte</th><th>Tamanho</th><th>Como foi calculado</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Mercado total</th><td className="num">≈ 83 milhões de pessoas</td><td>Adultos com ao menos uma doença crônica (52% de 159,1 milhões, PNS 2019)</td></tr>
+                  <tr><th scope="row">Mercado endereçável</th><td className="num">≈ 21 milhões de pessoas</td><td>Desses, a parcela com plano de saúde (cerca de 1 em cada 4 brasileiros; 53 milhões de beneficiários, ANS, 2025), que circula entre SUS, rede privada e papel e tem maior chance de pagar</td></tr>
+                  <tr><th scope="row">Meta em 3 anos</th><td className="num">150 mil usuários ativos</td><td>0,7% do mercado endereçável, com 10,5 mil assinantes e 60 mil vidas B2B2C</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Aquisição dos primeiros clientes</h3>
+            <ol className="doc__lista-num">
+              <li>
+                <strong>O médico como canal.</strong> Cada acesso temporário apresenta a Nurai a um
+                médico. Vamos procurar 20 médicos de atenção primária e cardiologistas que atendem
+                crônicos, para que recomendem o app aos pacientes antes do retorno.
+              </li>
+              <li>
+                <strong>Cuidadores onde eles já estão.</strong> Grupos de WhatsApp e Facebook de
+                cuidadores, e conteúdo curto ("como organizar os exames da sua mãe em 10
+                minutos").
+              </li>
+              <li>
+                <strong>Associações de pacientes.</strong> Parcerias com associações de diabetes e
+                hipertensão, com o plano Plus gratuito por 3 meses para os associados.
+              </li>
+              <li>
+                <strong>Um piloto B2B2C.</strong> Uma clínica de atenção primária ou uma operadora
+                regional com programa de crônicos, com cerca de mil vidas por 6 meses, medindo exames
+                repetidos evitados.
+              </li>
+              <li>
+                <strong>Indicação.</strong> Um mês de Plus para quem indica e para quem entra.
+              </li>
+            </ol>
+            <p>
+              <strong>Meta:</strong> mil usuários ativos e o piloto assinado nos primeiros 90
+              dias, com custo de aquisição abaixo de R$ 68 por assinante.
+            </p>
+
+            <h3>Posicionamento competitivo</h3>
+            <blockquote className="doc__citacao">
+              Para quem tem doença crônica e se trata em vários lugares, a Nurai é o histórico de
+              saúde que fica com o paciente e chega pronto à consulta. Diferente dos apps de
+              laboratório, de operadora e do governo, ela junta público, privado e papel, e diz o
+              que fazer com isso.
+            </blockquote>
+            <div className="rolagem-x">
+              <table className="doc__tabela">
+                <thead>
+                  <tr><th>Alternativa</th><th>O que faz bem</th><th>O que não faz</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Pasta de papel, WhatsApp e e-mail</th><td>Grátis e conhecido</td><td>Se perde, não avisa nada e não chega organizado ao médico</td></tr>
+                  <tr><th scope="row">App do laboratório</th><td>Resultado rápido</td><td>Mostra só aquele laboratório</td></tr>
+                  <tr><th scope="row">App da operadora</th><td>Rede credenciada e carteirinha</td><td>Mostra só a própria rede e some quando o plano muda</td></tr>
+                  <tr><th scope="row">Meu SUS Digital</th><td>Vacinas e registros enviados à rede nacional</td><td>Não reúne o papel do paciente e não cruza registros para apontar pendências</td></tr>
+                  <tr><th scope="row">Nurai</th><td>Junta todas as fontes, lê documentos com IA, aponta exame repetido e prepara a consulta</td><td>Ainda depende do paciente para anexar o que não está integrado</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <h4 className="doc__subtitulo">Diferencial competitivo, eixo a eixo</h4>
             <div className="rolagem-x">
               <table className="doc__tabela">
                 <thead>
@@ -567,100 +1026,45 @@ export function Projeto() {
                 </tbody>
               </table>
             </div>
-          </section>
-
-          {/* ---------------- PARTE 4 ---------------- */}
-          <section id="parte-4">
-            <p className="doc__parte">Parte 4</p>
-            <h2>Estrutura tecnológica</h2>
-
-            <p className="doc__lead">
-              O protótipo desta entrega tem front em React com TypeScript sobre Vite e uma API
-              em Hono na Vercel, que chama o OCI Generative AI (São Paulo) e grava o histórico no
-              Oracle Autonomous Database. Sem credenciais, a mesma API sobe com IA simulada e
-              banco em memória — o produto segue testável em qualquer máquina. O desenho abaixo
-              separa o que já existe do que a fase seguinte precisa construir.
-            </p>
-
-            <figure className="doc__figura">
-              <div className="doc__rolagem"><Arquitetura /></div>
-              <figcaption>
-                Figura 3 — Arquitetura em três camadas. Em traço cheio, o que está construído
-                e rodando; em traço tracejado, a camada gerenciada que a próxima fase precisa
-                ocupar para sair do protótipo.
-              </figcaption>
-            </figure>
-
-            <h3>O que já está construído</h3>
-            <div className="rolagem-x">
-              <table className="doc__tabela">
-                <thead>
-                  <tr><th>Camada</th><th>Implementação atual</th><th>Por quê</th></tr>
-                </thead>
-                <tbody>
-                  <tr><th scope="row">Interface</th><td>React 19 + TypeScript, roteamento por hash, CSS próprio com tokens</td><td>Nenhum framework de UI além do React: as telas ficam leves e sob controle do time</td></tr>
-                  <tr><th scope="row">Domínio</th><td>Modelo de evento clínico tipado, com fonte, origem, medidas e faixa de referência</td><td>É o mesmo formato que a API valida e o Oracle Database persiste — o modelo já nasce estável</td></tr>
-                  <tr><th scope="row">Estado</th><td>Store própria com assinatura, alimentada pela API; histórico no Oracle Autonomous Database</td><td>As telas falam só com a store — a API e o banco ficam atrás dela</td></tr>
-                  <tr><th scope="row">Inteligência</th><td>OCI Generative AI (Llama 3.3 70B) para extração, explicação, copiloto, resumo e pendências; OCI Document Understanding, opcional, para ler PDF escaneado; motor determinístico no modo simulado</td><td>Âncoras que não existem no histórico são descartadas: nenhuma frase sem registro que a sustente</td></tr>
-                </tbody>
-              </table>
-            </div>
-
-            <h3>Como a solução escala</h3>
+            <h3>Crescimento sustentável</h3>
             <ul className="doc__lista">
               <li>
-                <strong>O gargalo é ingestão, não tráfego.</strong> Cada paciente gera poucos
-                eventos por mês, mas cada documento novo custa leitura, extração e ligação ao
-                histórico. Escalar significa processar documento em fila assíncrona, não
-                dimensionar servidor de página.
+                <strong>Unidade econômica antes de escala.</strong> Só aumentar o marketing quando o
+                LTV/CAC passar de 3 e o retorno do custo de aquisição ficar abaixo de 12 meses.
               </li>
               <li>
-                <strong>Particionamento natural por titular.</strong> O dado de uma pessoa nunca
-                precisa ser lido junto com o de outra. Isso permite isolar por paciente, o que
-                serve tanto à escala horizontal quanto ao requisito de privacidade.
+                <strong>B2B2C reduz o custo de aquisição.</strong> Um contrato com uma clínica ou
+                operadora traz milhares de pacientes de uma vez, e a receita por vida financia o
+                plano gratuito.
               </li>
               <li>
-                <strong>Conector por instituição, não por cliente.</strong> Cada integração nova
-                atende todos os pacientes daquela fonte de uma vez — o custo de aquisição de
-                dado cai à medida que a base cresce.
+                <strong>Efeitos de rede.</strong> Cada médico que recebe um código conhece a Nurai,
+                e cada conector novo melhora o produto para todos os pacientes daquela fonte.
               </li>
               <li>
-                <strong>Padrões abertos como interface.</strong> Falar HL7 FHIR e DICOM significa
-                que uma nova instituição entra pela mesma porta, sem código sob medida.
+                <strong>Custo de IA sob controle.</strong> Leitura única por documento, limite no
+                plano gratuito e acompanhamento do custo por usuário ativo como KPI.
               </li>
               <li>
-                <strong>Custo de IA controlado na origem.</strong> Extração roda uma vez por
-                documento e o resultado fica estruturado. A pergunta do copiloto recupera contexto
-                já processado, em vez de reler o acervo inteiro a cada vez.
+                <strong>Confiança como ativo.</strong> Nenhuma venda de dado, consentimento por
+                instituição, registro de cada acesso e exportação a qualquer momento. Em saúde, é
+                isso que faz as pessoas ficarem.
               </li>
             </ul>
+          </section>
 
-            <h3>A camada que a próxima fase precisa ocupar</h3>
+          {/* ---------------- PARTE 5 ---------------- */}
+          <section id="parte-5">
+            <p className="doc__parte">Parte 5</p>
+            <h2>Pitch final</h2>
             <p>
-              A arquitetura foi desenhada com um encaixe explícito: as telas conversam com uma
-              store, e não com o banco. Essa store já fala com a API; para o protótipo virar
-              produto, falta o restante da camada gerenciada. O que ela precisa entregar:
-            </p>
-            <div className="rolagem-x">
-              <table className="doc__tabela">
-                <thead>
-                  <tr><th>Necessidade</th><th>O que precisa garantir</th></tr>
-                </thead>
-                <tbody>
-                  <tr><th scope="row">Armazenamento de documentos</th><td>Objeto durável para PDF, imagem e DICOM, com criptografia em repouso e ciclo de vida por titular</td></tr>
-                  <tr><th scope="row">Banco do histórico</th><td>Persistência do evento clínico estruturado, com trilha de auditoria e isolamento por paciente</td></tr>
-                  <tr><th scope="row">Busca semântica</th><td>Recuperação por significado sobre laudos, para o copiloto responder com as âncoras corretas</td></tr>
-                  <tr><th scope="row">Execução de IA</th><td>Extração de documento e geração de resumo em ambiente gerenciado, com registro do que foi enviado</td></tr>
-                  <tr><th scope="row">Gestão de segredos e chaves</th><td>Credenciais das integrações e chaves de criptografia fora do código, com rotação</td></tr>
-                  <tr><th scope="row">Fila de ingestão</th><td>Processamento assíncrono por documento, com reprocessamento sem perda</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <p className="doc__nota">
-              O Challenge pede a incorporação de uma tecnologia da empresa parceira. Ela entra
-              exatamente na camada gerenciada, e não na interface: OCI Generative AI e Oracle
-              Autonomous Database já atendem a API. Documentos, busca semântica, fila e
-              segredos gerenciados seguem como a próxima decisão de arquitetura.
+              O pitch em PDF (<code className="doc__caminho">docs/entrega/pitch-nurai.pdf</code>)
+              percorre os dez tópicos pedidos, na ordem: problema, solução, demonstração do MVP,
+              mercado, modelo de negócio, tecnologia e integração com a Oracle, diferencial
+              competitivo, estratégia de crescimento, projeções e time. O vídeo de até 7 minutos
+              segue o roteiro em <code className="doc__caminho">docs/entrega/roteiro-video.md</code>,
+              com a demonstração do sistema em funcionamento em{' '}
+              <a href="https://nurai-one.vercel.app">nurai-one.vercel.app</a>.
             </p>
           </section>
 

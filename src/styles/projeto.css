@@ -64,7 +64,10 @@
 .doc__texto p + p { margin-top: var(--sp-3); }
 /* Tabela seguida de tabela ou de parágrafo não fica colada no que vem depois. */
 .doc__texto .rolagem-x + .rolagem-x { margin-top: var(--sp-5); }
-.doc__texto .rolagem-x + p { margin-top: var(--sp-4); }
+.doc__texto .rolagem-x + p,
+.doc__texto ol + p,
+.doc__texto ul + p { margin-top: var(--sp-4); }
+.doc__texto td.num { white-space: nowrap; }
 .doc__texto p + .rolagem-x { margin-top: var(--sp-2); }
 .doc__texto code { overflow-wrap: anywhere; }
 .doc__texto .doc__caminho { white-space: nowrap; }
@@ -238,3 +241,33 @@
 .tarefa__desfecho { display: block; white-space: nowrap; }
 .tarefa__tempo { display: block; font-size: 12.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .tarefa__desfecho--nao { color: var(--sig-alterado); font-weight: 600; }
+
+/* ---------------- Business Model Canvas ---------------- */
+.canvas {
+  display: grid; gap: 1px; margin-top: var(--sp-3);
+  background: var(--line); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  grid-template-areas:
+    "parc parc ativ ativ prop prop rela rela segm segm"
+    "parc parc recu recu prop prop cana cana segm segm"
+    "cust cust cust cust cust rece rece rece rece rece";
+}
+.canvas__bloco { background: var(--card, #fff); padding: 12px 14px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.canvas__bloco h4 { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+.canvas__bloco ul { display: grid; gap: 5px; }
+.canvas__parceiros { grid-area: parc; }
+.canvas__atividades { grid-area: ativ; }
+.canvas__recursos { grid-area: recu; }
+.canvas__proposta { grid-area: prop; background: var(--accent-soft); }
+.canvas__relacionamento { grid-area: rela; }
+.canvas__canais { grid-area: cana; }
+.canvas__segmentos { grid-area: segm; }
+.canvas__custos { grid-area: cust; }
+.canvas__receitas { grid-area: rece; }
+@media (max-width: 860px) {
+  .canvas {
+    grid-template-columns: 1fr;
+    grid-template-areas: "prop" "segm" "cana" "rela" "rece" "ativ" "recu" "parc" "cust";
+  }
+}
+.doc__subtitulo { margin-top: var(--sp-5); font-size: 13px; color: var(--ink); }
