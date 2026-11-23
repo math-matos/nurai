@@ -82,7 +82,7 @@ export function Stakeholders() {
         <line x1="196" y1="497" x2="228" y2="497" className="dg__ligacao" />
         <text x="236" y="501">dado clínico, com consentimento do titular</text>
         <line x1="196" y1="516" x2="228" y2="516" className="dg__ligacao dg__ligacao--derivada" />
-        <text x="236" y="520">acesso derivado — nunca o histórico bruto</text>
+        <text x="236" y="520">acesso a dados agregados, sem o histórico completo</text>
       </g>
     </svg>
   )
