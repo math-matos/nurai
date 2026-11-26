@@ -40,6 +40,5 @@ Dentro do código-fonte:
 - `docs/validacao/roteiro-testes.md`: o roteiro usado nos testes com usuários.
 - `docs/validacao/resultados-testes.md`: os resultados anonimizados, com as falas dos participantes.
 - `docs/setup-oci.md`: a configuração da Oracle Cloud (Autonomous Database, Generative AI e Document Understanding).
-- `docs/entrega/roteiro-video.md`: o roteiro do vídeo.
 
 Paciente, instituições e resultados da demonstração são fictícios. A Nurai é um protótipo acadêmico e não é um dispositivo médico.
